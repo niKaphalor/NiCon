@@ -75,6 +75,9 @@ func (rel *Relay) Routes() http.Handler {
 }
 
 func (rel *Relay) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if !rel.cors(w, r) {
+		return
+	}
 	_, _ = w.Write([]byte("ok"))
 }
 
