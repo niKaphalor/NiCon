@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NiCon</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <span class="brand">NiCon</span>
+  <span id="relay-status" class="status status-unknown">relay: checking…</span>
+</header>
+<main>
+  <section>
+    <h2>Relay</h2>
+    <p class="hint">
+      NiCon needs a small local relay running on your machine to speak RCON —
+      browsers can't open raw TCP sockets on their own. Download and run it
+      from the <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener">repository</a>,
+      then confirm its address below.
+    </p>
+    <form id="relay-form" class="form-inline">
+      <input id="relay-url" type="text" value="http://localhost:8765">
+      <button type="submit">Use this relay</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Nitrado account</h2>
+    <p class="hint">Your token is sent once to the relay above to list servers whose current game has RCON enabled, then discarded — nothing is stored, here or there.</p>
+    <form id="nitrado-form" class="form-inline">
+      <input id="nitrado-token" type="password" placeholder="Nitrado API token" autocomplete="off">
+      <button type="submit">Sync servers</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Add server manually</h2>
+    <form id="manual-form" class="form-grid">
+      <input id="manual-name" type="text" placeholder="Name" required>
+      <input id="manual-host" type="text" placeholder="Host" required>
+      <input id="manual-port" type="number" placeholder="RCON port" required>
+      <input id="manual-password" type="password" placeholder="RCON password" required autocomplete="off">
+      <button type="submit">Add</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Servers <span class="hint">(this session only — nothing is saved anywhere)</span></h2>
+    <ul id="server-list" class="server-list"></ul>
+  </section>
+
+  <section id="console-section" hidden>
+    <h2 id="console-title"></h2>
+    <pre id="log" class="console-log"></pre>
+    <form id="cmd-form" class="form-inline">
+      <input id="cmd-input" type="text" autocomplete="off" placeholder="say hello">
+      <button type="submit">Send</button>
+    </form>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

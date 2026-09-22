@@ -1,5 +1,6 @@
-// Command nicon runs NiCon's web UI: a lightweight RCON control panel for
-// Nitrado-hosted (and other) game servers.
+// Command nicon-relay runs NiCon's local relay: a WebSocket<->RCON bridge
+// and a Nitrado API proxy for the static NiCon web UI (e.g. hosted on
+// GitHub Pages), which can't open raw TCP sockets itself. Stores nothing.
 package main
 
 import (
@@ -8,35 +9,28 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
-	"github.com/niKaphalor/NiCon/internal/store"
-	"github.com/niKaphalor/NiCon/internal/web"
+	"github.com/niKaphalor/NiCon/internal/relay"
 )
 
 func main() {
-	addr := flag.String("addr", ":8080", "address to listen on")
-	dbPath := flag.String("db", "nicon.db", "path to the NiCon database file")
+	addr := flag.String("addr", "localhost:8765", "address to listen on")
+	allowOrigin := flag.String("allow-origin", "https://nikaphalor.github.io,http://localhost:8765", "comma-separated list of origins allowed to connect")
 	flag.Parse()
 
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 
-	st, err := store.Open(*dbPath)
-	if err != nil {
-		logger.Fatalf("open store: %v", err)
-	}
-	defer st.Close()
-
-	app := web.NewApp(st, logger)
-	defer app.Close()
+	rel := relay.New(logger, strings.Split(*allowOrigin, ","))
 
 	server := &http.Server{
 		Addr:    *addr,
-		Handler: app.Routes(),
+		Handler: rel.Routes(),
 	}
 
 	go func() {
-		logger.Printf("NiCon listening on %s", *addr)
+		logger.Printf("NiCon relay listening on %s", *addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatalf("serve: %v", err)
 		}
