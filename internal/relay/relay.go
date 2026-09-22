@@ -195,6 +195,10 @@ func (rel *Relay) handleNitradoSync(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if !gs.GameSpecific.Features.HasRcon || gs.RconPort == 0 || gs.IP == "" {
+			rel.log.Printf(
+				"nitrado sync: skipping service %d (%s, status=%s): has_rcon=%v rcon_port=%d ip=%q",
+				svc.ID, gs.GameHuman, gs.Status, gs.GameSpecific.Features.HasRcon, gs.RconPort, gs.IP,
+			)
 			continue
 		}
 		name := gs.Query.ServerName
