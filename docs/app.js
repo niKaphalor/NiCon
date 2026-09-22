@@ -7,25 +7,49 @@
   var servers = [];
   var activeServerId = null;
   var socket = null;
+  var pendingPlayersRequest = false;
 
-  var relayStatus = document.getElementById("relay-status");
+  // --- element refs ---
+
+  var relayPill = document.getElementById("relay-pill");
+  var relayBanner = document.getElementById("relay-banner");
+  var settingsBtn = document.getElementById("settings-btn");
+  var bannerSettingsBtn = document.getElementById("banner-settings-btn");
+  var settingsModal = document.getElementById("settings-modal");
+  var settingsClose = document.getElementById("settings-close");
   var relayForm = document.getElementById("relay-form");
   var relayUrlInput = document.getElementById("relay-url");
+
+  var viewServers = document.getElementById("view-servers");
+  var viewConsole = document.getElementById("view-console");
+  var serverGrid = document.getElementById("server-grid");
+  var emptyState = document.getElementById("empty-state");
+  var addServerBtn = document.getElementById("add-server-btn");
+  var emptyAddBtn = document.getElementById("empty-add-btn");
+
+  var addModal = document.getElementById("add-modal");
+  var addClose = document.getElementById("add-close");
+  var tabs = document.querySelectorAll(".tab");
+  var tabPanels = document.querySelectorAll(".tab-panel");
   var nitradoForm = document.getElementById("nitrado-form");
   var nitradoTokenInput = document.getElementById("nitrado-token");
   var manualForm = document.getElementById("manual-form");
-  var serverList = document.getElementById("server-list");
-  var consoleSection = document.getElementById("console-section");
+
+  var backBtn = document.getElementById("back-btn");
   var consoleTitle = document.getElementById("console-title");
+  var consoleBadge = document.getElementById("console-badge");
+  var infoBtn = document.getElementById("info-btn");
   var log = document.getElementById("log");
   var cmdForm = document.getElementById("cmd-form");
   var cmdInput = document.getElementById("cmd-input");
+
   var gameSelect = document.getElementById("game-select");
   var playersBtn = document.getElementById("players-btn");
   var playersPanel = document.getElementById("players-panel");
   var infoModal = document.getElementById("info-modal");
   var infoClose = document.getElementById("info-close");
-  var pendingPlayersRequest = false;
+
+  // --- relay address + status ---
 
   function relayHttpUrl() {
     return relayUrlInput.value.replace(/\/+$/, "");
@@ -36,8 +60,8 @@
   }
 
   function setRelayStatus(ok) {
-    relayStatus.textContent = "relay: " + (ok ? "connected" : "unreachable");
-    relayStatus.className = "status " + (ok ? "status-ok" : "status-error");
+    relayPill.className = "relay-pill " + (ok ? "status-ok" : "status-error");
+    relayBanner.hidden = ok;
   }
 
   function checkRelay() {
@@ -49,9 +73,43 @@
   relayForm.addEventListener("submit", function (e) {
     e.preventDefault();
     checkRelay();
+    settingsModal.close();
   });
 
-  // --- server list rendering ---
+  settingsBtn.addEventListener("click", function () { settingsModal.showModal(); });
+  bannerSettingsBtn.addEventListener("click", function () { settingsModal.showModal(); });
+  relayPill.addEventListener("click", function () { settingsModal.showModal(); });
+  settingsClose.addEventListener("click", function () { settingsModal.close(); });
+  settingsModal.addEventListener("click", function (e) {
+    if (e.target === settingsModal) settingsModal.close();
+  });
+
+  // --- add-server modal + tabs ---
+
+  function openAddModal() {
+    addModal.showModal();
+  }
+
+  addServerBtn.addEventListener("click", openAddModal);
+  emptyAddBtn.addEventListener("click", openAddModal);
+  addClose.addEventListener("click", function () { addModal.close(); });
+  addModal.addEventListener("click", function (e) {
+    if (e.target === addModal) addModal.close();
+  });
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      tabs.forEach(function (t) {
+        t.classList.toggle("active", t === tab);
+        t.setAttribute("aria-selected", t === tab ? "true" : "false");
+      });
+      tabPanels.forEach(function (panel) {
+        panel.hidden = panel.dataset.panel !== tab.dataset.tab;
+      });
+    });
+  });
+
+  // --- server state ---
 
   function findServer(id) {
     for (var i = 0; i < servers.length; i++) {
@@ -71,34 +129,51 @@
 
   function removeServer(id) {
     servers = servers.filter(function (s) { return s.id !== id; });
-    if (activeServerId === id) closeConsole();
+    if (activeServerId === id) showServersView();
     renderServers();
   }
 
+  function serverMeta(server) {
+    var parts = [];
+    if (server.game) parts.push(server.game);
+    if (server.protocol === "webrcon") parts.push("WebRCON");
+    parts.push(server.host + ":" + server.port);
+    return parts.join(" · ");
+  }
+
   function renderServers() {
-    serverList.innerHTML = "";
+    serverGrid.innerHTML = "";
+    emptyState.hidden = servers.length > 0;
+    serverGrid.hidden = servers.length === 0;
+
     servers.forEach(function (server) {
-      var li = document.createElement("li");
-      li.className = "server-row";
+      var card = document.createElement("article");
+      card.className = "server-card";
 
-      var label = document.createElement("span");
-      label.textContent = server.name + " — " + server.host + ":" + server.port +
-        (server.game ? " (" + server.game + ")" : "") +
-        (server.protocol === "webrcon" ? " [WebRCON]" : "");
-      li.appendChild(label);
+      var main = document.createElement("div");
+      var h3 = document.createElement("h3");
+      h3.textContent = server.name;
+      main.appendChild(h3);
+      var meta = document.createElement("p");
+      meta.className = "server-meta";
+      meta.textContent = serverMeta(server);
+      main.appendChild(meta);
+      card.appendChild(main);
 
-      var actions = document.createElement("span");
-      actions.className = "server-actions";
+      var actions = document.createElement("div");
+      actions.className = "server-card-actions";
 
       if (!server.password) {
         var pwInput = document.createElement("input");
         pwInput.type = "password";
         pwInput.placeholder = "RCON password";
         pwInput.autocomplete = "off";
+        pwInput.setAttribute("aria-label", "RCON password for " + server.name);
         actions.appendChild(pwInput);
 
         var saveBtn = document.createElement("button");
         saveBtn.type = "button";
+        saveBtn.className = "btn-primary";
         saveBtn.textContent = "Save";
         saveBtn.addEventListener("click", function () {
           server.password = pwInput.value;
@@ -108,6 +183,7 @@
       } else {
         var connectBtn = document.createElement("button");
         connectBtn.type = "button";
+        connectBtn.className = "btn-primary";
         connectBtn.textContent = "Connect";
         connectBtn.addEventListener("click", function () { openConsole(server); });
         actions.appendChild(connectBtn);
@@ -115,13 +191,15 @@
 
       var removeBtn = document.createElement("button");
       removeBtn.type = "button";
-      removeBtn.className = "link-button";
-      removeBtn.textContent = "Remove";
+      removeBtn.className = "icon-btn small";
+      removeBtn.title = "Remove";
+      removeBtn.setAttribute("aria-label", "Remove " + server.name);
+      removeBtn.textContent = "×";
       removeBtn.addEventListener("click", function () { removeServer(server.id); });
       actions.appendChild(removeBtn);
 
-      li.appendChild(actions);
-      serverList.appendChild(li);
+      card.appendChild(actions);
+      serverGrid.appendChild(card);
     });
   }
 
@@ -155,6 +233,7 @@
           });
         });
         renderServers();
+        addModal.close();
       })
       .catch(function (err) {
         alert("Nitrado sync failed: " + err.message);
@@ -173,7 +252,6 @@
     var host = document.getElementById("manual-host");
     var port = document.getElementById("manual-port");
     var password = document.getElementById("manual-password");
-
     var protocol = document.getElementById("manual-protocol");
 
     upsertServer({
@@ -187,7 +265,20 @@
     });
     renderServers();
     manualForm.reset();
+    addModal.close();
   });
+
+  // --- view switching ---
+
+  function showServersView() {
+    closeSocket();
+    activeServerId = null;
+    if (infoModal.open) infoModal.close();
+    viewConsole.hidden = true;
+    viewServers.hidden = false;
+  }
+
+  backBtn.addEventListener("click", showServersView);
 
   // --- console ---
 
@@ -203,10 +294,10 @@
     playersPanel.innerHTML = "";
     pendingPlayersRequest = false;
     gameSelect.value = window.NICON_GUESS_GAME(server.game);
-    consoleTitle.textContent = server.name + " (" + server.host + ":" + server.port + ")";
-    consoleTitle.onclick = function () { openInfoModal(); };
-    consoleSection.hidden = false;
-    consoleSection.scrollIntoView({ behavior: "smooth" });
+    consoleTitle.textContent = server.name;
+    consoleBadge.textContent = serverMeta(server);
+    viewServers.hidden = true;
+    viewConsole.hidden = false;
 
     socket = new WebSocket(relayWsUrl() + "/ws/rcon");
     socket.addEventListener("open", function () {
@@ -257,21 +348,11 @@
     }
   }
 
-  function closeConsole() {
-    closeSocket();
-    activeServerId = null;
-    consoleSection.hidden = true;
-    if (infoModal.open) infoModal.close();
-  }
+  // --- players info modal ---
 
-  function openInfoModal() {
-    infoModal.showModal();
-  }
-
+  infoBtn.addEventListener("click", function () { infoModal.showModal(); });
   infoClose.addEventListener("click", function () { infoModal.close(); });
   infoModal.addEventListener("click", function (e) {
-    // A click landing on the <dialog> element itself (not its content) hit
-    // the backdrop.
     if (e.target === infoModal) infoModal.close();
   });
 
@@ -285,7 +366,7 @@
     if (!parsed) {
       var notice = document.createElement("p");
       notice.className = "hint";
-      notice.textContent = "Could not parse the " + game.label + " response — see the raw output above.";
+      notice.textContent = "Could not parse the " + game.label + " response — see the raw output in the console.";
       playersPanel.appendChild(notice);
       return;
     }
@@ -345,5 +426,6 @@
     cmdInput.value = "";
   });
 
+  renderServers();
   checkRelay();
 })();

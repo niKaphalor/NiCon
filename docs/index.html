@@ -4,88 +4,134 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NiCon</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <span class="brand">NiCon</span>
-  <span id="relay-status" class="status status-unknown">relay: checking…</span>
+
+<header class="topbar">
+  <span class="wordmark">NiCon</span>
+  <div class="topbar-right">
+    <button type="button" id="relay-pill" class="relay-pill status-unknown">
+      <span class="dot"></span> relay
+    </button>
+    <button type="button" id="settings-btn" class="icon-btn" aria-label="Relay settings" title="Relay settings">⚙</button>
+  </div>
 </header>
+
+<div id="relay-banner" class="relay-banner" hidden>
+  <p>
+    NiCon can't reach its local relay — nothing will work until it's
+    running. <a href="https://github.com/niKaphalor/NiCon#relay" target="_blank" rel="noopener">Get it here</a>,
+    then check the address in <button type="button" id="banner-settings-btn" class="link-button">settings</button>.
+  </p>
+</div>
+
 <main>
-  <section>
-    <h2>Relay</h2>
-    <p class="hint">
-      NiCon needs a small local relay running on your machine to speak RCON —
-      browsers can't open raw TCP sockets on their own. Download and run it
-      from the <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener">repository</a>,
-      then confirm its address below.
-    </p>
-    <form id="relay-form" class="form-inline">
-      <input id="relay-url" type="text" value="http://localhost:8765">
-      <button type="submit">Use this relay</button>
-    </form>
+  <section id="view-servers" class="view">
+    <div class="view-header">
+      <h1>Servers</h1>
+      <button type="button" id="add-server-btn" class="btn-primary">+ Add server</button>
+    </div>
+    <p class="hint view-subhead">Nothing here is saved — reload the page and you'll start over, on purpose.</p>
+
+    <div id="server-grid" class="server-grid"></div>
+
+    <div id="empty-state" class="empty-state" hidden>
+      <p>No servers added this session.</p>
+      <button type="button" id="empty-add-btn" class="btn-primary">+ Add a server</button>
+    </div>
   </section>
 
-  <section>
-    <h2>Nitrado account</h2>
-    <p class="hint">Your token is sent once to the relay above to list servers whose current game has RCON enabled, then discarded — nothing is stored, here or there.</p>
-    <form id="nitrado-form" class="form-inline">
-      <input id="nitrado-token" type="password" placeholder="Nitrado API token" autocomplete="off">
-      <button type="submit">Sync servers</button>
-    </form>
-  </section>
-
-  <section>
-    <h2>Add server manually</h2>
-    <form id="manual-form" class="form-grid">
-      <input id="manual-name" type="text" placeholder="Name" required>
-      <input id="manual-host" type="text" placeholder="Host" required>
-      <input id="manual-port" type="number" placeholder="RCON port" required>
-      <input id="manual-password" type="password" placeholder="RCON password" required autocomplete="off">
-      <select id="manual-protocol">
-        <option value="source">Source RCON (most games)</option>
-        <option value="webrcon">Rust WebRCON</option>
-      </select>
-      <button type="submit">Add</button>
-    </form>
-  </section>
-
-  <section>
-    <h2>Servers <span class="hint">(this session only — nothing is saved anywhere)</span></h2>
-    <ul id="server-list" class="server-list"></ul>
-  </section>
-
-  <section id="console-section" hidden>
-    <button type="button" id="console-title" class="console-title-link"></button>
+  <section id="view-console" class="view" hidden>
+    <div class="console-header">
+      <button type="button" id="back-btn" class="link-button">← Servers</button>
+      <div class="console-heading">
+        <h1 id="console-title"></h1>
+        <span id="console-badge" class="badge"></span>
+      </div>
+      <button type="button" id="info-btn" class="btn-secondary">Players</button>
+    </div>
     <pre id="log" class="console-log"></pre>
-    <form id="cmd-form" class="form-inline">
-      <input id="cmd-input" type="text" autocomplete="off" placeholder="say hello">
+    <form id="cmd-form" class="cmd-bar">
+      <input id="cmd-input" type="text" autocomplete="off" placeholder="Type a command…" aria-label="RCON command">
       <button type="submit">Send</button>
     </form>
   </section>
 </main>
 
+<dialog id="add-modal">
+  <div class="modal-header">
+    <h2>Add server</h2>
+    <button type="button" id="add-close" class="link-button">Close</button>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button type="button" class="tab active" data-tab="nitrado" role="tab" aria-selected="true">From Nitrado</button>
+    <button type="button" class="tab" data-tab="manual" role="tab" aria-selected="false">Manually</button>
+  </div>
+
+  <div class="tab-panel" data-panel="nitrado">
+    <p class="hint">Your token is sent once to the relay to list servers whose current game supports RCON, then discarded — nothing is stored, here or there.</p>
+    <form id="nitrado-form" class="stacked-form">
+      <input id="nitrado-token" type="password" placeholder="Nitrado API token" autocomplete="off" aria-label="Nitrado API token">
+      <button type="submit" class="btn-primary">Sync servers</button>
+    </form>
+  </div>
+
+  <div class="tab-panel" data-panel="manual" hidden>
+    <form id="manual-form" class="stacked-form">
+      <input id="manual-name" type="text" placeholder="Name" required aria-label="Server name">
+      <div class="form-row">
+        <input id="manual-host" type="text" placeholder="Host" required aria-label="Host">
+        <input id="manual-port" type="number" placeholder="Port" required aria-label="Port">
+      </div>
+      <input id="manual-password" type="password" placeholder="RCON password" required autocomplete="off" aria-label="RCON password">
+      <select id="manual-protocol" aria-label="RCON protocol">
+        <option value="source">Source RCON (most games)</option>
+        <option value="webrcon">Rust WebRCON</option>
+      </select>
+      <button type="submit" class="btn-primary">Add server</button>
+    </form>
+  </div>
+</dialog>
+
+<dialog id="settings-modal">
+  <div class="modal-header">
+    <h2>Relay</h2>
+    <button type="button" id="settings-close" class="link-button">Close</button>
+  </div>
+  <p class="hint">
+    NiCon needs a small local relay running on your machine to speak RCON
+    — browsers can't open raw TCP or WebRCON sockets on their own.
+    <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener">Get it here.</a>
+  </p>
+  <form id="relay-form" class="form-row">
+    <input id="relay-url" type="text" value="http://localhost:8765" aria-label="Relay address">
+    <button type="submit" class="btn-primary">Save</button>
+  </form>
+</dialog>
+
 <dialog id="info-modal">
   <div class="modal-header">
-    <h3>Server info</h3>
+    <h2>Players</h2>
     <button type="button" id="info-close" class="link-button">Close</button>
   </div>
   <p class="hint">
-    Player-list parsing is best-effort, based on documented command
-    formats, not verified against a live server of each game — if it
-    looks wrong, the raw response is still visible in the console.
+    Parsing is best-effort, based on documented command formats, not
+    verified against a live server of each game — if it looks wrong, the
+    raw response is still visible in the console.
   </p>
-  <div class="console-toolbar">
-    <label>Game
-      <select id="game-select">
-        <option value="">Generic (no parsing)</option>
-        <option value="minecraft">Minecraft</option>
-        <option value="rust">Rust</option>
-        <option value="ark">ARK: Survival Evolved</option>
-        <option value="palworld">Palworld</option>
-      </select>
-    </label>
-    <button type="button" id="players-btn">Show players</button>
+  <div class="form-row">
+    <select id="game-select" aria-label="Game">
+      <option value="">Generic (no parsing)</option>
+      <option value="minecraft">Minecraft</option>
+      <option value="rust">Rust</option>
+      <option value="ark">ARK: Survival Evolved</option>
+      <option value="palworld">Palworld</option>
+    </select>
+    <button type="button" id="players-btn" class="btn-primary">Show players</button>
   </div>
   <div id="players-panel"></div>
 </dialog>
