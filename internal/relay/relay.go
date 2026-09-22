@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gorcon/rcon"
 	"github.com/gorilla/websocket"
@@ -84,8 +85,10 @@ func (rel *Relay) handleHealth(w http.ResponseWriter, r *http.Request) {
 // --- WebSocket RCON bridge ---
 
 // wsMessage is the JSON protocol spoken over the WebSocket connection.
-// Client -> relay: {"type":"connect", host, port, password} then any number
-// of {"type":"command", command}.
+// Client -> relay: {"type":"connect", host, port, password, protocol} then
+// any number of {"type":"command", command}. protocol is "source" (default,
+// classic Source RCON over raw TCP) or "webrcon" (Rust's WebSocket-based
+// RCON).
 // Relay -> client: {"type":"connected"} / {"type":"response", output} /
 // {"type":"error", message}.
 type wsMessage struct {
@@ -93,9 +96,34 @@ type wsMessage struct {
 	Host     string `json:"host,omitempty"`
 	Port     int    `json:"port,omitempty"`
 	Password string `json:"password,omitempty"`
+	Protocol string `json:"protocol,omitempty"`
 	Command  string `json:"command,omitempty"`
 	Output   string `json:"output,omitempty"`
 	Message  string `json:"message,omitempty"`
+}
+
+// gameConn abstracts over the two RCON transports NiCon speaks: classic
+// Source RCON (*rcon.Conn, which already satisfies this) and WebRCON
+// (*webRconConn).
+type gameConn interface {
+	Execute(command string) (string, error)
+	Close() error
+}
+
+func connectGame(msg wsMessage) (gameConn, error) {
+	if msg.Protocol == "webrcon" {
+		c, err := dialWebRcon(msg.Host, msg.Port, msg.Password)
+		if err != nil {
+			return nil, err
+		}
+		return c, nil
+	}
+	address := fmt.Sprintf("%s:%d", msg.Host, msg.Port)
+	c, err := rcon.Dial(address, msg.Password)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -106,10 +134,10 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	var rc *rcon.Conn
+	var gc gameConn
 	defer func() {
-		if rc != nil {
-			rc.Close()
+		if gc != nil {
+			gc.Close()
 		}
 	}()
 
@@ -121,28 +149,28 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 
 		switch msg.Type {
 		case "connect":
-			if rc != nil {
-				rc.Close()
-				rc = nil
+			if gc != nil {
+				gc.Close()
+				gc = nil
 			}
-			address := fmt.Sprintf("%s:%d", msg.Host, msg.Port)
-			rc, err = rcon.Dial(address, msg.Password)
-			if err != nil {
-				_ = conn.WriteJSON(wsMessage{Type: "error", Message: err.Error()})
+			newConn, dialErr := connectGame(msg)
+			if dialErr != nil {
+				_ = conn.WriteJSON(wsMessage{Type: "error", Message: dialErr.Error()})
 				continue
 			}
+			gc = newConn
 			_ = conn.WriteJSON(wsMessage{Type: "connected"})
 
 		case "command":
-			if rc == nil {
+			if gc == nil {
 				_ = conn.WriteJSON(wsMessage{Type: "error", Message: "not connected"})
 				continue
 			}
-			output, execErr := rc.Execute(msg.Command)
+			output, execErr := gc.Execute(msg.Command)
 			if execErr != nil {
 				_ = conn.WriteJSON(wsMessage{Type: "error", Message: execErr.Error()})
-				rc.Close()
-				rc = nil
+				gc.Close()
+				gc = nil
 				continue
 			}
 			_ = conn.WriteJSON(wsMessage{Type: "response", Output: output})
@@ -166,6 +194,7 @@ type nitradoServer struct {
 	Game      string `json:"game"`
 	Host      string `json:"host"`
 	Port      int    `json:"port"`
+	Protocol  string `json:"protocol"` // "source" or "webrcon"
 }
 
 func (rel *Relay) handleNitradoSync(w http.ResponseWriter, r *http.Request) {
@@ -194,13 +223,27 @@ func (rel *Relay) handleNitradoSync(w http.ResponseWriter, r *http.Request) {
 			rel.log.Printf("nitrado sync: gameserver %d: %v", svc.ID, err)
 			continue
 		}
-		if !gs.GameSpecific.Features.HasRcon || gs.RconPort == 0 || gs.IP == "" {
+		// Rust doesn't use classic RCON at all - it has its own WebSocket-based
+		// "WebRCON" protocol, so Nitrado's has_rcon flag likely doesn't (and
+		// isn't expected to) cover it. Treat any Rust service as eligible on
+		// host/port alone, and use the webrcon transport for it.
+		isRust := strings.Contains(strings.ToLower(gs.GameHuman), "rust")
+		hasConnectionInfo := gs.RconPort != 0 && gs.IP != ""
+		eligible := (gs.GameSpecific.Features.HasRcon || isRust) && hasConnectionInfo
+
+		if !eligible {
 			rel.log.Printf(
 				"nitrado sync: skipping service %d (%s, status=%s): has_rcon=%v rcon_port=%d ip=%q",
 				svc.ID, gs.GameHuman, gs.Status, gs.GameSpecific.Features.HasRcon, gs.RconPort, gs.IP,
 			)
 			continue
 		}
+
+		protocol := "source"
+		if isRust {
+			protocol = "webrcon"
+		}
+
 		name := gs.Query.ServerName
 		if name == "" {
 			name = gs.GameHuman
@@ -211,6 +254,7 @@ func (rel *Relay) handleNitradoSync(w http.ResponseWriter, r *http.Request) {
 			Game:      gs.GameHuman,
 			Host:      gs.IP,
 			Port:      gs.RconPort,
+			Protocol:  protocol,
 		})
 	}
 

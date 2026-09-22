@@ -29,7 +29,14 @@ working prototype.
    servers" (adds every server whose current game has RCON enabled; the
    RCON password itself isn't in Nitrado's API response, so add it
    inline before connecting).
-4. Click "Connect" to open the console for that server.
+4. Click "Connect" to open the console for that server. Click the server
+   name in the console to open a modal with a structured player list, for
+   the games NiCon knows how to parse (see [games.js](docs/games.js)).
+
+Most games speak classic Source RCON, but **Rust doesn't** — it uses its
+own WebSocket-based "WebRCON" protocol instead. NiCon detects this
+automatically for servers found via Nitrado sync; for a manually-added
+Rust server, pick "Rust WebRCON" in the protocol dropdown when adding it.
 
 ## Relay
 
@@ -42,14 +49,20 @@ go build -o nicon-relay .
 The relay does two things, and stores neither:
 
 - **WebSocket ↔ RCON bridge** (`/ws/rcon`): the browser sends
-  `{"type":"connect", host, port, password}` then any number of
-  `{"type":"command", command}` messages; the relay holds one
-  [gorcon/rcon](https://github.com/gorcon/rcon) connection for the
-  lifetime of that WebSocket and relays responses back as JSON.
+  `{"type":"connect", host, port, password, protocol}` then any number of
+  `{"type":"command", command}` messages; the relay holds one game
+  connection for the lifetime of that WebSocket and relays responses back
+  as JSON. `protocol` is `"source"` (default — classic Source RCON via
+  [gorcon/rcon](https://github.com/gorcon/rcon)) or `"webrcon"` (Rust's
+  own WebSocket-based RCON, hand-rolled in `internal/relay/webrcon.go`
+  since there's no existing Go client for it).
 - **Nitrado API proxy** (`POST /api/nitrado/sync`): takes `{"token": "..."}`,
   calls the Nitrado API server-side (so the token never needs to survive a
   browser CORS round trip on its own), and returns the RCON-capable
-  servers. The token is used for that one request and then forgotten.
+  servers, each tagged with its `protocol`. Rust services are included even
+  though Nitrado's `has_rcon` flag apparently doesn't cover WebRCON — any
+  service whose game is Rust is treated as eligible on host/port alone.
+  The token is used for that one request and then forgotten.
 
 Only origins in `-allow-origin` (default: the GitHub Pages URL plus
 `localhost:8765`) can open a WebSocket to the relay or call the sync
@@ -74,5 +87,12 @@ on a shared or otherwise untrusted host.
 
 - Windows binary packaging for the relay (`GOOS=windows GOARCH=amd64 go
   build` works today, just not automated/released anywhere yet)
-- Automated tests (the relay's WebSocket↔RCON path has been exercised
-  manually against a mock RCON server, but there's no test suite yet)
+- Automated tests (both the classic RCON and WebRCON paths have been
+  exercised manually against hand-written mock servers, but there's no
+  test suite yet)
+- The WebRCON implementation is based on Facepunch's own
+  [webrcon](https://github.com/Facepunch/webrcon) tool and third-party
+  documentation, not verified against a real Rust server yet
+- Structured player-list parsing (`docs/games.js`) covers Minecraft, Rust,
+  ARK: Survival Evolved, and Palworld, based on documented command output
+  formats rather than verified live responses — see the file for details

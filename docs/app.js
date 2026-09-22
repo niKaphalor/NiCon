@@ -83,7 +83,8 @@
 
       var label = document.createElement("span");
       label.textContent = server.name + " — " + server.host + ":" + server.port +
-        (server.game ? " (" + server.game + ")" : "");
+        (server.game ? " (" + server.game + ")" : "") +
+        (server.protocol === "webrcon" ? " [WebRCON]" : "");
       li.appendChild(label);
 
       var actions = document.createElement("span");
@@ -149,6 +150,7 @@
             host: item.host,
             port: item.port,
             password: null,
+            protocol: item.protocol || "source",
             source: "nitrado",
           });
         });
@@ -172,12 +174,15 @@
     var port = document.getElementById("manual-port");
     var password = document.getElementById("manual-password");
 
+    var protocol = document.getElementById("manual-protocol");
+
     upsertServer({
       id: "manual-" + crypto.randomUUID(),
       name: name.value,
       host: host.value,
       port: parseInt(port.value, 10),
       password: password.value,
+      protocol: protocol.value,
       source: "manual",
     });
     renderServers();
@@ -210,6 +215,7 @@
         host: server.host,
         port: server.port,
         password: server.password,
+        protocol: server.protocol || "source",
       }));
     });
     socket.addEventListener("message", function (event) {

@@ -54,7 +54,7 @@ section {
 
 a { color: var(--accent); }
 
-input[type="text"], input[type="password"], input[type="number"] {
+input[type="text"], input[type="password"], input[type="number"], select {
   background: #0f1216;
   border: 1px solid var(--border);
   border-radius: 6px;
