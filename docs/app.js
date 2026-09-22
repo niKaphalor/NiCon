@@ -23,6 +23,8 @@
   var gameSelect = document.getElementById("game-select");
   var playersBtn = document.getElementById("players-btn");
   var playersPanel = document.getElementById("players-panel");
+  var infoModal = document.getElementById("info-modal");
+  var infoClose = document.getElementById("info-close");
   var pendingPlayersRequest = false;
 
   function relayHttpUrl() {
@@ -197,6 +199,7 @@
     pendingPlayersRequest = false;
     gameSelect.value = window.NICON_GUESS_GAME(server.game);
     consoleTitle.textContent = server.name + " (" + server.host + ":" + server.port + ")";
+    consoleTitle.onclick = function () { openInfoModal(); };
     consoleSection.hidden = false;
     consoleSection.scrollIntoView({ behavior: "smooth" });
 
@@ -252,7 +255,19 @@
     closeSocket();
     activeServerId = null;
     consoleSection.hidden = true;
+    if (infoModal.open) infoModal.close();
   }
+
+  function openInfoModal() {
+    infoModal.showModal();
+  }
+
+  infoClose.addEventListener("click", function () { infoModal.close(); });
+  infoModal.addEventListener("click", function (e) {
+    // A click landing on the <dialog> element itself (not its content) hit
+    // the backdrop.
+    if (e.target === infoModal) infoModal.close();
+  });
 
   function renderPlayersPanel(rawOutput) {
     playersPanel.innerHTML = "";
