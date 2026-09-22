@@ -1,0 +1,10 @@
+{{define "content"}}
+<h1>Add server</h1>
+<form method="post" action="/servers/new" class="form">
+  <label>Name<input type="text" name="name" required></label>
+  <label>Host<input type="text" name="host" required placeholder="203.0.113.1"></label>
+  <label>RCON port<input type="number" name="port" required placeholder="27015"></label>
+  <label>RCON password<input type="password" name="password" required></label>
+  <button type="submit">Add</button>
+</form>
+{{end}}

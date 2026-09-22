@@ -1,0 +1,10 @@
+{{define "content"}}
+<h1>{{.Server.Name}}</h1>
+<p class="hint">{{.Server.Host}}:{{.Server.Port}}</p>
+<pre id="log" class="console-log"></pre>
+<form id="cmd-form" class="console-form" data-server-id="{{.Server.ID}}">
+  <input id="cmd-input" type="text" autocomplete="off" placeholder="say hello" autofocus>
+  <button type="submit">Send</button>
+</form>
+<script src="/static/console.js"></script>
+{{end}}
