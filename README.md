@@ -23,15 +23,16 @@ working prototype.
 ## Using it
 
 1. Open **https://nikaphalor.github.io/NiCon/**.
-2. Run the relay locally (see below) and confirm its address in the
-   "Relay" box — the status pill turns green once it's reachable.
-3. Add a server manually, or paste a Nitrado API token and hit "Sync
-   servers" (adds every server whose current game has RCON enabled; the
-   RCON password itself isn't in Nitrado's API response, so add it
-   inline before connecting).
-4. Click "Connect" to open the console for that server. Click the server
-   name in the console to open a modal with a structured player list, for
-   the games NiCon knows how to parse (see [games.js](docs/games.js)).
+2. Run the relay locally (see below). The relay pill top-right turns green
+   once it's reachable; open it (or the ⚙ next to it) to change the
+   address if you're not using the default.
+3. Click **+ Add server**: sync from a Nitrado API token (adds every
+   server whose current game has RCON enabled; the RCON password itself
+   isn't in Nitrado's API response, so add it inline on the server card
+   before connecting), or add one manually.
+4. Click **Connect** on a server to open its console. Click **Players**
+   there for a structured player list, for the games NiCon knows how to
+   parse (see [games.js](docs/games.js)).
 
 Most games speak classic Source RCON, but **Rust doesn't** — it uses its
 own WebSocket-based "WebRCON" protocol instead. NiCon detects this
