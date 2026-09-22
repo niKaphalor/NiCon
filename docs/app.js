@@ -20,6 +20,10 @@
   var log = document.getElementById("log");
   var cmdForm = document.getElementById("cmd-form");
   var cmdInput = document.getElementById("cmd-input");
+  var gameSelect = document.getElementById("game-select");
+  var playersBtn = document.getElementById("players-btn");
+  var playersPanel = document.getElementById("players-panel");
+  var pendingPlayersRequest = false;
 
   function relayHttpUrl() {
     return relayUrlInput.value.replace(/\/+$/, "");
@@ -189,6 +193,9 @@
     closeSocket();
     activeServerId = server.id;
     log.textContent = "";
+    playersPanel.innerHTML = "";
+    pendingPlayersRequest = false;
+    gameSelect.value = window.NICON_GUESS_GAME(server.game);
     consoleTitle.textContent = server.name + " (" + server.host + ":" + server.port + ")";
     consoleSection.hidden = false;
     consoleSection.scrollIntoView({ behavior: "smooth" });
@@ -214,8 +221,16 @@
         appendLog("(connected)");
       } else if (msg.type === "response") {
         appendLog(msg.output && msg.output.length ? msg.output : "(no output)");
+        if (pendingPlayersRequest) {
+          pendingPlayersRequest = false;
+          renderPlayersPanel(msg.output || "");
+        }
       } else if (msg.type === "error") {
         appendLog("error: " + msg.message);
+        if (pendingPlayersRequest) {
+          pendingPlayersRequest = false;
+          playersPanel.innerHTML = "";
+        }
       }
     });
     socket.addEventListener("close", function () {
@@ -238,6 +253,67 @@
     activeServerId = null;
     consoleSection.hidden = true;
   }
+
+  function renderPlayersPanel(rawOutput) {
+    playersPanel.innerHTML = "";
+    var key = gameSelect.value;
+    if (!key) return;
+
+    var game = window.NICON_GAMES[key];
+    var parsed = game.parse(rawOutput);
+    if (!parsed) {
+      var notice = document.createElement("p");
+      notice.className = "hint";
+      notice.textContent = "Could not parse the " + game.label + " response — see the raw output above.";
+      playersPanel.appendChild(notice);
+      return;
+    }
+
+    var summary = document.createElement("p");
+    summary.className = "hint";
+    summary.textContent = parsed.summary;
+    playersPanel.appendChild(summary);
+
+    var table = document.createElement("table");
+    var thead = document.createElement("thead");
+    var headRow = document.createElement("tr");
+    parsed.columns.forEach(function (col) {
+      var th = document.createElement("th");
+      th.textContent = col;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement("tbody");
+    parsed.rows.forEach(function (row) {
+      var tr = document.createElement("tr");
+      row.forEach(function (cell) {
+        var td = document.createElement("td");
+        td.textContent = cell;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    playersPanel.appendChild(table);
+  }
+
+  playersBtn.addEventListener("click", function () {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      appendLog("error: not connected");
+      return;
+    }
+    var key = gameSelect.value;
+    if (!key) {
+      appendLog("error: select a game above first");
+      return;
+    }
+    var command = window.NICON_GAMES[key].command;
+    pendingPlayersRequest = true;
+    appendLog("> " + command);
+    socket.send(JSON.stringify({ type: "command", command: command }));
+  });
 
   cmdForm.addEventListener("submit", function (e) {
     e.preventDefault();

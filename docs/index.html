@@ -53,6 +53,24 @@
 
   <section id="console-section" hidden>
     <h2 id="console-title"></h2>
+    <p class="hint">
+      Player-list parsing is best-effort, based on documented command
+      formats, not verified against a live server of each game — if it
+      looks wrong, the raw response is always still shown below.
+    </p>
+    <div class="console-toolbar">
+      <label>Game
+        <select id="game-select">
+          <option value="">Generic (no parsing)</option>
+          <option value="minecraft">Minecraft</option>
+          <option value="rust">Rust</option>
+          <option value="ark">ARK: Survival Evolved</option>
+          <option value="palworld">Palworld</option>
+        </select>
+      </label>
+      <button type="button" id="players-btn">Show players</button>
+    </div>
+    <div id="players-panel"></div>
     <pre id="log" class="console-log"></pre>
     <form id="cmd-form" class="form-inline">
       <input id="cmd-input" type="text" autocomplete="off" placeholder="say hello">
@@ -60,6 +78,7 @@
     </form>
   </section>
 </main>
+<script src="games.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
