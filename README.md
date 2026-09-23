@@ -155,6 +155,13 @@ The relay does three things:
   though Nitrado's `has_rcon` flag apparently doesn't cover WebRCON — any
   service whose game is Rust is treated as eligible on host/port alone. The
   token itself is used for that one request and then forgotten.
+- **Admin** (`GET /api/admin/users`, `DELETE /api/admin/users/{id}`,
+  `POST /api/admin/users/{id}/recovery-code`): each checks the
+  authenticated caller's own `is_admin` flag before doing anything, on top
+  of the usual session check — a regular account gets 403, not just a
+  UI that happens to hide the button. Listing returns only
+  username/created-at/role/server-count per account, never password or
+  recovery-code hashes, or any of that account's server details.
 
 Only origins in `-allow-origin` (default: the GitHub Pages URL plus
 `localhost:8765`) can call the relay at all — without that check, any other
@@ -184,16 +191,47 @@ through the registration page:
 
 `adduser` also generates and prints a recovery code, same as self-service
 registration does — hand it to whoever the account is for, so they have
-the same self-service password-reset path either way.
+the same self-service password-reset path either way. If an existing
+account ever needs a new one (lost, or predates this feature —
+`recovery_code_hash` starts out `NULL` for accounts created before it
+shipped), regenerate it without touching their password:
 
-Each account's server list is completely separate; there's no sharing or
-admin override built in yet (see [Not implemented yet](#not-implemented-yet)).
-Open registration means anyone who reaches the frontend can create an
-account on your relay and store their own RCON credentials in your
-database — still run the relay only on a machine/network you're
-comfortable with that (see [Legal pages](#legal-pages) below for what to
-do about the accompanying imprint/privacy policy before operating this
-for real users).
+```sh
+./nicon-relay gen-recovery-code <username>
+```
+
+Each account's server list is completely separate; there's no sharing
+between accounts (see [Not implemented yet](#not-implemented-yet)). Open
+registration means anyone who reaches the frontend can create an account
+on your relay and store their own RCON credentials in your database —
+still run the relay only on a machine/network you're comfortable with
+that (see [Legal pages](#legal-pages) below for what to do about the
+accompanying imprint/privacy policy before operating this for real
+users).
+
+## Admin panel
+
+One or more accounts can be flagged as admin — visible as an **Admin**
+link next to their username once logged in, leading to a panel listing
+every account on the relay (username, created date, server count, role),
+with two actions per row: **regenerate their recovery code** (if they've
+lost it and can't reach you to run `gen-recovery-code` yourself) and
+**delete their account** (same cascading deletion as the self-service
+path, just triggered by an admin instead of the account holder).
+
+There's no HTTP endpoint that can grant admin status — the only way to
+create the first admin (or any other) is from the command line, by
+someone who already has operator-level access to the relay's host and
+database:
+
+```sh
+./nicon-relay setadmin <username>            # grant
+./nicon-relay setadmin -revoke <username>    # revoke
+```
+
+This is deliberate: self-registration is open to anyone who reaches the
+frontend, so admin promotion staying CLI-only means a bug in the web API
+can't be used to self-promote to admin.
 
 ## Legal pages
 
@@ -263,21 +301,22 @@ language.
 - Structured player-list parsing (`docs/games.js`) covers Minecraft, Rust,
   ARK: Survival Evolved, and Palworld, based on documented command output
   formats rather than verified live responses — see the file for details
-- Any admin UI for managing accounts — signup, self-service password
-  reset (via a recovery code), and self-service account deletion all
-  exist, but there's no dashboard for the relay operator; `adduser` and
-  direct database access are still the only operator-side tools
+- The [admin panel](#admin-panel) covers account management (list, delete,
+  regenerate a recovery code) but nothing about server data — an admin
+  can't see, edit, or connect through another account's servers, same as
+  anyone else
 - Sharing a server between accounts, or any notion of teams/roles — server
   ownership is strictly one account per server today
 - Invite-gating on `/api/register` — signup is open to anyone who can
   reach the frontend (rate-limited per IP, see [Relay](#relay) above, but
   not restricted to people you've invited)
 
-## Roadmap: becoming a full admin panel
+## Roadmap
 
 The relay now runs continuously against a real database, with servers and
-RCON credentials tied to individual accounts — the "nothing is stored,
-anywhere" phase is over. What's still ahead: player profiles/history,
+RCON credentials tied to individual accounts, self-service registration
+and password recovery, and a basic admin panel — the "nothing is stored,
+anywhere" phase is long over. What's still ahead: player profiles/history,
 notes, shared ban lists, scheduled/triggered commands, and Discord
 webhooks, all of which build on the storage layer that's now in place
 rather than requiring another architecture change.

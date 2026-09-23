@@ -183,6 +183,28 @@ func (a *Auth) ResetPassword(ctx context.Context, username, recoveryCode, newPas
 	return newRecoveryCode, nil
 }
 
+// GenerateAndSetRecoveryCode generates a fresh recovery code, stores its
+// hash for userID, and returns the plaintext once. Used by the
+// `gen-recovery-code` CLI command (bootstrapping a code for an account
+// that predates this feature, or replacing a lost one) and by the admin
+// panel's "regenerate recovery code" action — both cases where the
+// account holder can't run the normal ResetPassword flow themselves
+// because they have no recovery code to start from.
+func (a *Auth) GenerateAndSetRecoveryCode(ctx context.Context, userID int64) (string, error) {
+	code, err := GenerateRecoveryCode()
+	if err != nil {
+		return "", err
+	}
+	hash, err := HashPassword(NormalizeRecoveryCode(code))
+	if err != nil {
+		return "", err
+	}
+	if err := a.store.SetRecoveryCodeHash(ctx, userID, hash); err != nil {
+		return "", err
+	}
+	return code, nil
+}
+
 // GenerateRecoveryCode returns a fresh one-time recovery code formatted in
 // groups of 5 characters for readability (e.g. "ABCDE-FGH2J-..."). Callers
 // normalize it (NormalizeRecoveryCode) before hashing or comparing, so the

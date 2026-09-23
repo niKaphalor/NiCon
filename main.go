@@ -30,6 +30,12 @@ func main() {
 		case "genkey":
 			runGenKey()
 			return
+		case "gen-recovery-code":
+			runGenRecoveryCode(os.Args[2:])
+			return
+		case "setadmin":
+			runSetAdmin(os.Args[2:])
+			return
 		}
 	}
 	runServer()
@@ -163,4 +169,69 @@ func runGenKey() {
 		log.Fatalf("generate key: %v", err)
 	}
 	fmt.Println(key)
+}
+
+// runGenRecoveryCode issues a fresh recovery code for an existing account
+// — bootstrapping one for an account that predates this feature, or
+// replacing a lost code, without needing that account's password.
+func runGenRecoveryCode(args []string) {
+	fs := flag.NewFlagSet("nicon-relay gen-recovery-code", flag.ExitOnError)
+	dsn, encKey := dbFlags(fs)
+	fs.Parse(args)
+
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: nicon-relay gen-recovery-code [-db-dsn ...] [-encryption-key ...] <username>")
+		os.Exit(2)
+	}
+	username := fs.Arg(0)
+
+	st := openStore(*dsn, *encKey)
+	defer st.Close()
+
+	user, err := st.GetUserByUsername(context.Background(), username)
+	if err != nil {
+		log.Fatalf("find user %q: %v", username, err)
+	}
+
+	code, err := auth.New(st).GenerateAndSetRecoveryCode(context.Background(), user.ID)
+	if err != nil {
+		log.Fatalf("generate recovery code: %v", err)
+	}
+	fmt.Printf("New recovery code for %q (any previous code no longer works):\n\n", username)
+	fmt.Println("  " + code)
+}
+
+// runSetAdmin grants (or, with -revoke, removes) admin status. This is
+// deliberately CLI-only — there is no HTTP endpoint that can promote an
+// account to admin, so the only path to creating the first admin (or any
+// other) is someone who already has command-line/database access to the
+// relay.
+func runSetAdmin(args []string) {
+	fs := flag.NewFlagSet("nicon-relay setadmin", flag.ExitOnError)
+	revoke := fs.Bool("revoke", false, "remove admin status instead of granting it")
+	dsn, encKey := dbFlags(fs)
+	fs.Parse(args)
+
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: nicon-relay setadmin [-revoke] [-db-dsn ...] [-encryption-key ...] <username>")
+		os.Exit(2)
+	}
+	username := fs.Arg(0)
+
+	st := openStore(*dsn, *encKey)
+	defer st.Close()
+
+	user, err := st.GetUserByUsername(context.Background(), username)
+	if err != nil {
+		log.Fatalf("find user %q: %v", username, err)
+	}
+
+	if err := st.SetAdmin(context.Background(), user.ID, !*revoke); err != nil {
+		log.Fatalf("set admin: %v", err)
+	}
+	if *revoke {
+		fmt.Printf("%q is no longer an admin\n", username)
+	} else {
+		fmt.Printf("%q is now an admin\n", username)
+	}
 }

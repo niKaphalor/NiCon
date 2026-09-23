@@ -126,6 +126,13 @@ func (rel *Relay) Routes() http.Handler {
 	mux.HandleFunc("POST /api/nitrado/sync", rel.handleNitradoSync)
 	mux.HandleFunc("OPTIONS /api/nitrado/sync", rel.handleNitradoSync)
 
+	mux.HandleFunc("GET /api/admin/users", rel.handleAdminListUsers)
+	mux.HandleFunc("OPTIONS /api/admin/users", rel.handleAdminListUsers)
+	mux.HandleFunc("DELETE /api/admin/users/{id}", rel.handleAdminDeleteUser)
+	mux.HandleFunc("OPTIONS /api/admin/users/{id}", rel.handleAdminDeleteUser)
+	mux.HandleFunc("POST /api/admin/users/{id}/recovery-code", rel.handleAdminRegenerateRecoveryCode)
+	mux.HandleFunc("OPTIONS /api/admin/users/{id}/recovery-code", rel.handleAdminRegenerateRecoveryCode)
+
 	return mux
 }
 

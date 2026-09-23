@@ -14,6 +14,7 @@
   <span class="wordmark">NiCon</span>
   <div class="topbar-right">
     <span id="username-label" class="hint" hidden></span>
+    <button type="button" id="admin-nav-btn" class="link-button" data-i18n="admin.navLabel" hidden>Admin</button>
     <button type="button" id="logout-btn" class="link-button" data-i18n="nav.signOut" hidden>Sign out</button>
     <select id="lang-select" class="lang-select" aria-label="Language" data-i18n-aria-label="nav.language">
       <option value="en">EN</option>
@@ -107,6 +108,26 @@
       <input id="cmd-input" type="text" autocomplete="off" placeholder="Type a command…" aria-label="RCON command" data-i18n-placeholder="console.commandPlaceholder">
       <button type="submit" data-i18n="console.send">Send</button>
     </form>
+  </section>
+
+  <section id="view-admin" class="view" hidden>
+    <div class="view-header">
+      <h1 data-i18n="admin.title">Admin</h1>
+      <button type="button" id="admin-back-btn" class="link-button" data-i18n="admin.backToServers">← Servers</button>
+    </div>
+    <p class="hint view-subhead" data-i18n="admin.subhead">Every account on this relay. Regenerating a code or deleting an account takes effect immediately — hand any regenerated code to that person yourself, there's no email to send it to.</p>
+    <table class="admin-users-table">
+      <thead>
+        <tr>
+          <th data-i18n="common.username">Username</th>
+          <th data-i18n="admin.colCreated">Created</th>
+          <th data-i18n="admin.colServers">Servers</th>
+          <th data-i18n="admin.colRole">Role</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="admin-users-body"></tbody>
+    </table>
   </section>
 </main>
 

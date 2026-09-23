@@ -483,6 +483,45 @@ dialog::backdrop {
   font-weight: 600;
 }
 
+/* --- admin panel --- */
+
+.admin-users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.admin-users-table th, .admin-users-table td {
+  text-align: left;
+  padding: 0.6rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-users-table th {
+  color: var(--dim);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.admin-users-table td {
+  font-family: var(--font-mono);
+}
+
+.admin-users-table .admin-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.admin-badge {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  color: var(--signal);
+  border: 1px solid var(--signal-dim);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+}
+
 .login-box {
   max-width: 360px;
   margin: 3rem auto 0;

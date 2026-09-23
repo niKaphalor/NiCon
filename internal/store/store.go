@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	mysqldriver "github.com/go-sql-driver/mysql"
 )
@@ -29,6 +30,7 @@ CREATE TABLE IF NOT EXISTS users (
 	username VARCHAR(64) NOT NULL UNIQUE,
 	password_hash VARCHAR(255) NOT NULL,
 	recovery_code_hash VARCHAR(255) NULL,
+	is_admin BOOLEAN NOT NULL DEFAULT FALSE,
 	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -65,6 +67,7 @@ CREATE TABLE IF NOT EXISTS servers (
 // idempotent list applied in order.
 var migrations = []string{
 	`ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_code_hash VARCHAR(255) NULL`,
+	`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE`,
 }
 
 type Store struct {
@@ -148,6 +151,18 @@ type User struct {
 	Username         string
 	PasswordHash     string
 	RecoveryCodeHash string
+	IsAdmin          bool
+}
+
+// AdminUserSummary is what the admin panel lists: enough to identify an
+// account and gauge its size without exposing anything sensitive (no
+// password/recovery-code hashes, no server details).
+type AdminUserSummary struct {
+	ID          int64
+	Username    string
+	CreatedAt   time.Time
+	IsAdmin     bool
+	ServerCount int
 }
 
 // CreateUser inserts a new account. recoveryCodeHash is the bcrypt hash of
@@ -207,8 +222,8 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, 
 	var u User
 	var recoveryCodeHash sql.NullString
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, username, password_hash, recovery_code_hash FROM users WHERE username = ?`, username,
-	).Scan(&u.ID, &u.Username, &u.PasswordHash, &recoveryCodeHash)
+		`SELECT id, username, password_hash, recovery_code_hash, is_admin FROM users WHERE username = ?`, username,
+	).Scan(&u.ID, &u.Username, &u.PasswordHash, &recoveryCodeHash, &u.IsAdmin)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -223,8 +238,8 @@ func (s *Store) GetUserByID(ctx context.Context, id int64) (*User, error) {
 	var u User
 	var recoveryCodeHash sql.NullString
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, username, password_hash, recovery_code_hash FROM users WHERE id = ?`, id,
-	).Scan(&u.ID, &u.Username, &u.PasswordHash, &recoveryCodeHash)
+		`SELECT id, username, password_hash, recovery_code_hash, is_admin FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Username, &u.PasswordHash, &recoveryCodeHash, &u.IsAdmin)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -233,6 +248,54 @@ func (s *Store) GetUserByID(ctx context.Context, id int64) (*User, error) {
 	}
 	u.RecoveryCodeHash = recoveryCodeHash.String
 	return &u, nil
+}
+
+// SetAdmin grants or revokes admin status. Deliberately not reachable from
+// any HTTP endpoint — the only way to create the first admin (or any
+// other) is the `setadmin` CLI command, run by whoever already has
+// operator-level access to the relay's host and database.
+func (s *Store) SetAdmin(ctx context.Context, userID int64, isAdmin bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET is_admin = ? WHERE id = ?`, isAdmin, userID)
+	if err != nil {
+		return err
+	}
+	return checkAffected(res)
+}
+
+// SetRecoveryCodeHash replaces a user's recovery code hash without
+// touching their password — used by the `gen-recovery-code` CLI command
+// and by an admin regenerating a code for a user who's lost theirs.
+func (s *Store) SetRecoveryCodeHash(ctx context.Context, userID int64, recoveryCodeHash string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET recovery_code_hash = ? WHERE id = ?`, recoveryCodeHash, userID)
+	if err != nil {
+		return err
+	}
+	return checkAffected(res)
+}
+
+// ListUsers returns every account on the relay for the admin panel, each
+// with its stored server count, newest first.
+func (s *Store) ListUsers(ctx context.Context) ([]AdminUserSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT u.id, u.username, u.created_at, u.is_admin, COUNT(s.id)
+		FROM users u
+		LEFT JOIN servers s ON s.user_id = u.id
+		GROUP BY u.id, u.username, u.created_at, u.is_admin
+		ORDER BY u.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []AdminUserSummary
+	for rows.Next() {
+		var u AdminUserSummary
+		if err := rows.Scan(&u.ID, &u.Username, &u.CreatedAt, &u.IsAdmin, &u.ServerCount); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
 }
 
 // --- sessions ---

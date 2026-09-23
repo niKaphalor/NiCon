@@ -14,7 +14,8 @@ type loginRequest struct {
 }
 
 type loginResponse struct {
-	Token string `json:"token"`
+	Token   string `json:"token"`
+	IsAdmin bool   `json:"is_admin"`
 }
 
 func (rel *Relay) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +29,7 @@ func (rel *Relay) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, _, err := rel.auth.Login(r.Context(), req.Username, req.Password)
+	token, userID, err := rel.auth.Login(r.Context(), req.Username, req.Password)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			http.Error(w, "invalid username or password", http.StatusUnauthorized)
@@ -39,8 +40,15 @@ func (rel *Relay) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Not fatal to the login itself — worst case the frontend just doesn't
+	// show the admin panel for this session.
+	var isAdmin bool
+	if user, err := rel.store.GetUserByID(r.Context(), userID); err == nil {
+		isAdmin = user.IsAdmin
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(loginResponse{Token: token})
+	_ = json.NewEncoder(w).Encode(loginResponse{Token: token, IsAdmin: isAdmin})
 }
 
 func (rel *Relay) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -72,6 +80,11 @@ type registerResponse struct {
 	// step, since neither the plaintext nor any way to recover it exists
 	// after this response.
 	RecoveryCode string `json:"recovery_code"`
+	// IsAdmin is always false here — a self-registered account can never
+	// be an admin; that's only ever granted via the `setadmin` CLI command.
+	// Included so the frontend can treat login/register responses the same
+	// way rather than special-casing one of them.
+	IsAdmin bool `json:"is_admin"`
 }
 
 // handleRegister is NiCon's self-service signup. It requires

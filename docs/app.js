@@ -10,14 +10,38 @@
   // each time, never cached to disk.
   var TOKEN_KEY = "nicon_token";
   var USERNAME_KEY = "nicon_username";
+  var IS_ADMIN_KEY = "nicon_is_admin";
   var authToken = null;
   var currentUsername = "";
+  var currentIsAdmin = false;
   try {
     authToken = sessionStorage.getItem(TOKEN_KEY);
     currentUsername = sessionStorage.getItem(USERNAME_KEY) || "";
+    currentIsAdmin = sessionStorage.getItem(IS_ADMIN_KEY) === "1";
   } catch (e) {
     // Some browser contexts (e.g. a private window with storage blocked)
     // throw on access; fall back to session-memory-only auth.
+  }
+
+  function setAuthState(token, username, isAdmin) {
+    authToken = token;
+    currentUsername = username;
+    currentIsAdmin = !!isAdmin;
+    try {
+      sessionStorage.setItem(TOKEN_KEY, authToken);
+      sessionStorage.setItem(USERNAME_KEY, currentUsername);
+      sessionStorage.setItem(IS_ADMIN_KEY, currentIsAdmin ? "1" : "0");
+    } catch (e) { /* ignore */ }
+  }
+
+  function clearAuthState() {
+    authToken = null;
+    currentIsAdmin = false;
+    try {
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(USERNAME_KEY);
+      sessionStorage.removeItem(IS_ADMIN_KEY);
+    } catch (e) { /* ignore */ }
   }
 
   var servers = [];
@@ -41,6 +65,11 @@
   var usernameLabel = document.getElementById("username-label");
   var logoutBtn = document.getElementById("logout-btn");
   var langSelect = document.getElementById("lang-select");
+
+  var adminNavBtn = document.getElementById("admin-nav-btn");
+  var viewAdmin = document.getElementById("view-admin");
+  var adminBackBtn = document.getElementById("admin-back-btn");
+  var adminUsersBody = document.getElementById("admin-users-body");
 
   var viewLogin = document.getElementById("view-login");
   var loginForm = document.getElementById("login-form");
@@ -171,8 +200,7 @@
   }
 
   function sessionExpired() {
-    authToken = null;
-    try { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USERNAME_KEY); } catch (e) { /* ignore */ }
+    clearAuthState();
     disconnectAllConsoles();
     servers = [];
     showLoginView();
@@ -206,12 +234,7 @@
         return r.json();
       })
       .then(function (data) {
-        authToken = data.token;
-        currentUsername = username;
-        try {
-          sessionStorage.setItem(TOKEN_KEY, authToken);
-          sessionStorage.setItem(USERNAME_KEY, currentUsername);
-        } catch (e) { /* ignore */ }
+        setAuthState(data.token, username, data.is_admin);
         return loadServers();
       })
       .then(function () {
@@ -226,8 +249,7 @@
 
   logoutBtn.addEventListener("click", function () {
     apiFetch("/api/logout", { method: "POST" }).catch(function () { /* logging out regardless */ });
-    authToken = null;
-    try { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USERNAME_KEY); } catch (e) { /* ignore */ }
+    clearAuthState();
     disconnectAllConsoles();
     servers = [];
     showLoginView();
@@ -267,12 +289,7 @@
         return r.json();
       })
       .then(function (data) {
-        authToken = data.token;
-        currentUsername = username;
-        try {
-          sessionStorage.setItem(TOKEN_KEY, authToken);
-          sessionStorage.setItem(USERNAME_KEY, currentUsername);
-        } catch (e) { /* ignore */ }
+        setAuthState(data.token, username, data.is_admin);
         registerForm.reset();
         showRecoveryCodeModal(data.recovery_code, function () {
           loadServers()
@@ -376,8 +393,7 @@
       .then(function (r) {
         if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.failedToDeleteAccount"));
         settingsModal.close();
-        authToken = null;
-        try { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USERNAME_KEY); } catch (e) { /* ignore */ }
+        clearAuthState();
         disconnectAllConsoles();
         servers = [];
         showLoginView();
@@ -595,9 +611,11 @@
     viewConsole.hidden = true;
     viewServers.hidden = true;
     viewRegister.hidden = true;
+    viewAdmin.hidden = true;
     viewLogin.hidden = false;
     usernameLabel.hidden = true;
     logoutBtn.hidden = true;
+    adminNavBtn.hidden = true;
     accountDangerZone.hidden = true;
   }
 
@@ -615,15 +633,113 @@
     viewLogin.hidden = true;
     viewRegister.hidden = true;
     viewConsole.hidden = true;
+    viewAdmin.hidden = true;
     viewServers.hidden = false;
     usernameLabel.hidden = false;
     usernameLabel.textContent = currentUsername;
     logoutBtn.hidden = false;
+    adminNavBtn.hidden = !currentIsAdmin;
     accountDangerZone.hidden = false;
     renderServers();
   }
 
   backBtn.addEventListener("click", showServersView);
+
+  // --- admin panel ---
+
+  function showAdminView() {
+    if (infoModal.open) infoModal.close();
+    viewLogin.hidden = true;
+    viewRegister.hidden = true;
+    viewServers.hidden = true;
+    viewConsole.hidden = true;
+    viewAdmin.hidden = false;
+  }
+
+  adminBackBtn.addEventListener("click", showServersView);
+
+  adminNavBtn.addEventListener("click", function () {
+    loadAdminUsers();
+    showAdminView();
+  });
+
+  function loadAdminUsers() {
+    return apiFetch("/api/admin/users", { method: "GET" })
+      .then(function (r) {
+        if (!r.ok) throw new Error(I18N.t("errors.adminLoadFailed"));
+        return r.json();
+      })
+      .then(function (users) {
+        renderAdminUsers(users || []);
+      })
+      .catch(function (err) { alert(err.message); });
+  }
+
+  function renderAdminUsers(users) {
+    adminUsersBody.innerHTML = "";
+    users.forEach(function (u) {
+      var tr = document.createElement("tr");
+
+      var usernameTd = document.createElement("td");
+      usernameTd.textContent = u.username;
+      tr.appendChild(usernameTd);
+
+      var createdTd = document.createElement("td");
+      createdTd.textContent = new Date(u.created_at).toLocaleDateString();
+      tr.appendChild(createdTd);
+
+      var serversTd = document.createElement("td");
+      serversTd.textContent = String(u.server_count);
+      tr.appendChild(serversTd);
+
+      var roleTd = document.createElement("td");
+      if (u.is_admin) {
+        var badge = document.createElement("span");
+        badge.className = "admin-badge";
+        badge.textContent = I18N.t("admin.roleAdmin");
+        roleTd.appendChild(badge);
+      }
+      tr.appendChild(roleTd);
+
+      var actionsTd = document.createElement("td");
+      actionsTd.className = "admin-actions";
+
+      var regenBtn = document.createElement("button");
+      regenBtn.type = "button";
+      regenBtn.className = "btn-secondary";
+      regenBtn.textContent = I18N.t("admin.regenerateCode");
+      regenBtn.addEventListener("click", function () {
+        apiFetch("/api/admin/users/" + u.id + "/recovery-code", { method: "POST" })
+          .then(function (r) {
+            if (!r.ok) throw new Error(I18N.t("errors.adminRegenerateFailed"));
+            return r.json();
+          })
+          .then(function (data) {
+            showRecoveryCodeModal(data.recovery_code, function () { /* stays on the admin view */ });
+          })
+          .catch(function (err) { alert(err.message); });
+      });
+      actionsTd.appendChild(regenBtn);
+
+      var deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn-secondary btn-danger";
+      deleteBtn.textContent = I18N.t("admin.delete");
+      deleteBtn.addEventListener("click", function () {
+        if (!confirm(I18N.t("admin.confirmDelete", { username: u.username }))) return;
+        apiFetch("/api/admin/users/" + u.id, { method: "DELETE" })
+          .then(function (r) {
+            if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.adminDeleteFailed"));
+            loadAdminUsers();
+          })
+          .catch(function (err) { alert(err.message); });
+      });
+      actionsTd.appendChild(deleteBtn);
+
+      tr.appendChild(actionsTd);
+      adminUsersBody.appendChild(tr);
+    });
+  }
 
   // --- console (multiple, tabbed) ---
 
