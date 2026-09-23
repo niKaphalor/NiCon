@@ -48,6 +48,7 @@
       </form>
       <p id="login-error" class="hint login-error" hidden></p>
       <p class="hint auth-switch"><span data-i18n="auth.noAccountYet">No account yet?</span> <button type="button" id="show-register-btn" class="link-button" data-i18n="auth.createOne">Create one</button></p>
+      <p class="hint auth-switch"><button type="button" id="show-reset-btn" class="link-button" data-i18n="auth.forgotPassword">Forgot your password?</button></p>
     </div>
   </section>
 
@@ -108,6 +109,36 @@
     </form>
   </section>
 </main>
+
+<dialog id="reset-modal">
+  <div class="modal-header">
+    <h2 data-i18n="reset.title">Reset your password</h2>
+    <button type="button" id="reset-close" class="link-button" data-i18n="common.close">Close</button>
+  </div>
+  <p class="hint" data-i18n="reset.hint">Enter the recovery code you saved when you created your account (or the last time you reset your password) along with a new password.</p>
+  <form id="reset-form" class="stacked-form">
+    <input id="reset-username" type="text" placeholder="Username" required autocomplete="username" aria-label="Username" data-i18n-placeholder="common.username" data-i18n-aria-label="common.username">
+    <input id="reset-code" type="text" placeholder="Recovery code" required autocomplete="off" aria-label="Recovery code" data-i18n-placeholder="reset.codePlaceholder" data-i18n-aria-label="reset.codePlaceholder">
+    <input id="reset-new-password" type="password" placeholder="New password (min. 8 characters)" required autocomplete="new-password" minlength="8" aria-label="New password" data-i18n-placeholder="reset.newPasswordPlaceholder" data-i18n-aria-label="reset.newPasswordPlaceholder">
+    <input id="reset-new-password-confirm" type="password" placeholder="Confirm new password" required autocomplete="new-password" minlength="8" aria-label="Confirm new password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
+    <button type="submit" class="btn-primary" data-i18n="reset.submit">Reset password</button>
+  </form>
+  <p id="reset-error" class="hint login-error" hidden></p>
+</dialog>
+
+<dialog id="recovery-modal">
+  <div class="modal-header">
+    <h2 data-i18n="recovery.title">Save your recovery code</h2>
+  </div>
+  <p class="hint" data-i18n="recovery.hint">This is the only way to reset your password if you forget it — no email, no other way to recover your account. It's shown only this once.</p>
+  <p id="recovery-code" class="recovery-code"></p>
+  <button type="button" id="recovery-copy-btn" class="btn-secondary" data-i18n="recovery.copy">Copy code</button>
+  <label class="checkbox-row">
+    <input type="checkbox" id="recovery-ack">
+    <span data-i18n="recovery.ack">I've saved this recovery code somewhere safe.</span>
+  </label>
+  <button type="button" id="recovery-continue-btn" class="btn-primary" disabled data-i18n="common.continue">Continue</button>
+</dialog>
 
 <dialog id="add-modal">
   <div class="modal-header">

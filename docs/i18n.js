@@ -32,6 +32,7 @@ window.NICON_I18N = (function () {
         noAccountYet: "No account yet?",
         createOne: "Create one",
         alreadyHaveAccount: "Already have an account?",
+        forgotPassword: "Forgot your password?",
       },
       login: {
         subhead: "Your servers are tied to your NiCon account — sign in to see them.",
@@ -53,9 +54,24 @@ window.NICON_I18N = (function () {
         save: "Save",
         close: "Close",
         remove: "Remove",
+        continue: "Continue",
         host: "Host",
         port: "Port",
         rconPassword: "RCON password",
+      },
+      reset: {
+        title: "Reset your password",
+        hint: "Enter the recovery code you saved when you created your account (or the last time you reset your password) along with a new password.",
+        codePlaceholder: "Recovery code",
+        newPasswordPlaceholder: "New password (min. 8 characters)",
+        submit: "Reset password",
+      },
+      recovery: {
+        title: "Save your recovery code",
+        hint: "This is the only way to reset your password if you forget it — no email, no other way to recover your account. It's shown only this once.",
+        copy: "Copy code",
+        copied: "Copied!",
+        ack: "I've saved this recovery code somewhere safe.",
       },
       servers: {
         title: "Servers",
@@ -127,6 +143,7 @@ window.NICON_I18N = (function () {
         couldNotAddServer: "Could not add server: {{message}}",
         nitradoSyncFailed: "Nitrado sync failed: {{message}}",
         failedToDeleteAccount: "failed to delete account",
+        resetFailed: "Password reset failed.",
       },
     },
     de: {
@@ -150,6 +167,7 @@ window.NICON_I18N = (function () {
         noAccountYet: "Noch kein Konto?",
         createOne: "Jetzt erstellen",
         alreadyHaveAccount: "Schon ein Konto?",
+        forgotPassword: "Passwort vergessen?",
       },
       login: {
         subhead: "Deine Server sind an dein NiCon-Konto gebunden — melde dich an, um sie zu sehen.",
@@ -171,9 +189,24 @@ window.NICON_I18N = (function () {
         save: "Speichern",
         close: "Schließen",
         remove: "Entfernen",
+        continue: "Weiter",
         host: "Host",
         port: "Port",
         rconPassword: "RCON-Passwort",
+      },
+      reset: {
+        title: "Passwort zurücksetzen",
+        hint: "Gib den Wiederherstellungscode ein, den du bei der Kontoerstellung (oder beim letzten Zurücksetzen) gespeichert hast, zusammen mit einem neuen Passwort.",
+        codePlaceholder: "Wiederherstellungscode",
+        newPasswordPlaceholder: "Neues Passwort (mind. 8 Zeichen)",
+        submit: "Passwort zurücksetzen",
+      },
+      recovery: {
+        title: "Wiederherstellungscode speichern",
+        hint: "Das ist der einzige Weg, dein Passwort zurückzusetzen, falls du es vergisst — keine E-Mail, keine andere Möglichkeit, dein Konto wiederherzustellen. Er wird nur dieses eine Mal angezeigt.",
+        copy: "Code kopieren",
+        copied: "Kopiert!",
+        ack: "Ich habe diesen Wiederherstellungscode sicher gespeichert.",
       },
       servers: {
         title: "Server",
@@ -245,6 +278,7 @@ window.NICON_I18N = (function () {
         couldNotAddServer: "Server konnte nicht hinzugefügt werden: {{message}}",
         nitradoSyncFailed: "Nitrado-Synchronisierung fehlgeschlagen: {{message}}",
         failedToDeleteAccount: "Konto konnte nicht gelöscht werden",
+        resetFailed: "Zurücksetzen fehlgeschlagen.",
       },
     },
   };

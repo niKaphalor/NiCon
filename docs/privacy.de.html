@@ -44,6 +44,7 @@
   <ul>
     <li><strong>Benutzername</strong> — frei gewählt, keine E-Mail-Adresse erforderlich.</li>
     <li><strong>Passwort</strong> — wird nie im Klartext gespeichert, sondern ausschließlich als bcrypt-Hash.</li>
+    <li><strong>Wiederherstellungscode</strong> — ein 20-stelliger, einmaliger Code, der bei Kontoerstellung (bzw. beim letzten Zurücksetzen) erzeugt und dir genau einmal angezeigt wird. Wie beim Passwort wird nur sein bcrypt-Hash gespeichert — er ist der einzige Weg, dein Passwort zurückzusetzen, da keine E-Mail-Adresse hinterlegt ist.</li>
     <li><strong>Server-Daten, die du selbst hinzufügst</strong> — Name, Host, Port und Spiel eines Spieleservers, sowie dessen RCON-Passwort. Das RCON-Passwort wird verschlüsselt (AES-256-GCM) gespeichert, mit einem Schlüssel, der getrennt von der Datenbank verwaltet wird.</li>
     <li><strong>Sitzungs-Token</strong> — ein zufälliger Token, der dich nach dem Login für bis zu 7 Tage identifiziert. Er wird serverseitig in der Datenbank sowie browserseitig in <code>sessionStorage</code> (nicht <code>localStorage</code>) gespeichert und beim Schließen des Browser-Tabs aus dem Browser entfernt.</li>
   </ul>

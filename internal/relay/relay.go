@@ -29,18 +29,27 @@ import (
 // registerRateLimit — e.g. 3 then one per 15 minutes, capping sustained
 // abuse from one source at a handful of accounts per hour without getting
 // in the way of a household signing up a few real accounts back to back.
+//
+// resetPasswordRateLimit/Burst are tighter: this endpoint effectively lets
+// anyone who knows a username try a recovery code against it, so it gets a
+// stricter per-IP allowance even though the code itself is high-entropy
+// enough that brute-forcing it outright isn't practical.
 const (
 	registerRateLimit = 15 * time.Minute
 	registerRateBurst = 3
+
+	resetPasswordRateLimit = 15 * time.Minute
+	resetPasswordRateBurst = 2
 )
 
 type Relay struct {
-	log             *log.Logger
-	allowedOrigins  map[string]bool
-	upgrader        websocket.Upgrader
-	store           *store.Store
-	auth            *auth.Auth
-	registerLimiter *ipRateLimiter
+	log                  *log.Logger
+	allowedOrigins       map[string]bool
+	upgrader             websocket.Upgrader
+	store                *store.Store
+	auth                 *auth.Auth
+	registerLimiter      *ipRateLimiter
+	resetPasswordLimiter *ipRateLimiter
 }
 
 func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.Auth) *Relay {
@@ -49,11 +58,12 @@ func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.
 		origins[o] = true
 	}
 	rel := &Relay{
-		log:             logger,
-		allowedOrigins:  origins,
-		store:           st,
-		auth:            au,
-		registerLimiter: newIPRateLimiter(rate.Every(registerRateLimit), registerRateBurst),
+		log:                  logger,
+		allowedOrigins:       origins,
+		store:                st,
+		auth:                 au,
+		registerLimiter:      newIPRateLimiter(rate.Every(registerRateLimit), registerRateBurst),
+		resetPasswordLimiter: newIPRateLimiter(rate.Every(resetPasswordRateLimit), resetPasswordRateBurst),
 	}
 	rel.upgrader = websocket.Upgrader{CheckOrigin: rel.checkOrigin}
 	return rel
@@ -102,6 +112,8 @@ func (rel *Relay) Routes() http.Handler {
 	mux.HandleFunc("OPTIONS /api/register", rel.handleRegister)
 	mux.HandleFunc("DELETE /api/account", rel.handleDeleteAccount)
 	mux.HandleFunc("OPTIONS /api/account", rel.handleDeleteAccount)
+	mux.HandleFunc("POST /api/reset-password", rel.handleResetPassword)
+	mux.HandleFunc("OPTIONS /api/reset-password", rel.handleResetPassword)
 
 	mux.HandleFunc("GET /api/servers", rel.handleListServers)
 	mux.HandleFunc("OPTIONS /api/servers", rel.handleListServers)

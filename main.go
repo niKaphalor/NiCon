@@ -136,11 +136,25 @@ func runAddUser(args []string) {
 		log.Fatalf("hash password: %v", err)
 	}
 
-	id, err := st.CreateUser(context.Background(), username, hash)
+	recoveryCode, err := auth.GenerateRecoveryCode()
+	if err != nil {
+		log.Fatalf("generate recovery code: %v", err)
+	}
+	recoveryCodeHash, err := auth.HashPassword(auth.NormalizeRecoveryCode(recoveryCode))
+	if err != nil {
+		log.Fatalf("hash recovery code: %v", err)
+	}
+
+	id, err := st.CreateUser(context.Background(), username, hash, recoveryCodeHash)
 	if err != nil {
 		log.Fatalf("create user: %v", err)
 	}
 	fmt.Printf("Created user %q (id %d)\n", username, id)
+	fmt.Println()
+	fmt.Println("Recovery code (save this somewhere safe and give it to the user — it's the only")
+	fmt.Println("way to reset this account's password without your help, and won't be shown again):")
+	fmt.Println()
+	fmt.Println("  " + recoveryCode)
 }
 
 func runGenKey() {

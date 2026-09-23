@@ -505,6 +505,34 @@ dialog::backdrop {
   margin-bottom: 0;
 }
 
+.recovery-code {
+  background: var(--panel-raised);
+  border: 1px solid var(--signal);
+  border-radius: 6px;
+  padding: 0.9rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  color: var(--signal);
+  text-align: center;
+  user-select: all;
+  margin: 0 0 0.9rem;
+}
+
+#recovery-copy-btn {
+  margin-bottom: 1rem;
+}
+
+#recovery-continue-btn {
+  margin-top: 1rem;
+  width: 100%;
+}
+
+#recovery-continue-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 #username-label {
   font-family: var(--font-mono);
 }

@@ -65,6 +65,15 @@ type registerRequest struct {
 	ConsentAccepted bool   `json:"consent_accepted"`
 }
 
+type registerResponse struct {
+	Token string `json:"token"`
+	// RecoveryCode is returned exactly once, at the moment it's created —
+	// the frontend must show it to the user for a deliberate save-it-now
+	// step, since neither the plaintext nor any way to recover it exists
+	// after this response.
+	RecoveryCode string `json:"recovery_code"`
+}
+
 // handleRegister is NiCon's self-service signup. It requires
 // consent_accepted (the frontend's required "I have read the privacy
 // policy" checkbox) — not because account creation itself needs consent as
@@ -91,7 +100,7 @@ func (rel *Relay) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, _, err := rel.auth.Register(r.Context(), req.Username, req.Password)
+	token, recoveryCode, _, err := rel.auth.Register(r.Context(), req.Username, req.Password)
 	if err != nil {
 		switch {
 		case errors.Is(err, auth.ErrUsernameTaken):
@@ -106,7 +115,58 @@ func (rel *Relay) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(loginResponse{Token: token})
+	_ = json.NewEncoder(w).Encode(registerResponse{Token: token, RecoveryCode: recoveryCode})
+}
+
+type resetPasswordRequest struct {
+	Username     string `json:"username"`
+	RecoveryCode string `json:"recovery_code"`
+	NewPassword  string `json:"new_password"`
+}
+
+type resetPasswordResponse struct {
+	NewRecoveryCode string `json:"new_recovery_code"`
+}
+
+// handleResetPassword is the self-service recovery path for a forgotten
+// password: username + the one-time recovery code shown at registration
+// (or after the last reset) + a new password. It's intentionally
+// unauthenticated — that's the whole point — so it's rate-limited
+// separately from /api/register to slow down anyone trying to guess a
+// recovery code for an account they don't own.
+func (rel *Relay) handleResetPassword(w http.ResponseWriter, r *http.Request) {
+	if !rel.cors(w, r) {
+		return
+	}
+	if !rel.resetPasswordLimiter.allow(clientIP(r)) {
+		w.Header().Set("Retry-After", "900")
+		http.Error(w, "too many reset attempts from this address — try again later", http.StatusTooManyRequests)
+		return
+	}
+
+	var req resetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil ||
+		req.Username == "" || req.RecoveryCode == "" || req.NewPassword == "" {
+		http.Error(w, "username, recovery_code, and new_password are required", http.StatusBadRequest)
+		return
+	}
+
+	newRecoveryCode, err := rel.auth.ResetPassword(r.Context(), req.Username, req.RecoveryCode, req.NewPassword)
+	if err != nil {
+		switch {
+		case errors.Is(err, auth.ErrInvalidRecoveryCode):
+			http.Error(w, "invalid username or recovery code", http.StatusUnauthorized)
+		case errors.Is(err, auth.ErrPasswordTooShort):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			rel.log.Printf("reset password: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resetPasswordResponse{NewRecoveryCode: newRecoveryCode})
 }
 
 // handleDeleteAccount is the self-service "right to erasure" endpoint:

@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS users (
 	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 	username VARCHAR(64) NOT NULL UNIQUE,
 	password_hash VARCHAR(255) NOT NULL,
+	recovery_code_hash VARCHAR(255) NULL,
 	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -57,6 +58,15 @@ CREATE TABLE IF NOT EXISTS servers (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 `
 
+// migrations covers columns added after a table's initial CREATE TABLE IF
+// NOT EXISTS, so an existing installation picks them up too. Each statement
+// must be safe to run every time the relay starts (IF NOT EXISTS or
+// equivalent) since there's no migration-version tracking — just an
+// idempotent list applied in order.
+var migrations = []string{
+	`ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_code_hash VARCHAR(255) NULL`,
+}
+
 type Store struct {
 	db  *sql.DB
 	enc *encryptor
@@ -84,6 +94,12 @@ func Open(dsn string, encryptionKey []byte) (*Store, error) {
 		if _, err := db.Exec(stmt); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("migrate schema: %w", err)
+		}
+	}
+	for _, stmt := range migrations {
+		if _, err := db.Exec(stmt); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("run migration %q: %w", stmt, err)
 		}
 	}
 
@@ -128,14 +144,19 @@ func splitLines(s string) []string {
 // --- users ---
 
 type User struct {
-	ID           int64
-	Username     string
-	PasswordHash string
+	ID               int64
+	Username         string
+	PasswordHash     string
+	RecoveryCodeHash string
 }
 
-func (s *Store) CreateUser(ctx context.Context, username, passwordHash string) (int64, error) {
+// CreateUser inserts a new account. recoveryCodeHash is the bcrypt hash of
+// its one-time recovery code (see internal/auth) — the only self-service
+// path back into an account whose password is forgotten.
+func (s *Store) CreateUser(ctx context.Context, username, passwordHash, recoveryCodeHash string) (int64, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO users (username, password_hash) VALUES (?, ?)`, username, passwordHash)
+		`INSERT INTO users (username, password_hash, recovery_code_hash) VALUES (?, ?, ?)`,
+		username, passwordHash, recoveryCodeHash)
 	if err != nil {
 		var mysqlErr *mysqldriver.MySQLError
 		if errors.As(err, &mysqlErr) && mysqlErr.Number == mysqlDuplicateEntry {
@@ -144,6 +165,31 @@ func (s *Store) CreateUser(ctx context.Context, username, passwordHash string) (
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+// ResetPassword replaces a user's password and recovery code together (the
+// old recovery code is single-use — a successful reset always issues a new
+// one) and invalidates every existing session, in one transaction.
+func (s *Store) ResetPassword(ctx context.Context, userID int64, newPasswordHash, newRecoveryCodeHash string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE users SET password_hash = ?, recovery_code_hash = ? WHERE id = ?`,
+		newPasswordHash, newRecoveryCodeHash, userID)
+	if err != nil {
+		return err
+	}
+	if err := checkAffected(res); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // DeleteUser removes a user account. Their sessions and servers are removed
@@ -159,29 +205,33 @@ func (s *Store) DeleteUser(ctx context.Context, userID int64) error {
 
 func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, error) {
 	var u User
+	var recoveryCodeHash sql.NullString
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, username, password_hash FROM users WHERE username = ?`, username,
-	).Scan(&u.ID, &u.Username, &u.PasswordHash)
+		`SELECT id, username, password_hash, recovery_code_hash FROM users WHERE username = ?`, username,
+	).Scan(&u.ID, &u.Username, &u.PasswordHash, &recoveryCodeHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
+	u.RecoveryCodeHash = recoveryCodeHash.String
 	return &u, nil
 }
 
 func (s *Store) GetUserByID(ctx context.Context, id int64) (*User, error) {
 	var u User
+	var recoveryCodeHash sql.NullString
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, username, password_hash FROM users WHERE id = ?`, id,
-	).Scan(&u.ID, &u.Username, &u.PasswordHash)
+		`SELECT id, username, password_hash, recovery_code_hash FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Username, &u.PasswordHash, &recoveryCodeHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
+	u.RecoveryCodeHash = recoveryCodeHash.String
 	return &u, nil
 }
 

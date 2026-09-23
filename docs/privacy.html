@@ -43,6 +43,7 @@
   <ul>
     <li><strong>Username</strong> — freely chosen, no email address required.</li>
     <li><strong>Password</strong> — never stored in plaintext, only as a bcrypt hash.</li>
+    <li><strong>Recovery code</strong> — a 20-character one-time code generated when your account is created (or last reset), shown to you exactly once. Like the password, only its bcrypt hash is stored — it's the only way to reset your password since no email address is on file.</li>
     <li><strong>Server data you add yourself</strong> — a game server's name, host, port, and game, plus its RCON password. The RCON password is stored encrypted (AES-256-GCM), with a key managed separately from the database.</li>
     <li><strong>Session token</strong> — a random token that identifies you after login, for up to 7 days. It's stored server-side in the database and, in your browser, in <code>sessionStorage</code> (not <code>localStorage</code>) — removed automatically when the browser tab closes.</li>
   </ul>

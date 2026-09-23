@@ -89,25 +89,36 @@ to be re-entered (server rows aren't lost, just their password field).
 The relay does three things:
 
 - **Auth** (`POST /api/login`, `POST /api/logout`, `POST /api/register`,
-  `DELETE /api/account`): login exchanges a username/password
-  (bcrypt-hashed at rest) for a session token, which the frontend then
-  sends as `Authorization: Bearer <token>` on every other request and as
-  the first WebSocket message. Tokens live 7 days server-side (a
-  `sessions` table row with an expiry) and are stored in the browser's
-  `sessionStorage`, not `localStorage`, so they don't outlive the tab.
-  Register is the same, minus an existing account — it also requires
-  `consent_accepted: true` (the frontend's required privacy-policy
-  checkbox) and rejects a taken username with 409. It's also rate-limited
-  per client IP (3 immediately, then one every 15 minutes — a fixed
-  in-process limit, not configurable via a flag) to make it impractical to
-  spam accounts on your relay; a request over the limit gets 429 with a
-  `Retry-After` header. The limiter only ever sees the TCP connection's own
-  address, never an `X-Forwarded-For` header, so it's easy to spoof around
-  and not meaningful if the relay sits behind a reverse proxy (every
-  request would appear to come from the proxy's IP). Account deletion
-  removes the user row; `sessions` and `servers` cascade-delete with it at
-  the database level (`ON DELETE CASCADE`), so there's nothing left to
-  clean up separately.
+  `POST /api/reset-password`, `DELETE /api/account`): login exchanges a
+  username/password (bcrypt-hashed at rest) for a session token, which the
+  frontend then sends as `Authorization: Bearer <token>` on every other
+  request and as the first WebSocket message. Tokens live 7 days
+  server-side (a `sessions` table row with an expiry) and are stored in
+  the browser's `sessionStorage`, not `localStorage`, so they don't
+  outlive the tab. Register is the same, minus an existing account — it
+  also requires `consent_accepted: true` (the frontend's required
+  privacy-policy checkbox) and rejects a taken username with 409.
+  Registration also generates a **recovery code** (20 random characters,
+  shown to the user exactly once, only its bcrypt hash stored) — with no
+  email address on file, it's the only way back into an account whose
+  password is forgotten. `POST /api/reset-password` takes a username, that
+  recovery code, and a new password; on success it rotates in a fresh
+  recovery code (the old one is single-use, like a 2FA backup code) and
+  invalidates every existing session for the account, in case the old
+  password had leaked. A wrong username and a wrong recovery code return
+  the identical error, so the endpoint can't be used to check which
+  usernames exist. `/api/register` and `/api/reset-password` are each
+  rate-limited per client IP (register: 3 immediately then one every 15
+  minutes; reset: 2 then one every 15 minutes — fixed in-process limits,
+  not configurable via a flag) to make spamming accounts or brute-forcing
+  a recovery code impractical; a request over the limit gets 429 with a
+  `Retry-After` header. The limiter only ever sees the TCP connection's
+  own address, never an `X-Forwarded-For` header, so it's easy to spoof
+  around and not meaningful if the relay sits behind a reverse proxy
+  (every request would appear to come from the proxy's IP). Account
+  deletion removes the user row; `sessions` and `servers` cascade-delete
+  with it at the database level (`ON DELETE CASCADE`), so there's nothing
+  left to clean up separately.
 - **Per-user server storage** (`GET/POST /api/servers`,
   `PUT /api/servers/{id}/password`, `DELETE /api/servers/{id}`,
   `POST /api/nitrado/sync`): every query is scoped to the authenticated
@@ -170,6 +181,10 @@ through the registration page:
 ```sh
 ./nicon-relay adduser <username>    # prompts for a password (min 8 chars), twice
 ```
+
+`adduser` also generates and prints a recovery code, same as self-service
+registration does — hand it to whoever the account is for, so they have
+the same self-service password-reset path either way.
 
 Each account's server list is completely separate; there's no sharing or
 admin override built in yet (see [Not implemented yet](#not-implemented-yet)).
@@ -248,14 +263,15 @@ language.
 - Structured player-list parsing (`docs/games.js`) covers Minecraft, Rust,
   ARK: Survival Evolved, and Palworld, based on documented command output
   formats rather than verified live responses — see the file for details
-- Password reset and any admin UI for managing accounts — signup and
-  self-service account deletion exist, but a forgotten password today
-  means the relay operator has to intervene directly in the database
+- Any admin UI for managing accounts — signup, self-service password
+  reset (via a recovery code), and self-service account deletion all
+  exist, but there's no dashboard for the relay operator; `adduser` and
+  direct database access are still the only operator-side tools
 - Sharing a server between accounts, or any notion of teams/roles — server
   ownership is strictly one account per server today
 - Invite-gating on `/api/register` — signup is open to anyone who can
-  reach the frontend (rate-limited per IP, see below, but not restricted
-  to people you've invited)
+  reach the frontend (rate-limited per IP, see [Relay](#relay) above, but
+  not restricted to people you've invited)
 
 ## Roadmap: becoming a full admin panel
 

@@ -52,6 +52,18 @@
   var registerError = document.getElementById("register-error");
   var showLoginBtn = document.getElementById("show-login-btn");
 
+  var showResetBtn = document.getElementById("show-reset-btn");
+  var resetModal = document.getElementById("reset-modal");
+  var resetClose = document.getElementById("reset-close");
+  var resetForm = document.getElementById("reset-form");
+  var resetError = document.getElementById("reset-error");
+
+  var recoveryModal = document.getElementById("recovery-modal");
+  var recoveryCodeEl = document.getElementById("recovery-code");
+  var recoveryCopyBtn = document.getElementById("recovery-copy-btn");
+  var recoveryAckCheckbox = document.getElementById("recovery-ack");
+  var recoveryContinueBtn = document.getElementById("recovery-continue-btn");
+
   var viewServers = document.getElementById("view-servers");
   var viewConsole = document.getElementById("view-console");
   var serverGrid = document.getElementById("server-grid");
@@ -261,16 +273,98 @@
           sessionStorage.setItem(TOKEN_KEY, authToken);
           sessionStorage.setItem(USERNAME_KEY, currentUsername);
         } catch (e) { /* ignore */ }
-        return loadServers();
-      })
-      .then(function () {
         registerForm.reset();
-        showServersView();
+        showRecoveryCodeModal(data.recovery_code, function () {
+          loadServers()
+            .then(showServersView)
+            .catch(function () { /* apiFetch already routes 401s to sessionExpired() */ });
+        });
       })
       .catch(function (err) {
         registerError.textContent = err.message || I18N.t("errors.registrationFailed");
         registerError.hidden = false;
       });
+  });
+
+  // --- password reset (self-service, no email — a saved recovery code) ---
+
+  showResetBtn.addEventListener("click", function () {
+    resetForm.reset();
+    resetError.hidden = true;
+    resetModal.showModal();
+  });
+  resetClose.addEventListener("click", function () { resetModal.close(); });
+  resetModal.addEventListener("click", function (e) {
+    if (e.target === resetModal) resetModal.close();
+  });
+
+  resetForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var username = document.getElementById("reset-username").value.trim();
+    var code = document.getElementById("reset-code").value;
+    var newPassword = document.getElementById("reset-new-password").value;
+    var newPasswordConfirm = document.getElementById("reset-new-password-confirm").value;
+    resetError.hidden = true;
+
+    if (newPassword !== newPasswordConfirm) {
+      resetError.textContent = I18N.t("errors.passwordMismatch");
+      resetError.hidden = false;
+      return;
+    }
+
+    fetch(relayHttpUrl() + "/api/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: username, recovery_code: code, new_password: newPassword }),
+    })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(t || "reset failed"); });
+        return r.json();
+      })
+      .then(function (data) {
+        resetModal.close();
+        showRecoveryCodeModal(data.new_recovery_code, function () { /* stays on the login view */ });
+      })
+      .catch(function (err) {
+        resetError.textContent = err.message || I18N.t("errors.resetFailed");
+        resetError.hidden = false;
+      });
+  });
+
+  // --- recovery code modal: shown once at registration and again after any
+  // reset, since the old code is single-use. Not dismissible except via the
+  // explicit "I've saved it" acknowledgment — there's no way to see the
+  // code again afterward, so a stray Escape/backdrop-click can't lose it.
+
+  var pendingRecoveryContinue = null;
+
+  function showRecoveryCodeModal(code, onContinue) {
+    recoveryCodeEl.textContent = code;
+    recoveryAckCheckbox.checked = false;
+    recoveryContinueBtn.disabled = true;
+    recoveryCopyBtn.textContent = I18N.t("recovery.copy");
+    pendingRecoveryContinue = onContinue;
+    recoveryModal.showModal();
+  }
+
+  recoveryModal.addEventListener("cancel", function (e) { e.preventDefault(); });
+
+  recoveryAckCheckbox.addEventListener("change", function () {
+    recoveryContinueBtn.disabled = !recoveryAckCheckbox.checked;
+  });
+
+  recoveryCopyBtn.addEventListener("click", function () {
+    if (!navigator.clipboard || !navigator.clipboard.writeText) return;
+    navigator.clipboard.writeText(recoveryCodeEl.textContent)
+      .then(function () { recoveryCopyBtn.textContent = I18N.t("recovery.copied"); })
+      .catch(function () { /* clipboard denied — the code is still selectable text */ });
+  });
+
+  recoveryContinueBtn.addEventListener("click", function () {
+    recoveryModal.close();
+    var cb = pendingRecoveryContinue;
+    pendingRecoveryContinue = null;
+    if (cb) cb();
   });
 
   // --- account deletion (self-service, Art. 17 GDPR) ---
