@@ -10,6 +10,19 @@ jobs:
   build:
     name: Build, vet, format, test
     runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_DATABASE: nicon_test
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "yes"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - uses: actions/checkout@v4
 
@@ -38,4 +51,6 @@ jobs:
           git diff --exit-code -- go.mod go.sum
 
       - name: Test
+        env:
+          NICON_TEST_DB_DSN: root@tcp(127.0.0.1:3306)/nicon_test?parseTime=true
         run: go test ./...

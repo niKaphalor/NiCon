@@ -287,14 +287,43 @@ language.
   no build step), deployed to GitHub Pages by
   `.github/workflows/pages.yml`
 
+## Testing
+
+```sh
+go test ./...
+```
+
+`internal/store`, `internal/auth`, and `internal/relay` each have a test
+suite; a handful of pure-logic tests (recovery code generation/formatting,
+bcrypt round-tripping) always run, but most of it is integration tests
+against a real MariaDB/MySQL — the schema leans on server-side features
+(auto-increment, foreign keys, `ON DUPLICATE KEY UPDATE`) with no
+meaningful pure-Go substitute. Those tests read their database from
+`$NICON_TEST_DB_DSN` and skip cleanly if it's unset, so `go test ./...`
+stays green without one. Point it at a database used for nothing else —
+tests create and delete real rows there — never at a database holding
+real accounts:
+
+```sh
+export NICON_TEST_DB_DSN="nicon:<password>@tcp(localhost:3306)/nicon_test?parseTime=true"
+go test ./...
+```
+
+CI runs against a MariaDB service container (`.github/workflows/ci.yml`),
+so both kinds of test run on every push. `/ws/rcon` itself isn't covered
+by this suite — it's been exercised manually and with throwaway Go
+clients throughout development instead; wiring up a real WebSocket
+listener plus a mock game server would be a larger, separate effort.
+
 ## Not implemented yet
 
 - Windows binary packaging for the relay (`GOOS=windows GOARCH=amd64 go
   build` works today, just not automated/released anywhere yet)
-- Automated tests (the classic RCON, WebRCON, broadcast-forwarding, and
-  auth/storage paths have been exercised manually — including `-race` runs
-  and live testing against a real MariaDB with multiple accounts — but
-  there's no test suite yet)
+- Automated tests for the WebSocket/RCON bridge itself (`internal/store`,
+  `internal/auth`, and `internal/relay`'s HTTP handlers have a real test
+  suite — see [Testing](#testing) — but classic RCON, WebRCON, and
+  broadcast-forwarding have only been exercised manually, including
+  `-race` runs, against hand-written mock servers)
 - The WebRCON implementation is based on Facepunch's own
   [webrcon](https://github.com/Facepunch/webrcon) tool and third-party
   documentation, not verified against a real Rust server yet
