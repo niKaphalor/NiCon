@@ -5,9 +5,12 @@
   // is written to localStorage, cookies, or anywhere else — reload the page
   // and it's gone, by design.
   var servers = [];
-  var activeServerId = null;
-  var socket = null;
-  var pendingPlayersRequest = false;
+
+  // One entry per currently-open console: serverId -> { server, socket,
+  // lines: [{kind, text}], pendingPlayersRequest }. Multiple can be open at
+  // once — switching the view back to Servers doesn't close any of them.
+  var consoles = {};
+  var activeConsoleId = null;
 
   // --- element refs ---
 
@@ -29,8 +32,8 @@
 
   var addModal = document.getElementById("add-modal");
   var addClose = document.getElementById("add-close");
-  var tabs = document.querySelectorAll(".tab");
-  var tabPanels = document.querySelectorAll(".tab-panel");
+  var addTabs = document.querySelectorAll(".tab");
+  var addTabPanels = document.querySelectorAll(".tab-panel");
   var nitradoForm = document.getElementById("nitrado-form");
   var nitradoTokenInput = document.getElementById("nitrado-token");
   var manualForm = document.getElementById("manual-form");
@@ -38,6 +41,8 @@
   var backBtn = document.getElementById("back-btn");
   var consoleTitle = document.getElementById("console-title");
   var consoleBadge = document.getElementById("console-badge");
+  var consoleTabs = document.getElementById("console-tabs");
+  var filterInput = document.getElementById("filter-input");
   var infoBtn = document.getElementById("info-btn");
   var log = document.getElementById("log");
   var cmdForm = document.getElementById("cmd-form");
@@ -97,13 +102,13 @@
     if (e.target === addModal) addModal.close();
   });
 
-  tabs.forEach(function (tab) {
+  addTabs.forEach(function (tab) {
     tab.addEventListener("click", function () {
-      tabs.forEach(function (t) {
+      addTabs.forEach(function (t) {
         t.classList.toggle("active", t === tab);
         t.setAttribute("aria-selected", t === tab ? "true" : "false");
       });
-      tabPanels.forEach(function (panel) {
+      addTabPanels.forEach(function (panel) {
         panel.hidden = panel.dataset.panel !== tab.dataset.tab;
       });
     });
@@ -129,7 +134,7 @@
 
   function removeServer(id) {
     servers = servers.filter(function (s) { return s.id !== id; });
-    if (activeServerId === id) showServersView();
+    if (consoles[id]) closeConsoleFor(id);
     renderServers();
   }
 
@@ -152,7 +157,13 @@
 
       var main = document.createElement("div");
       var h3 = document.createElement("h3");
-      h3.textContent = server.name;
+      if (consoles[server.id]) {
+        var dot = document.createElement("span");
+        dot.className = "connected-dot";
+        dot.title = "Connected";
+        h3.appendChild(dot);
+      }
+      h3.appendChild(document.createTextNode(server.name));
       main.appendChild(h3);
       var meta = document.createElement("p");
       meta.className = "server-meta";
@@ -184,8 +195,8 @@
         var connectBtn = document.createElement("button");
         connectBtn.type = "button";
         connectBtn.className = "btn-primary";
-        connectBtn.textContent = "Connect";
-        connectBtn.addEventListener("click", function () { openConsole(server); });
+        connectBtn.textContent = consoles[server.id] ? "Open console" : "Connect";
+        connectBtn.addEventListener("click", function () { openOrFocusConsole(server); });
         actions.appendChild(connectBtn);
       }
 
@@ -269,37 +280,43 @@
   });
 
   // --- view switching ---
+  // Going back to the server list never closes any open console — it just
+  // switches which view is visible. Multiple consoles can stay connected
+  // in the background at once.
 
   function showServersView() {
-    closeSocket();
-    activeServerId = null;
     if (infoModal.open) infoModal.close();
     viewConsole.hidden = true;
     viewServers.hidden = false;
+    renderServers();
   }
 
   backBtn.addEventListener("click", showServersView);
 
-  // --- console ---
+  // --- console (multiple, tabbed) ---
 
-  function appendLog(line) {
-    log.textContent += line + "\n";
-    log.scrollTop = log.scrollHeight;
-  }
-
-  function openConsole(server) {
-    closeSocket();
-    activeServerId = server.id;
-    log.textContent = "";
-    playersPanel.innerHTML = "";
-    pendingPlayersRequest = false;
-    gameSelect.value = window.NICON_GUESS_GAME(server.game);
-    consoleTitle.textContent = server.name;
-    consoleBadge.textContent = serverMeta(server);
+  function openOrFocusConsole(server) {
+    if (!consoles[server.id]) createConsole(server);
+    activeConsoleId = server.id;
     viewServers.hidden = true;
     viewConsole.hidden = false;
+    renderConsoleTabs();
+    renderActiveConsole();
+  }
 
-    socket = new WebSocket(relayWsUrl() + "/ws/rcon");
+  function createConsole(server) {
+    var c = {
+      server: server,
+      socket: null,
+      lines: [],
+      pendingPlayersRequest: false,
+    };
+    consoles[server.id] = c;
+    appendConsoleLine(c, "system", "(connecting…)");
+
+    var socket = new WebSocket(relayWsUrl() + "/ws/rcon");
+    c.socket = socket;
+
     socket.addEventListener("open", function () {
       socket.send(JSON.stringify({
         type: "connect",
@@ -309,44 +326,175 @@
         protocol: server.protocol || "source",
       }));
     });
+
     socket.addEventListener("message", function (event) {
       var msg;
       try {
         msg = JSON.parse(event.data);
       } catch (e) {
-        appendLog("error: could not parse relay message");
+        appendConsoleLine(c, "error", "could not parse relay message");
+        refreshIfActive(c);
         return;
       }
+
       if (msg.type === "connected") {
-        appendLog("(connected)");
+        appendConsoleLine(c, "system", "(connected)");
       } else if (msg.type === "response") {
-        appendLog(msg.output && msg.output.length ? msg.output : "(no output)");
-        if (pendingPlayersRequest) {
-          pendingPlayersRequest = false;
+        appendConsoleLine(c, "response", msg.output && msg.output.length ? msg.output : "(no output)");
+        if (c.pendingPlayersRequest) {
+          c.pendingPlayersRequest = false;
           renderPlayersPanel(msg.output || "");
         }
+      } else if (msg.type === "broadcast") {
+        // WebRCON servers (Rust) push chat/log lines unsolicited.
+        appendConsoleLine(c, "broadcast", msg.output || "");
       } else if (msg.type === "error") {
-        appendLog("error: " + msg.message);
-        if (pendingPlayersRequest) {
-          pendingPlayersRequest = false;
-          playersPanel.innerHTML = "";
+        appendConsoleLine(c, "error", msg.message);
+        if (c.pendingPlayersRequest) {
+          c.pendingPlayersRequest = false;
+          if (activeConsoleId === server.id) playersPanel.innerHTML = "";
         }
       }
+      refreshIfActive(c);
     });
+
     socket.addEventListener("close", function () {
-      appendLog("(disconnected)");
+      appendConsoleLine(c, "system", "(disconnected)");
+      refreshIfActive(c);
+      if (viewServers.hidden === false) renderServers();
     });
+
     socket.addEventListener("error", function () {
-      appendLog("error: relay connection failed — is the relay running at " + relayHttpUrl() + "?");
+      appendConsoleLine(c, "error", "relay connection failed — is the relay running at " + relayHttpUrl() + "?");
+      refreshIfActive(c);
     });
   }
 
-  function closeSocket() {
-    if (socket) {
-      socket.close();
-      socket = null;
+  function closeConsoleFor(id) {
+    var c = consoles[id];
+    if (!c) return;
+    if (c.socket) c.socket.close();
+    delete consoles[id];
+    renderConsoleTabs();
+
+    if (activeConsoleId === id) {
+      var remaining = Object.keys(consoles);
+      if (remaining.length) {
+        activeConsoleId = remaining[0];
+        renderConsoleTabs();
+        renderActiveConsole();
+      } else {
+        activeConsoleId = null;
+        showServersView();
+      }
     }
   }
+
+  function appendConsoleLine(c, kind, text) {
+    c.lines.push({ kind: kind, text: text });
+  }
+
+  function refreshIfActive(c) {
+    if (activeConsoleId === c.server.id) renderActiveConsole();
+  }
+
+  function renderConsoleTabs() {
+    consoleTabs.innerHTML = "";
+    Object.keys(consoles).forEach(function (id) {
+      var c = consoles[id];
+      var tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "console-tab" + (id === activeConsoleId ? " active" : "");
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-selected", id === activeConsoleId ? "true" : "false");
+      tab.addEventListener("click", function () {
+        activeConsoleId = id;
+        renderConsoleTabs();
+        renderActiveConsole();
+      });
+
+      tab.appendChild(document.createTextNode(c.server.name));
+
+      var closeBtn = document.createElement("span");
+      closeBtn.className = "tab-close";
+      closeBtn.textContent = "×";
+      closeBtn.setAttribute("role", "button");
+      closeBtn.setAttribute("aria-label", "Disconnect " + c.server.name);
+      closeBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        closeConsoleFor(id);
+      });
+      tab.appendChild(closeBtn);
+
+      consoleTabs.appendChild(tab);
+    });
+  }
+
+  function renderActiveConsole() {
+    var c = consoles[activeConsoleId];
+    if (!c) return;
+    consoleTitle.textContent = c.server.name;
+    consoleBadge.textContent = serverMeta(c.server);
+    gameSelect.value = window.NICON_GUESS_GAME(c.server.game);
+    renderLog(c);
+  }
+
+  // --- console log: filtering + highlighting ---
+
+  function activeFilterRegex() {
+    var text = filterInput.value.trim();
+    if (!text) return null;
+    try {
+      return new RegExp(text, "i");
+    } catch (e) {
+      return null; // invalid regex mid-typing — just show everything
+    }
+  }
+
+  function renderLog(c) {
+    log.innerHTML = "";
+    var regex = activeFilterRegex();
+
+    c.lines.forEach(function (line) {
+      if (regex && !regex.test(line.text)) return;
+      var div = document.createElement("div");
+      div.className = "log-line kind-" + line.kind;
+      appendHighlighted(div, line.text, regex);
+      log.appendChild(div);
+    });
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // Appends text to container as plain text, except for regex matches,
+  // which are wrapped in <mark>. Built with DOM nodes (never innerHTML
+  // with raw content) so console output can never be interpreted as HTML.
+  function appendHighlighted(container, text, regex) {
+    if (!regex) {
+      container.appendChild(document.createTextNode(text));
+      return;
+    }
+    var global = new RegExp(regex.source, "gi");
+    var lastIndex = 0;
+    var match;
+    while ((match = global.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      }
+      var mark = document.createElement("mark");
+      mark.textContent = match[0];
+      container.appendChild(mark);
+      lastIndex = match.index + match[0].length;
+      if (match[0].length === 0) global.lastIndex++; // guard against zero-length match loops
+    }
+    if (lastIndex < text.length) {
+      container.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+  }
+
+  filterInput.addEventListener("input", function () {
+    var c = consoles[activeConsoleId];
+    if (c) renderLog(c);
+  });
 
   // --- players info modal ---
 
@@ -402,27 +550,27 @@
   }
 
   playersBtn.addEventListener("click", function () {
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      appendLog("error: not connected");
-      return;
-    }
+    var c = consoles[activeConsoleId];
+    if (!c || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
     var key = gameSelect.value;
-    if (!key) {
-      appendLog("error: select a game above first");
-      return;
-    }
+    if (!key) return;
     var command = window.NICON_GAMES[key].command;
-    pendingPlayersRequest = true;
-    appendLog("> " + command);
-    socket.send(JSON.stringify({ type: "command", command: command }));
+    c.pendingPlayersRequest = true;
+    appendConsoleLine(c, "sent", "> " + command);
+    refreshIfActive(c);
+    c.socket.send(JSON.stringify({ type: "command", command: command }));
   });
+
+  // --- command bar ---
 
   cmdForm.addEventListener("submit", function (e) {
     e.preventDefault();
+    var c = consoles[activeConsoleId];
     var command = cmdInput.value.trim();
-    if (!command || !socket || socket.readyState !== WebSocket.OPEN) return;
-    appendLog("> " + command);
-    socket.send(JSON.stringify({ type: "command", command: command }));
+    if (!command || !c || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
+    appendConsoleLine(c, "sent", "> " + command);
+    refreshIfActive(c);
+    c.socket.send(JSON.stringify({ type: "command", command: command }));
     cmdInput.value = "";
   });
 

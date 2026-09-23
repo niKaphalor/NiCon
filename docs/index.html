@@ -53,7 +53,14 @@
       </div>
       <button type="button" id="info-btn" class="btn-secondary">Players</button>
     </div>
-    <pre id="log" class="console-log"></pre>
+
+    <div id="console-tabs" class="console-tabs" role="tablist" aria-label="Open server consoles"></div>
+
+    <div class="console-toolbar">
+      <input id="filter-input" type="text" placeholder="Filter (regex)…" aria-label="Filter console output">
+    </div>
+
+    <div id="log" class="console-log" role="log" aria-live="polite"></div>
     <form id="cmd-form" class="cmd-bar">
       <input id="cmd-input" type="text" autocomplete="off" placeholder="Type a command…" aria-label="RCON command">
       <button type="submit">Send</button>

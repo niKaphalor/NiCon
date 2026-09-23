@@ -39,6 +39,14 @@ own WebSocket-based "WebRCON" protocol instead. NiCon detects this
 automatically for servers found via Nitrado sync; for a manually-added
 Rust server, pick "Rust WebRCON" in the protocol dropdown when adding it.
 
+You can have several consoles open at once — connecting to another server
+doesn't disconnect the current one, it opens another tab in the console
+view. The filter box above the log accepts a regex: matching lines stay,
+everything else is hidden, and the match itself is highlighted. For
+WebRCON (Rust) servers, chat/log lines the game pushes on its own (not in
+response to a command) show up live in the console, styled differently
+from command output.
+
 ## Relay
 
 ```sh
@@ -53,10 +61,15 @@ The relay does two things, and stores neither:
   `{"type":"connect", host, port, password, protocol}` then any number of
   `{"type":"command", command}` messages; the relay holds one game
   connection for the lifetime of that WebSocket and relays responses back
-  as JSON. `protocol` is `"source"` (default — classic Source RCON via
-  [gorcon/rcon](https://github.com/gorcon/rcon)) or `"webrcon"` (Rust's
-  own WebSocket-based RCON, hand-rolled in `internal/relay/webrcon.go`
-  since there's no existing Go client for it).
+  as JSON (`{"type":"response", output}` / `{"type":"error", message}` /
+  `{"type":"broadcast", output}` for a WebRCON server's own unsolicited
+  push messages). `protocol` is `"source"` (default — classic Source RCON
+  via [gorcon/rcon](https://github.com/gorcon/rcon)) or `"webrcon"`
+  (Rust's own WebSocket-based RCON, hand-rolled in
+  `internal/relay/webrcon.go` since there's no existing Go client for
+  it). The WebRCON connection also sends itself a WebSocket ping every 25s
+  — Rust closes WebRCON connections it considers idle, and this keeps it
+  alive without sending a bogus command to the game.
 - **Nitrado API proxy** (`POST /api/nitrado/sync`): takes `{"token": "..."}`,
   calls the Nitrado API server-side (so the token never needs to survive a
   browser CORS round trip on its own), and returns the RCON-capable
@@ -88,12 +101,21 @@ on a shared or otherwise untrusted host.
 
 - Windows binary packaging for the relay (`GOOS=windows GOARCH=amd64 go
   build` works today, just not automated/released anywhere yet)
-- Automated tests (both the classic RCON and WebRCON paths have been
-  exercised manually against hand-written mock servers, but there's no
-  test suite yet)
+- Automated tests (the classic RCON, WebRCON, and broadcast-forwarding
+  paths have been exercised manually — including a `-race` run — against
+  hand-written mock servers, but there's no test suite yet)
 - The WebRCON implementation is based on Facepunch's own
   [webrcon](https://github.com/Facepunch/webrcon) tool and third-party
   documentation, not verified against a real Rust server yet
 - Structured player-list parsing (`docs/games.js`) covers Minecraft, Rust,
   ARK: Survival Evolved, and Palworld, based on documented command output
   formats rather than verified live responses — see the file for details
+
+## Roadmap: becoming a persistent admin panel
+
+Everything above is deliberately stateless. A further planned direction —
+player profiles/history, notes, shared ban lists, scheduled/triggered
+commands, Discord webhooks — needs the opposite: a real database and a
+relay that runs continuously rather than only while a browser tab is
+open. That's a genuine architecture change from "nothing is stored,
+anywhere," not an incremental addition, and hasn't started yet.

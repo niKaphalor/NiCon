@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/gorcon/rcon"
 	"github.com/gorilla/websocket"
@@ -90,7 +91,10 @@ func (rel *Relay) handleHealth(w http.ResponseWriter, r *http.Request) {
 // classic Source RCON over raw TCP) or "webrcon" (Rust's WebSocket-based
 // RCON).
 // Relay -> client: {"type":"connected"} / {"type":"response", output} /
-// {"type":"error", message}.
+// {"type":"error", message} / {"type":"broadcast", output} — the last is
+// WebRCON-only: messages the game server pushes unsolicited over the same
+// connection (chat, kill feed, log lines), not a response to any command
+// the client sent.
 type wsMessage struct {
 	Type     string `json:"type"`
 	Host     string `json:"host,omitempty"`
@@ -134,12 +138,29 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	// The main loop below and the broadcast-forwarding goroutine (started
+	// on "connect" for WebRCON) can both write to conn; gorilla/websocket
+	// allows only one writer at a time.
+	var writeMu sync.Mutex
+	writeJSON := func(msg wsMessage) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return conn.WriteJSON(msg)
+	}
+
 	var gc gameConn
-	defer func() {
+	var stopBroadcast func()
+	disconnect := func() {
+		if stopBroadcast != nil {
+			stopBroadcast()
+			stopBroadcast = nil
+		}
 		if gc != nil {
 			gc.Close()
+			gc = nil
 		}
-	}()
+	}
+	defer disconnect()
 
 	for {
 		var msg wsMessage
@@ -149,34 +170,51 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 
 		switch msg.Type {
 		case "connect":
-			if gc != nil {
-				gc.Close()
-				gc = nil
-			}
+			disconnect()
+
 			newConn, dialErr := connectGame(msg)
 			if dialErr != nil {
-				_ = conn.WriteJSON(wsMessage{Type: "error", Message: dialErr.Error()})
+				_ = writeJSON(wsMessage{Type: "error", Message: dialErr.Error()})
 				continue
 			}
 			gc = newConn
-			_ = conn.WriteJSON(wsMessage{Type: "connected"})
+			_ = writeJSON(wsMessage{Type: "connected"})
+
+			// WebRCON servers (Rust) push chat/log lines unsolicited over
+			// the same connection; forward those to the browser live.
+			if wrc, ok := newConn.(*webRconConn); ok {
+				done := make(chan struct{})
+				stopBroadcast = func() { close(done) }
+				go func() {
+					for {
+						select {
+						case line, ok := <-wrc.Broadcast:
+							if !ok {
+								return
+							}
+							_ = writeJSON(wsMessage{Type: "broadcast", Output: line})
+						case <-done:
+							return
+						}
+					}
+				}()
+			}
 
 		case "command":
 			if gc == nil {
-				_ = conn.WriteJSON(wsMessage{Type: "error", Message: "not connected"})
+				_ = writeJSON(wsMessage{Type: "error", Message: "not connected"})
 				continue
 			}
 			output, execErr := gc.Execute(msg.Command)
 			if execErr != nil {
-				_ = conn.WriteJSON(wsMessage{Type: "error", Message: execErr.Error()})
-				gc.Close()
-				gc = nil
+				_ = writeJSON(wsMessage{Type: "error", Message: execErr.Error()})
+				disconnect()
 				continue
 			}
-			_ = conn.WriteJSON(wsMessage{Type: "response", Output: output})
+			_ = writeJSON(wsMessage{Type: "response", Output: output})
 
 		default:
-			_ = conn.WriteJSON(wsMessage{Type: "error", Message: "unknown message type: " + msg.Type})
+			_ = writeJSON(wsMessage{Type: "error", Message: "unknown message type: " + msg.Type})
 		}
 	}
 }
