@@ -150,7 +150,7 @@
   }
 
   function checkApi() {
-    fetch(apiHttpUrl() + "/healthz")
+    fetch(apiHttpUrl() + "/api/healthz")
       .then(function (r) { setApiStatus(r.ok); })
       .catch(function () { setApiStatus(false); });
   }
