@@ -86,6 +86,7 @@ func (rel *Relay) Routes() http.Handler {
 	mux.HandleFunc("PUT /api/servers/{id}/password", rel.handleSetServerPassword)
 	mux.HandleFunc("OPTIONS /api/servers/{id}/password", rel.handleSetServerPassword)
 	mux.HandleFunc("DELETE /api/servers/{id}", rel.handleDeleteServer)
+	mux.HandleFunc("OPTIONS /api/servers/{id}", rel.handleDeleteServer)
 
 	mux.HandleFunc("POST /api/nitrado/sync", rel.handleNitradoSync)
 	mux.HandleFunc("OPTIONS /api/nitrado/sync", rel.handleNitradoSync)

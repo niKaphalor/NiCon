@@ -158,6 +158,9 @@ func (rel *Relay) handleSetServerPassword(w http.ResponseWriter, r *http.Request
 }
 
 func (rel *Relay) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
+	if !rel.cors(w, r) {
+		return
+	}
 	userID, ok := rel.authenticateRequest(w, r)
 	if !ok {
 		return
