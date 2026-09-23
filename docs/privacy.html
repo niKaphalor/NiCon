@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy — NiCon</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <span class="wordmark">NiCon</span>
+</header>
+
+<main class="legal-page">
+  <a href="index.html" class="back-link link-button">← Back to NiCon</a>
+  <nav class="lang-switch" aria-label="Language">
+    <a href="privacy.html" lang="en" hreflang="en" aria-current="page">EN</a>
+    <span aria-hidden="true">·</span>
+    <a href="privacy.de.html" lang="de" hreflang="de">DE</a>
+  </nav>
+  <h1>Privacy policy</h1>
+  <p class="hint">
+    Last updated: September 23, 2026. This policy applies to the instance
+    of NiCon served at this URL (the web frontend, plus the relay you use
+    with it). See the <a href="imprint.html">imprint</a> for this
+    instance's operator contact details.
+  </p>
+
+  <h2>1. Who's responsible</h2>
+  <p>
+    The operator named in the <a href="imprint.html">imprint</a> is
+    responsible for data processing on this instance under the GDPR. NiCon
+    is open-source software; anyone running their own relay and their own
+    copy of the frontend is responsible for the data they process —
+    not the authors of the NiCon project.
+  </p>
+
+  <h2>2. What data we process</h2>
+  <p>When you create and use an account, we process:</p>
+  <ul>
+    <li><strong>Username</strong> — freely chosen, no email address required.</li>
+    <li><strong>Password</strong> — never stored in plaintext, only as a bcrypt hash.</li>
+    <li><strong>Server data you add yourself</strong> — a game server's name, host, port, and game, plus its RCON password. The RCON password is stored encrypted (AES-256-GCM), with a key managed separately from the database.</li>
+    <li><strong>Session token</strong> — a random token that identifies you after login, for up to 7 days. It's stored server-side in the database and, in your browser, in <code>sessionStorage</code> (not <code>localStorage</code>) — removed automatically when the browser tab closes.</li>
+  </ul>
+  <p>
+    We set no cookies and use no tracking, analytics, or third-party
+    advertising tools.
+  </p>
+
+  <h2>3. Nitrado API token</h2>
+  <p>
+    When you import servers through the "Sync from Nitrado" dialog, your
+    Nitrado API token is sent to the relay once. The relay uses it only in
+    that moment, to look up your servers at Nitrado, and doesn't store it
+    afterward — not in the database, not anywhere else. You'll need to
+    enter it again for each future sync.
+  </p>
+
+  <h2>4. Purpose and legal basis</h2>
+  <p>
+    We process the data above to provide your account and RCON control
+    over your game servers. The legal basis is Art. 6(1)(b) GDPR
+    (performance of the usage relationship your registration establishes,
+    or steps taken at your request, e.g. during a Nitrado sync). The
+    session token, as a strictly necessary technical function, is
+    additionally covered by Art. 6(1)(f) GDPR (legitimate interest in a
+    working, secure login).
+  </p>
+
+  <h2>5. How long we keep it</h2>
+  <p>
+    Account and server data stays stored until you delete your account
+    yourself (see section 7). Session tokens expire automatically after 7
+    days and are invalidated immediately on sign-out.
+  </p>
+
+  <h2>6. Sharing with third parties</h2>
+  <p>
+    Your account data and stored servers are not shared with third
+    parties. A connection to your game server (RCON) or a Nitrado sync
+    goes directly from the relay you control or trust — no other
+    intermediaries are involved.
+  </p>
+
+  <h2>7. Your rights</h2>
+  <p>Under the GDPR, you have in particular the right to:</p>
+  <ul>
+    <li>Access the data stored about you (Art. 15 GDPR)</li>
+    <li>Have inaccurate data corrected (Art. 16 GDPR)</li>
+    <li>Have your data deleted (Art. 17 GDPR) — you can delete your
+      account, along with every server stored under it, yourself at any
+      time via <strong>Settings → Delete account</strong> in the app. This
+      immediately and irreversibly removes all your data from the
+      database.</li>
+    <li>Restrict processing (Art. 18 GDPR)</li>
+    <li>Data portability (Art. 20 GDPR)</li>
+    <li>Object to processing (Art. 21 GDPR)</li>
+    <li>Lodge a complaint with a data protection supervisory authority (Art. 77 GDPR)</li>
+  </ul>
+  <p>
+    For requests beyond what the app's self-service feature covers,
+    contact the address listed in the <a href="imprint.html">imprint</a>.
+  </p>
+
+  <h2>8. Technical notes</h2>
+  <p>
+    The relay itself does not keep access logs with IP addresses.
+    Depending on the operator's network environment (e.g. router, internet
+    provider), technical connection data may still be logged at that
+    layer, which is outside NiCon's control.
+  </p>
+</main>
+
+<footer class="site-footer">
+  <a href="imprint.html">Imprint</a>
+  <span aria-hidden="true">·</span>
+  <a href="privacy.html">Privacy</a>
+</footer>
+
+</body>
+</html>

@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  var I18N = window.NICON_I18N;
+
   // The session token lives in sessionStorage (cleared when the tab
   // closes, unlike localStorage) so a reload doesn't force a re-login but
   // nothing survives beyond this browser session. Everything else —
@@ -38,10 +40,17 @@
 
   var usernameLabel = document.getElementById("username-label");
   var logoutBtn = document.getElementById("logout-btn");
+  var langSelect = document.getElementById("lang-select");
 
   var viewLogin = document.getElementById("view-login");
   var loginForm = document.getElementById("login-form");
   var loginError = document.getElementById("login-error");
+  var showRegisterBtn = document.getElementById("show-register-btn");
+
+  var viewRegister = document.getElementById("view-register");
+  var registerForm = document.getElementById("register-form");
+  var registerError = document.getElementById("register-error");
+  var showLoginBtn = document.getElementById("show-login-btn");
 
   var viewServers = document.getElementById("view-servers");
   var viewConsole = document.getElementById("view-console");
@@ -49,6 +58,10 @@
   var emptyState = document.getElementById("empty-state");
   var addServerBtn = document.getElementById("add-server-btn");
   var emptyAddBtn = document.getElementById("empty-add-btn");
+  var openSettingsFromSubhead = document.getElementById("open-settings-from-subhead");
+
+  var accountDangerZone = document.getElementById("account-danger-zone");
+  var deleteAccountBtn = document.getElementById("delete-account-btn");
 
   var addModal = document.getElementById("add-modal");
   var addClose = document.getElementById("add-close");
@@ -101,9 +114,24 @@
     settingsModal.close();
   });
 
+  // --- language ---
+
+  langSelect.value = I18N.getLang();
+  langSelect.addEventListener("change", function () {
+    I18N.setLang(langSelect.value);
+  });
+  document.addEventListener("nicon:langchange", function () {
+    // Static text re-renders itself via data-i18n attributes; anything
+    // built from JS strings (server cards, console status lines already on
+    // screen) needs an explicit re-render.
+    renderServers();
+    if (activeConsoleId !== null) renderActiveConsole();
+  });
+
   settingsBtn.addEventListener("click", function () { settingsModal.showModal(); });
   bannerSettingsBtn.addEventListener("click", function () { settingsModal.showModal(); });
   relayPill.addEventListener("click", function () { settingsModal.showModal(); });
+  openSettingsFromSubhead.addEventListener("click", function () { settingsModal.showModal(); });
   settingsClose.addEventListener("click", function () { settingsModal.close(); });
   settingsModal.addEventListener("click", function (e) {
     if (e.target === settingsModal) settingsModal.close();
@@ -136,7 +164,7 @@
     disconnectAllConsoles();
     servers = [];
     showLoginView();
-    loginError.textContent = "Your session expired — sign in again.";
+    loginError.textContent = I18N.t("errors.sessionExpired");
     loginError.hidden = false;
   }
 
@@ -179,7 +207,7 @@
         showServersView();
       })
       .catch(function (err) {
-        loginError.textContent = err.message || "Sign in failed.";
+        loginError.textContent = err.message || I18N.t("errors.signInFailed");
         loginError.hidden = false;
       });
   });
@@ -191,6 +219,76 @@
     disconnectAllConsoles();
     servers = [];
     showLoginView();
+  });
+
+  // --- registration ---
+
+  showRegisterBtn.addEventListener("click", function () { showRegisterView(); });
+  showLoginBtn.addEventListener("click", function () { showLoginView(); });
+
+  registerForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var username = document.getElementById("register-username").value.trim();
+    var password = document.getElementById("register-password").value;
+    var passwordConfirm = document.getElementById("register-password-confirm").value;
+    var consent = document.getElementById("register-consent").checked;
+    registerError.hidden = true;
+
+    if (password !== passwordConfirm) {
+      registerError.textContent = I18N.t("errors.passwordMismatch");
+      registerError.hidden = false;
+      return;
+    }
+    if (!consent) {
+      registerError.textContent = I18N.t("errors.mustAcceptPrivacy");
+      registerError.hidden = false;
+      return;
+    }
+
+    fetch(relayHttpUrl() + "/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: username, password: password, consent_accepted: consent }),
+    })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(t || "registration failed"); });
+        return r.json();
+      })
+      .then(function (data) {
+        authToken = data.token;
+        currentUsername = username;
+        try {
+          sessionStorage.setItem(TOKEN_KEY, authToken);
+          sessionStorage.setItem(USERNAME_KEY, currentUsername);
+        } catch (e) { /* ignore */ }
+        return loadServers();
+      })
+      .then(function () {
+        registerForm.reset();
+        showServersView();
+      })
+      .catch(function (err) {
+        registerError.textContent = err.message || I18N.t("errors.registrationFailed");
+        registerError.hidden = false;
+      });
+  });
+
+  // --- account deletion (self-service, Art. 17 GDPR) ---
+
+  deleteAccountBtn.addEventListener("click", function () {
+    if (!confirm(I18N.t("settings.deleteAccountConfirm"))) return;
+
+    apiFetch("/api/account", { method: "DELETE" })
+      .then(function (r) {
+        if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.failedToDeleteAccount"));
+        settingsModal.close();
+        authToken = null;
+        try { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USERNAME_KEY); } catch (e) { /* ignore */ }
+        disconnectAllConsoles();
+        servers = [];
+        showLoginView();
+      })
+      .catch(function (err) { alert(err.message); });
   });
 
   // --- add-server modal + tabs ---
@@ -223,7 +321,7 @@
   function loadServers() {
     return apiFetch("/api/servers", { method: "GET" })
       .then(function (r) {
-        if (!r.ok) throw new Error("failed to load servers");
+        if (!r.ok) throw new Error(I18N.t("errors.failedToLoadServers"));
         return r.json();
       })
       .then(function (list) {
@@ -242,7 +340,7 @@
   function removeServer(id) {
     apiFetch("/api/servers/" + id, { method: "DELETE" })
       .then(function (r) {
-        if (!r.ok && r.status !== 204) throw new Error("failed to remove server");
+        if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.failedToRemoveServer"));
         servers = servers.filter(function (s) { return s.id !== id; });
         if (consoles[id]) closeConsoleFor(id);
         renderServers();
@@ -272,7 +370,7 @@
       if (consoles[server.id]) {
         var dot = document.createElement("span");
         dot.className = "connected-dot";
-        dot.title = "Connected";
+        dot.title = I18N.t("servers.connectedTooltip");
         h3.appendChild(dot);
       }
       h3.appendChild(document.createTextNode(server.name));
@@ -289,15 +387,15 @@
       if (!server.has_password) {
         var pwInput = document.createElement("input");
         pwInput.type = "password";
-        pwInput.placeholder = "RCON password";
+        pwInput.placeholder = I18N.t("common.rconPassword");
         pwInput.autocomplete = "off";
-        pwInput.setAttribute("aria-label", "RCON password for " + server.name);
+        pwInput.setAttribute("aria-label", I18N.t("servers.rconPasswordAriaLabel", { name: server.name }));
         actions.appendChild(pwInput);
 
         var saveBtn = document.createElement("button");
         saveBtn.type = "button";
         saveBtn.className = "btn-primary";
-        saveBtn.textContent = "Save";
+        saveBtn.textContent = I18N.t("common.save");
         saveBtn.addEventListener("click", function () {
           apiFetch("/api/servers/" + server.id + "/password", {
             method: "PUT",
@@ -305,7 +403,7 @@
             body: JSON.stringify({ password: pwInput.value }),
           })
             .then(function (r) {
-              if (!r.ok) throw new Error("failed to save password");
+              if (!r.ok) throw new Error(I18N.t("errors.failedToSavePassword"));
               server.has_password = true;
               renderServers();
             })
@@ -316,7 +414,7 @@
         var connectBtn = document.createElement("button");
         connectBtn.type = "button";
         connectBtn.className = "btn-primary";
-        connectBtn.textContent = consoles[server.id] ? "Open console" : "Connect";
+        connectBtn.textContent = consoles[server.id] ? I18N.t("servers.openConsole") : I18N.t("servers.connect");
         connectBtn.addEventListener("click", function () { openOrFocusConsole(server); });
         actions.appendChild(connectBtn);
       }
@@ -324,8 +422,8 @@
       var removeBtn = document.createElement("button");
       removeBtn.type = "button";
       removeBtn.className = "icon-btn small";
-      removeBtn.title = "Remove";
-      removeBtn.setAttribute("aria-label", "Remove " + server.name);
+      removeBtn.title = I18N.t("common.remove");
+      removeBtn.setAttribute("aria-label", I18N.t("servers.removeAriaLabel", { name: server.name }));
       removeBtn.textContent = "×";
       removeBtn.addEventListener("click", function () { removeServer(server.id); });
       actions.appendChild(removeBtn);
@@ -357,7 +455,7 @@
         addModal.close();
       })
       .catch(function (err) {
-        alert("Nitrado sync failed: " + err.message);
+        alert(I18N.t("errors.nitradoSyncFailed", { message: err.message }));
       })
       .finally(function () {
         // The token was only ever needed for this one request.
@@ -390,7 +488,7 @@
         manualForm.reset();
         addModal.close();
       })
-      .catch(function (err) { alert("Could not add server: " + err.message); });
+      .catch(function (err) { alert(I18N.t("errors.couldNotAddServer", { message: err.message })); });
   });
 
   // --- view switching ---
@@ -402,19 +500,32 @@
     if (infoModal.open) infoModal.close();
     viewConsole.hidden = true;
     viewServers.hidden = true;
+    viewRegister.hidden = true;
     viewLogin.hidden = false;
     usernameLabel.hidden = true;
     logoutBtn.hidden = true;
+    accountDangerZone.hidden = true;
+  }
+
+  function showRegisterView() {
+    if (infoModal.open) infoModal.close();
+    viewConsole.hidden = true;
+    viewServers.hidden = true;
+    viewLogin.hidden = true;
+    registerError.hidden = true;
+    viewRegister.hidden = false;
   }
 
   function showServersView() {
     if (infoModal.open) infoModal.close();
     viewLogin.hidden = true;
+    viewRegister.hidden = true;
     viewConsole.hidden = true;
     viewServers.hidden = false;
     usernameLabel.hidden = false;
     usernameLabel.textContent = currentUsername;
     logoutBtn.hidden = false;
+    accountDangerZone.hidden = false;
     renderServers();
   }
 
@@ -440,7 +551,7 @@
       authenticated: false,
     };
     consoles[server.id] = c;
-    appendConsoleLine(c, "system", "(connecting…)");
+    appendConsoleLine(c, "system", I18N.t("console.connecting"));
 
     var socket = new WebSocket(relayWsUrl() + "/ws/rcon");
     c.socket = socket;
@@ -454,7 +565,7 @@
       try {
         msg = JSON.parse(event.data);
       } catch (e) {
-        appendConsoleLine(c, "error", "could not parse relay message");
+        appendConsoleLine(c, "error", I18N.t("console.couldNotParseMessage"));
         refreshIfActive(c);
         return;
       }
@@ -463,9 +574,9 @@
         c.authenticated = true;
         socket.send(JSON.stringify({ type: "connect", server_id: server.id }));
       } else if (msg.type === "connected") {
-        appendConsoleLine(c, "system", "(connected)");
+        appendConsoleLine(c, "system", I18N.t("console.connected"));
       } else if (msg.type === "response") {
-        appendConsoleLine(c, "response", msg.output && msg.output.length ? msg.output : "(no output)");
+        appendConsoleLine(c, "response", msg.output && msg.output.length ? msg.output : I18N.t("console.noOutput"));
         if (c.pendingPlayersRequest) {
           c.pendingPlayersRequest = false;
           renderPlayersPanel(msg.output || "");
@@ -484,13 +595,13 @@
     });
 
     socket.addEventListener("close", function () {
-      appendConsoleLine(c, "system", "(disconnected)");
+      appendConsoleLine(c, "system", I18N.t("console.disconnected"));
       refreshIfActive(c);
       if (viewServers.hidden === false) renderServers();
     });
 
     socket.addEventListener("error", function () {
-      appendConsoleLine(c, "error", "relay connection failed — is the relay running at " + relayHttpUrl() + "?");
+      appendConsoleLine(c, "error", I18N.t("console.relayConnectionFailed", { url: relayHttpUrl() }));
       refreshIfActive(c);
     });
   }
@@ -639,7 +750,7 @@
     if (!parsed) {
       var notice = document.createElement("p");
       notice.className = "hint";
-      notice.textContent = "Could not parse the " + game.label + " response — see the raw output in the console.";
+      notice.textContent = I18N.t("info.couldNotParse", { game: game.label });
       playersPanel.appendChild(notice);
       return;
     }
@@ -701,6 +812,7 @@
 
   // --- boot ---
 
+  I18N.applyStatic(document);
   checkRelay();
   if (authToken) {
     loadServers()

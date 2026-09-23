@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datenschutzerklärung — NiCon</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <span class="wordmark">NiCon</span>
+</header>
+
+<main class="legal-page">
+  <a href="index.html" class="back-link link-button">← Zurück zu NiCon</a>
+  <nav class="lang-switch" aria-label="Sprache">
+    <a href="privacy.html" lang="en" hreflang="en">EN</a>
+    <span aria-hidden="true">·</span>
+    <a href="privacy.de.html" lang="de" hreflang="de" aria-current="page">DE</a>
+  </nav>
+  <h1>Datenschutzerklärung</h1>
+  <p class="hint">
+    Stand: 23. September 2026. Diese Erklärung gilt für die unter dieser
+    URL bereitgestellte Instanz von NiCon (Weboberfläche + der von dir
+    verwendete Relay). Siehe <a href="imprint.de.html">Impressum</a> für die
+    Kontaktangaben des Betreibers dieser Instanz.
+  </p>
+
+  <h2>1. Verantwortlicher</h2>
+  <p>
+    Verantwortlich für die Datenverarbeitung im Sinne der DSGVO ist der im
+    <a href="imprint.de.html">Impressum</a> genannte Betreiber dieser
+    NiCon-Instanz. NiCon ist Open-Source-Software; jeder, der seinen
+    eigenen Relay und seine eigene Kopie der Weboberfläche betreibt, ist
+    für die von ihm verarbeiteten Daten selbst verantwortlich — nicht die
+    Autoren des NiCon-Projekts.
+  </p>
+
+  <h2>2. Welche Daten wir verarbeiten</h2>
+  <p>Beim Erstellen und Nutzen eines Kontos verarbeiten wir:</p>
+  <ul>
+    <li><strong>Benutzername</strong> — frei gewählt, keine E-Mail-Adresse erforderlich.</li>
+    <li><strong>Passwort</strong> — wird nie im Klartext gespeichert, sondern ausschließlich als bcrypt-Hash.</li>
+    <li><strong>Server-Daten, die du selbst hinzufügst</strong> — Name, Host, Port und Spiel eines Spieleservers, sowie dessen RCON-Passwort. Das RCON-Passwort wird verschlüsselt (AES-256-GCM) gespeichert, mit einem Schlüssel, der getrennt von der Datenbank verwaltet wird.</li>
+    <li><strong>Sitzungs-Token</strong> — ein zufälliger Token, der dich nach dem Login für bis zu 7 Tage identifiziert. Er wird serverseitig in der Datenbank sowie browserseitig in <code>sessionStorage</code> (nicht <code>localStorage</code>) gespeichert und beim Schließen des Browser-Tabs aus dem Browser entfernt.</li>
+  </ul>
+  <p>
+    Es werden keine Cookies gesetzt, kein Tracking und keine
+    Analyse-/Werbe-Tools Dritter eingebunden.
+  </p>
+
+  <h2>3. Nitrado-API-Token</h2>
+  <p>
+    Wenn du Server über den "Von Nitrado synchronisieren"-Dialog importierst,
+    sendest du deinen Nitrado-API-Token einmalig an den Relay. Der Relay
+    verwendet ihn ausschließlich, um in diesem einen Moment deine Server
+    bei Nitrado abzufragen, und speichert ihn danach nicht — weder in der
+    Datenbank noch sonst irgendwo. Bei jeder erneuten Synchronisierung
+    musst du ihn erneut eingeben.
+  </p>
+
+  <h2>4. Zweck und Rechtsgrundlage der Verarbeitung</h2>
+  <p>
+    Wir verarbeiten die genannten Daten, um dir ein Nutzerkonto und die
+    RCON-Steuerung deiner Spieleserver bereitzustellen. Rechtsgrundlage ist
+    Art. 6 Abs. 1 lit. b DSGVO (Erfüllung des Nutzungsverhältnisses, das
+    mit deiner Registrierung zustande kommt, bzw. Maßnahmen auf deine
+    Anfrage hin, etwa beim Nitrado-Sync). Für das Sitzungs-Token als
+    technisch notwendige Funktion gilt zusätzlich Art. 6 Abs. 1 lit. f
+    DSGVO (berechtigtes Interesse an einer funktionierenden, sicheren
+    Anmeldung).
+  </p>
+
+  <h2>5. Speicherdauer</h2>
+  <p>
+    Konto- und Serverdaten bleiben gespeichert, bis du dein Konto selbst
+    löschst (siehe Punkt 7). Sitzungs-Token laufen automatisch nach 7 Tagen
+    ab und werden beim Abmelden sofort ungültig gemacht.
+  </p>
+
+  <h2>6. Weitergabe an Dritte</h2>
+  <p>
+    Deine Kontodaten und gespeicherten Server werden nicht an Dritte
+    weitergegeben. Eine Verbindung zu deinem Spieleserver (RCON) sowie ein
+    Nitrado-Sync gehen direkt vom Relay aus, den du selbst kontrollierst
+    bzw. dem du vertraust — es sind keine weiteren Vermittler beteiligt.
+  </p>
+
+  <h2>7. Deine Rechte</h2>
+  <p>Du hast nach der DSGVO insbesondere folgende Rechte:</p>
+  <ul>
+    <li>Auskunft über die zu dir gespeicherten Daten (Art. 15 DSGVO)</li>
+    <li>Berichtigung unrichtiger Daten (Art. 16 DSGVO)</li>
+    <li>Löschung deiner Daten (Art. 17 DSGVO) — dein Konto samt aller
+      gespeicherten Server kannst du jederzeit selbst löschen: über
+      <strong>Einstellungen → Konto löschen</strong> in der App. Das
+      löscht sofort und unwiderruflich alle deine Daten aus der
+      Datenbank.</li>
+    <li>Einschränkung der Verarbeitung (Art. 18 DSGVO)</li>
+    <li>Datenübertragbarkeit (Art. 20 DSGVO)</li>
+    <li>Widerspruch gegen die Verarbeitung (Art. 21 DSGVO)</li>
+    <li>Beschwerde bei einer Datenschutz-Aufsichtsbehörde (Art. 77 DSGVO)</li>
+  </ul>
+  <p>
+    Für Anfragen, die über die Selbstbedienungsfunktion in der App hinausgehen,
+    wende dich an die im <a href="imprint.de.html">Impressum</a> genannte
+    Kontaktadresse.
+  </p>
+
+  <h2>8. Technische Hinweise</h2>
+  <p>
+    Der Relay selbst führt kein Zugriffs-Logging mit IP-Adressen. Je nach
+    Netzwerkumgebung des Betreibers (z. B. Router, Internetanbieter) können
+    auf dieser Ebene technische Verbindungsdaten anfallen, worauf NiCon
+    keinen Einfluss hat.
+  </p>
+</main>
+
+<footer class="site-footer">
+  <a href="imprint.de.html">Impressum</a>
+  <span aria-hidden="true">·</span>
+  <a href="privacy.de.html">Datenschutz</a>
+</footer>
+
+</body>
+</html>

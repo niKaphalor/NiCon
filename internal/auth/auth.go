@@ -9,6 +9,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"regexp"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -19,10 +21,17 @@ import (
 // me" distinction — every login gets the same lifetime.
 const SessionTTLSeconds = 7 * 24 * 3600 // 7 days
 
+const MinPasswordLength = 8
+
 var (
 	ErrInvalidCredentials = errors.New("invalid username or password")
 	ErrUnauthenticated    = errors.New("not authenticated")
+	ErrUsernameTaken      = errors.New("username already taken")
+	ErrInvalidUsername    = errors.New("username must be 3-32 characters: letters, numbers, underscore, hyphen, or dot")
+	ErrPasswordTooShort   = errors.New("password must be at least 8 characters")
 )
+
+var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,32}$`)
 
 type Auth struct {
 	store *store.Store
@@ -67,6 +76,46 @@ func (a *Auth) Login(ctx context.Context, username, password string) (token stri
 
 func (a *Auth) Logout(ctx context.Context, token string) error {
 	return a.store.DeleteSession(ctx, token)
+}
+
+// Register creates a new account and, on success, logs it in immediately
+// (same as a fresh Login) so a signup doesn't need a second round trip.
+func (a *Auth) Register(ctx context.Context, username, password string) (token string, userID int64, err error) {
+	username = strings.TrimSpace(username)
+	if !usernamePattern.MatchString(username) {
+		return "", 0, ErrInvalidUsername
+	}
+	if len(password) < MinPasswordLength {
+		return "", 0, ErrPasswordTooShort
+	}
+
+	hash, err := HashPassword(password)
+	if err != nil {
+		return "", 0, err
+	}
+
+	id, err := a.store.CreateUser(ctx, username, hash)
+	if err != nil {
+		if errors.Is(err, store.ErrUsernameTaken) {
+			return "", 0, ErrUsernameTaken
+		}
+		return "", 0, err
+	}
+
+	token, err = generateToken()
+	if err != nil {
+		return "", 0, err
+	}
+	if err := a.store.CreateSession(ctx, token, id, SessionTTLSeconds); err != nil {
+		return "", 0, err
+	}
+	return token, id, nil
+}
+
+// DeleteAccount permanently removes an account and everything tied to it
+// (sessions, servers) — the self-service "right to erasure" path.
+func (a *Auth) DeleteAccount(ctx context.Context, userID int64) error {
+	return a.store.DeleteUser(ctx, userID)
 }
 
 // Authenticate resolves a session token to a user ID, or ErrUnauthenticated

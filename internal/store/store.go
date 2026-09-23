@@ -11,10 +11,17 @@ import (
 	"errors"
 	"fmt"
 
-	_ "github.com/go-sql-driver/mysql"
+	mysqldriver "github.com/go-sql-driver/mysql"
 )
 
-var ErrNotFound = errors.New("not found")
+var (
+	ErrNotFound      = errors.New("not found")
+	ErrUsernameTaken = errors.New("username already taken")
+)
+
+// mysqlDuplicateEntry is MariaDB/MySQL's error number for a UNIQUE
+// constraint violation (ER_DUP_ENTRY).
+const mysqlDuplicateEntry = 1062
 
 const schema = `
 CREATE TABLE IF NOT EXISTS users (
@@ -130,9 +137,24 @@ func (s *Store) CreateUser(ctx context.Context, username, passwordHash string) (
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO users (username, password_hash) VALUES (?, ?)`, username, passwordHash)
 	if err != nil {
+		var mysqlErr *mysqldriver.MySQLError
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == mysqlDuplicateEntry {
+			return 0, ErrUsernameTaken
+		}
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+// DeleteUser removes a user account. Their sessions and servers are removed
+// along with it via ON DELETE CASCADE — this is the one place account data
+// actually gets erased (the self-service "delete my account" path).
+func (s *Store) DeleteUser(ctx context.Context, userID int64) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID)
+	if err != nil {
+		return err
+	}
+	return checkAffected(res)
 }
 
 func (s *Store) GetUserByUsername(ctx context.Context, username string) (*User, error) {

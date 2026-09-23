@@ -79,6 +79,10 @@ func (rel *Relay) Routes() http.Handler {
 	mux.HandleFunc("OPTIONS /api/login", rel.handleLogin)
 	mux.HandleFunc("POST /api/logout", rel.handleLogout)
 	mux.HandleFunc("OPTIONS /api/logout", rel.handleLogout)
+	mux.HandleFunc("POST /api/register", rel.handleRegister)
+	mux.HandleFunc("OPTIONS /api/register", rel.handleRegister)
+	mux.HandleFunc("DELETE /api/account", rel.handleDeleteAccount)
+	mux.HandleFunc("OPTIONS /api/account", rel.handleDeleteAccount)
 
 	mux.HandleFunc("GET /api/servers", rel.handleListServers)
 	mux.HandleFunc("OPTIONS /api/servers", rel.handleListServers)

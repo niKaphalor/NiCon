@@ -31,8 +31,9 @@ prototype.
 2. Run the relay locally (see below), pointed at your MariaDB database.
    The relay pill top-right turns green once it's reachable; open it (or
    the ⚙ next to it) to change the address if you're not using the default.
-3. Sign in with an account the relay operator created for you (see
-   [User accounts](#user-accounts)).
+3. Sign in, or create an account yourself (see
+   [User accounts](#user-accounts)) — registration asks you to confirm
+   you've read the [privacy policy](docs/privacy.html) first.
 4. Click **+ Add server**: sync from a Nitrado API token (adds every
    server whose current game has RCON enabled; the RCON password itself
    isn't in Nitrado's API response, so add it inline on the server card
@@ -87,12 +88,19 @@ to be re-entered (server rows aren't lost, just their password field).
 
 The relay does three things:
 
-- **Auth** (`POST /api/login`, `POST /api/logout`): exchanges a
-  username/password (bcrypt-hashed at rest) for a session token, which the
-  frontend then sends as `Authorization: Bearer <token>` on every other
-  request and as the first WebSocket message. Tokens live 7 days server-side
-  (a `sessions` table row with an expiry) and are stored in the browser's
+- **Auth** (`POST /api/login`, `POST /api/logout`, `POST /api/register`,
+  `DELETE /api/account`): login exchanges a username/password
+  (bcrypt-hashed at rest) for a session token, which the frontend then
+  sends as `Authorization: Bearer <token>` on every other request and as
+  the first WebSocket message. Tokens live 7 days server-side (a
+  `sessions` table row with an expiry) and are stored in the browser's
   `sessionStorage`, not `localStorage`, so they don't outlive the tab.
+  Register is the same, minus an existing account — it also requires
+  `consent_accepted: true` (the frontend's required privacy-policy
+  checkbox) and rejects a taken username with 409. Account deletion
+  removes the user row; `sessions` and `servers` cascade-delete with it at
+  the database level (`ON DELETE CASCADE`), so there's nothing left to
+  clean up separately.
 - **Per-user server storage** (`GET/POST /api/servers`,
   `PUT /api/servers/{id}/password`, `DELETE /api/servers/{id}`,
   `POST /api/nitrado/sync`): every query is scoped to the authenticated
@@ -139,8 +147,18 @@ reach anyone's servers or RCON connections.
 
 ## User accounts
 
-There's no self-service signup — whoever runs the relay creates accounts
-for the people who'll use it:
+Anyone who can reach the frontend can create their own account from the
+**Create one** link on the sign-in screen — registration is open by
+default. Signing up requires a username (3–32 characters), a password (min
+8 characters), and checking a box confirming the
+[privacy policy](docs/privacy.html) has been read; it logs you in
+immediately afterward. An account can delete itself at any time from
+**Settings → Delete account** — this permanently removes the account and
+every server it added, RCON passwords included (there is no "soft delete"
+or recovery).
+
+The relay operator can also create accounts directly, without going
+through the registration page:
 
 ```sh
 ./nicon-relay adduser <username>    # prompts for a password (min 8 chars), twice
@@ -148,8 +166,52 @@ for the people who'll use it:
 
 Each account's server list is completely separate; there's no sharing or
 admin override built in yet (see [Not implemented yet](#not-implemented-yet)).
-Still run the relay only on a machine/network you trust the users of —
-authentication protects data between accounts, not the host itself.
+Open registration means anyone who reaches the frontend can create an
+account on your relay and store their own RCON credentials in your
+database — still run the relay only on a machine/network you're
+comfortable with that (see [Legal pages](#legal-pages) below for what to
+do about the accompanying imprint/privacy policy before operating this
+for real users).
+
+## Legal pages
+
+`docs/imprint.html` and `docs/privacy.html` are included so a self-hosted
+NiCon instance has somewhere to point users for German TMG/DSGVO
+requirements (legal notice + privacy policy), linked from the footer, the
+registration form, and the servers view. Each has a German sibling file
+(`imprint.de.html`, `privacy.de.html`) with a small EN/DE switcher at the
+top — see [Language](#language) below for how the pair is chosen. **Both
+currently contain placeholder data** ("Max Mustermann", `kontakt@example.com`,
+etc.), clearly marked as such in the page text — replace them (in both
+languages) with your own real details before letting anyone but yourself
+register. The privacy policy documents what NiCon actually stores
+(username, bcrypt password hash, RCON server data with the password
+encrypted at rest, a session token in `sessionStorage`) and how to
+exercise the self-service deletion described above; adjust its wording if
+you fork NiCon and change what's collected.
+
+## Language
+
+The frontend ships in English and German today, switchable from the `EN
+· DE` dropdown in the topbar. There's no build step or server-side
+rendering involved — `docs/i18n.js` holds one flat dictionary per
+language, applied to the DOM at load (and again on switch) via
+`data-i18n`/`-placeholder`/`-aria-label`/`-title` attributes in
+`index.html`, and the choice is remembered in `localStorage` (falling back
+to the browser's own language on first visit, then English). The legal
+pages aren't part of that dictionary — they're long-form prose, so each
+one is a separate file per language (`imprint.html`/`imprint.de.html`,
+`privacy.html`/`privacy.de.html`) with its own tiny switcher, and the
+in-app links to them pick the file matching the active UI language
+automatically.
+
+Adding a language means adding one object to the `dict` in
+`docs/i18n.js`, one `<option>` to `#lang-select` in `index.html`, and — if
+you want the legal pages translated too — an `imprint.<code>.html` /
+`privacy.<code>.html` pair. Per-game player-list parsing
+(`docs/games.js`) and error messages returned by the relay's HTTP API are
+not localized yet; both stay in English regardless of the selected UI
+language.
 
 ## Architecture
 
@@ -179,10 +241,14 @@ authentication protects data between accounts, not the host itself.
 - Structured player-list parsing (`docs/games.js`) covers Minecraft, Rust,
   ARK: Survival Evolved, and Palworld, based on documented command output
   formats rather than verified live responses — see the file for details
-- Account self-service (signup, password reset, admin UI) — accounts are
-  created one at a time on the relay's command line for now
+- Password reset and any admin UI for managing accounts — signup and
+  self-service account deletion exist, but a forgotten password today
+  means the relay operator has to intervene directly in the database
 - Sharing a server between accounts, or any notion of teams/roles — server
   ownership is strictly one account per server today
+- Rate limiting or invite-gating on `/api/register` — signup is
+  completely open; anyone who can reach the frontend can create an
+  account on your relay
 
 ## Roadmap: becoming a full admin panel
 

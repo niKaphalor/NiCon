@@ -14,150 +14,187 @@
   <span class="wordmark">NiCon</span>
   <div class="topbar-right">
     <span id="username-label" class="hint" hidden></span>
-    <button type="button" id="logout-btn" class="link-button" hidden>Sign out</button>
+    <button type="button" id="logout-btn" class="link-button" data-i18n="nav.signOut" hidden>Sign out</button>
+    <select id="lang-select" class="lang-select" aria-label="Language" data-i18n-aria-label="nav.language">
+      <option value="en">EN</option>
+      <option value="de">DE</option>
+    </select>
     <button type="button" id="relay-pill" class="relay-pill status-unknown">
-      <span class="dot"></span> relay
+      <span class="dot"></span> <span data-i18n="nav.relay">relay</span>
     </button>
-    <button type="button" id="settings-btn" class="icon-btn" aria-label="Relay settings" title="Relay settings">⚙</button>
+    <button type="button" id="settings-btn" class="icon-btn" aria-label="Relay settings" title="Relay settings" data-i18n-aria-label="nav.relaySettings" data-i18n-title="nav.relaySettings">⚙</button>
   </div>
 </header>
 
 <div id="relay-banner" class="relay-banner" hidden>
   <p>
-    NiCon can't reach its local relay — nothing will work until it's
-    running. <a href="https://github.com/niKaphalor/NiCon#relay" target="_blank" rel="noopener">Get it here</a>,
-    then check the address in <button type="button" id="banner-settings-btn" class="link-button">settings</button>.
+    <span data-i18n="banner.unreachable">NiCon can't reach its local relay — nothing will work until it's running.</span>
+    <a href="https://github.com/niKaphalor/NiCon#relay" target="_blank" rel="noopener" data-i18n="banner.getItHere">Get it here</a>,
+    <span data-i18n="banner.thenCheck">then check the address in</span>
+    <button type="button" id="banner-settings-btn" class="link-button" data-i18n="nav.settingsLink">settings</button>.
   </p>
 </div>
 
 <main>
   <section id="view-login" class="view">
     <div class="login-box">
-      <h1>Sign in</h1>
-      <p class="hint">Your servers are tied to your NiCon account — sign in to see them.</p>
+      <h1 data-i18n="auth.signIn">Sign in</h1>
+      <p class="hint" data-i18n="login.subhead">Your servers are tied to your NiCon account — sign in to see them.</p>
       <form id="login-form" class="stacked-form">
-        <input id="login-username" type="text" placeholder="Username" required autocomplete="username" aria-label="Username">
-        <input id="login-password" type="password" placeholder="Password" required autocomplete="current-password" aria-label="Password">
-        <button type="submit" class="btn-primary">Sign in</button>
+        <input id="login-username" type="text" placeholder="Username" required autocomplete="username" aria-label="Username" data-i18n-placeholder="common.username" data-i18n-aria-label="common.username">
+        <input id="login-password" type="password" placeholder="Password" required autocomplete="current-password" aria-label="Password" data-i18n-placeholder="common.password" data-i18n-aria-label="common.password">
+        <button type="submit" class="btn-primary" data-i18n="auth.signIn">Sign in</button>
       </form>
       <p id="login-error" class="hint login-error" hidden></p>
+      <p class="hint auth-switch"><span data-i18n="auth.noAccountYet">No account yet?</span> <button type="button" id="show-register-btn" class="link-button" data-i18n="auth.createOne">Create one</button></p>
+    </div>
+  </section>
+
+  <section id="view-register" class="view" hidden>
+    <div class="login-box">
+      <h1 data-i18n="register.title">Create an account</h1>
+      <p class="hint"><span data-i18n="register.subheadBefore">Only your username and a password hash are stored — see what that means in the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a>.</p>
+      <form id="register-form" class="stacked-form">
+        <input id="register-username" type="text" placeholder="Username (3–32 characters)" required autocomplete="username" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.\-]+" aria-label="Username" data-i18n-placeholder="register.usernamePlaceholder" data-i18n-aria-label="common.username">
+        <input id="register-password" type="password" placeholder="Password (min. 8 characters)" required autocomplete="new-password" minlength="8" aria-label="Password" data-i18n-placeholder="register.passwordPlaceholder" data-i18n-aria-label="common.password">
+        <input id="register-password-confirm" type="password" placeholder="Confirm password" required autocomplete="new-password" minlength="8" aria-label="Confirm password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
+        <label class="checkbox-row">
+          <input type="checkbox" id="register-consent" required>
+          <span><span data-i18n="register.consentBefore">I've read the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a> <span data-i18n="register.consentAfter">and agree to it.</span></span>
+        </label>
+        <button type="submit" class="btn-primary" data-i18n="register.submit">Create account</button>
+      </form>
+      <p id="register-error" class="hint login-error" hidden></p>
+      <p class="hint auth-switch"><span data-i18n="auth.alreadyHaveAccount">Already have an account?</span> <button type="button" id="show-login-btn" class="link-button" data-i18n="auth.signIn">Sign in</button></p>
     </div>
   </section>
 
   <section id="view-servers" class="view" hidden>
     <div class="view-header">
-      <h1>Servers</h1>
-      <button type="button" id="add-server-btn" class="btn-primary">+ Add server</button>
+      <h1 data-i18n="servers.title">Servers</h1>
+      <button type="button" id="add-server-btn" class="btn-primary" data-i18n="servers.addServer">+ Add server</button>
     </div>
-    <p class="hint view-subhead">Your server list and RCON passwords are stored for your account only — no one else can see, edit, or connect through them.</p>
+    <p class="hint view-subhead"><span data-i18n="servers.subheadPart1">Your server list and RCON passwords are stored for your account only — no one else can see, edit, or connect through them.</span> <span data-i18n="servers.seeThe">See the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a> <span data-i18n="servers.subheadPart2">for details, or delete your account any time in</span> <button type="button" id="open-settings-from-subhead" class="link-button" data-i18n="nav.settingsLink">settings</button>.</p>
 
     <div id="server-grid" class="server-grid"></div>
 
     <div id="empty-state" class="empty-state" hidden>
-      <p>No servers yet.</p>
-      <button type="button" id="empty-add-btn" class="btn-primary">+ Add a server</button>
+      <p data-i18n="servers.emptyTitle">No servers yet.</p>
+      <button type="button" id="empty-add-btn" class="btn-primary" data-i18n="servers.emptyAdd">+ Add a server</button>
     </div>
   </section>
 
   <section id="view-console" class="view" hidden>
     <div class="console-header">
-      <button type="button" id="back-btn" class="link-button">← Servers</button>
+      <button type="button" id="back-btn" class="link-button" data-i18n="console.back">← Servers</button>
       <div class="console-heading">
         <h1 id="console-title"></h1>
         <span id="console-badge" class="badge"></span>
       </div>
-      <button type="button" id="info-btn" class="btn-secondary">Players</button>
+      <button type="button" id="info-btn" class="btn-secondary" data-i18n="console.players">Players</button>
     </div>
 
     <div id="console-tabs" class="console-tabs" role="tablist" aria-label="Open server consoles"></div>
 
     <div class="console-toolbar">
-      <input id="filter-input" type="text" placeholder="Filter (regex)…" aria-label="Filter console output">
+      <input id="filter-input" type="text" placeholder="Filter (regex)…" aria-label="Filter console output" data-i18n-placeholder="console.filterPlaceholder">
     </div>
 
     <div id="log" class="console-log" role="log" aria-live="polite"></div>
     <form id="cmd-form" class="cmd-bar">
-      <input id="cmd-input" type="text" autocomplete="off" placeholder="Type a command…" aria-label="RCON command">
-      <button type="submit">Send</button>
+      <input id="cmd-input" type="text" autocomplete="off" placeholder="Type a command…" aria-label="RCON command" data-i18n-placeholder="console.commandPlaceholder">
+      <button type="submit" data-i18n="console.send">Send</button>
     </form>
   </section>
 </main>
 
 <dialog id="add-modal">
   <div class="modal-header">
-    <h2>Add server</h2>
-    <button type="button" id="add-close" class="link-button">Close</button>
+    <h2 data-i18n="addModal.title">Add server</h2>
+    <button type="button" id="add-close" class="link-button" data-i18n="common.close">Close</button>
   </div>
 
   <div class="tabs" role="tablist">
-    <button type="button" class="tab active" data-tab="nitrado" role="tab" aria-selected="true">From Nitrado</button>
-    <button type="button" class="tab" data-tab="manual" role="tab" aria-selected="false">Manually</button>
+    <button type="button" class="tab active" data-tab="nitrado" role="tab" aria-selected="true" data-i18n="addModal.tabNitrado">From Nitrado</button>
+    <button type="button" class="tab" data-tab="manual" role="tab" aria-selected="false" data-i18n="addModal.tabManual">Manually</button>
   </div>
 
   <div class="tab-panel" data-panel="nitrado">
-    <p class="hint">Your token is sent once to the relay to list servers whose current game supports RCON, then discarded — nothing is stored, here or there.</p>
+    <p class="hint" data-i18n="addModal.nitradoHint">Your token is sent once to the relay to list servers whose current game supports RCON, then discarded — nothing is stored, here or there.</p>
     <form id="nitrado-form" class="stacked-form">
-      <input id="nitrado-token" type="password" placeholder="Nitrado API token" autocomplete="off" aria-label="Nitrado API token">
-      <button type="submit" class="btn-primary">Sync servers</button>
+      <input id="nitrado-token" type="password" placeholder="Nitrado API token" autocomplete="off" aria-label="Nitrado API token" data-i18n-placeholder="addModal.nitradoTokenPlaceholder" data-i18n-aria-label="addModal.nitradoTokenPlaceholder">
+      <button type="submit" class="btn-primary" data-i18n="addModal.syncServers">Sync servers</button>
     </form>
   </div>
 
   <div class="tab-panel" data-panel="manual" hidden>
     <form id="manual-form" class="stacked-form">
-      <input id="manual-name" type="text" placeholder="Name" required aria-label="Server name">
+      <input id="manual-name" type="text" placeholder="Name" required aria-label="Server name" data-i18n-placeholder="addModal.manualNamePlaceholder" data-i18n-aria-label="addModal.manualNameAriaLabel">
       <div class="form-row">
-        <input id="manual-host" type="text" placeholder="Host" required aria-label="Host">
-        <input id="manual-port" type="number" placeholder="Port" required aria-label="Port">
+        <input id="manual-host" type="text" placeholder="Host" required aria-label="Host" data-i18n-placeholder="common.host" data-i18n-aria-label="common.host">
+        <input id="manual-port" type="number" placeholder="Port" required aria-label="Port" data-i18n-placeholder="common.port" data-i18n-aria-label="common.port">
       </div>
-      <input id="manual-password" type="password" placeholder="RCON password" required autocomplete="off" aria-label="RCON password">
-      <select id="manual-protocol" aria-label="RCON protocol">
-        <option value="source">Source RCON (most games)</option>
-        <option value="webrcon">Rust WebRCON</option>
+      <input id="manual-password" type="password" placeholder="RCON password" required autocomplete="off" aria-label="RCON password" data-i18n-placeholder="common.rconPassword" data-i18n-aria-label="common.rconPassword">
+      <select id="manual-protocol" aria-label="RCON protocol" data-i18n-aria-label="addModal.protocolAriaLabel">
+        <option value="source" data-i18n="addModal.protocolSource">Source RCON (most games)</option>
+        <option value="webrcon" data-i18n="addModal.protocolWebrcon">Rust WebRCON</option>
       </select>
-      <button type="submit" class="btn-primary">Add server</button>
+      <button type="submit" class="btn-primary" data-i18n="addModal.addServerSubmit">Add server</button>
     </form>
   </div>
 </dialog>
 
 <dialog id="settings-modal">
   <div class="modal-header">
-    <h2>Relay</h2>
-    <button type="button" id="settings-close" class="link-button">Close</button>
+    <h2 data-i18n="settings.title">Relay</h2>
+    <button type="button" id="settings-close" class="link-button" data-i18n="common.close">Close</button>
   </div>
   <p class="hint">
-    NiCon needs a small local relay running on your machine to speak RCON
-    — browsers can't open raw TCP or WebRCON sockets on their own.
-    <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener">Get it here.</a>
+    <span data-i18n="settings.hintBefore">NiCon needs a small local relay running on your machine to speak RCON — browsers can't open raw TCP or WebRCON sockets on their own.</span>
+    <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener" data-i18n="settings.getItHereLink">Get it here.</a>
   </p>
   <form id="relay-form" class="form-row">
-    <input id="relay-url" type="text" value="http://localhost:8765" aria-label="Relay address">
-    <button type="submit" class="btn-primary">Save</button>
+    <input id="relay-url" type="text" value="http://localhost:8765" aria-label="Relay address" data-i18n-aria-label="settings.relayAddressAriaLabel">
+    <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
   </form>
+
+  <div id="account-danger-zone" class="danger-zone" hidden>
+    <h3 data-i18n="settings.deleteAccountTitle">Delete account</h3>
+    <p class="hint" data-i18n="settings.deleteAccountHint">Permanently deletes your account and every server you've added — RCON passwords included. This can't be undone.</p>
+    <button type="button" id="delete-account-btn" class="btn-secondary btn-danger" data-i18n="settings.deleteAccountButton">Delete my account</button>
+  </div>
 </dialog>
 
 <dialog id="info-modal">
   <div class="modal-header">
-    <h2>Players</h2>
-    <button type="button" id="info-close" class="link-button">Close</button>
+    <h2 data-i18n="console.players">Players</h2>
+    <button type="button" id="info-close" class="link-button" data-i18n="common.close">Close</button>
   </div>
-  <p class="hint">
+  <p class="hint" data-i18n="info.parsingHint">
     Parsing is best-effort, based on documented command formats, not
     verified against a live server of each game — if it looks wrong, the
     raw response is still visible in the console.
   </p>
   <div class="form-row">
-    <select id="game-select" aria-label="Game">
-      <option value="">Generic (no parsing)</option>
+    <select id="game-select" aria-label="Game" data-i18n-aria-label="info.gameAriaLabel">
+      <option value="" data-i18n="info.genericOption">Generic (no parsing)</option>
       <option value="minecraft">Minecraft</option>
       <option value="rust">Rust</option>
       <option value="ark">ARK: Survival Evolved</option>
       <option value="palworld">Palworld</option>
     </select>
-    <button type="button" id="players-btn" class="btn-primary">Show players</button>
+    <button type="button" id="players-btn" class="btn-primary" data-i18n="info.showPlayers">Show players</button>
   </div>
   <div id="players-panel"></div>
 </dialog>
 
+<footer class="site-footer">
+  <a href="imprint.html" target="_blank" rel="noopener" data-i18n="nav.imprint" data-i18n-doc="imprint">Imprint</a>
+  <span aria-hidden="true">·</span>
+  <a href="privacy.html" target="_blank" rel="noopener" data-i18n="nav.privacy" data-i18n-doc="privacy">Privacy</a>
+</footer>
+
+<script src="i18n.js"></script>
 <script src="games.js"></script>
 <script src="app.js"></script>
 </body>
