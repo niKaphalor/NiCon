@@ -15,11 +15,11 @@ jobs:
         image: mariadb:11
         env:
           MARIADB_DATABASE: nicon_test
-          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "yes"
+          MARIADB_ROOT_PASSWORD: ci_test_root_password
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping --silent"
+          --health-cmd="mysqladmin ping -uroot -pci_test_root_password --silent"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=10
@@ -53,5 +53,5 @@ jobs:
 
       - name: Test
         env:
-          NICON_TEST_DB_DSN: root@tcp(127.0.0.1:3306)/nicon_test?parseTime=true
+          NICON_TEST_DB_DSN: root:ci_test_root_password@tcp(127.0.0.1:3306)/nicon_test?parseTime=true
         run: go test ./...
