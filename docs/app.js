@@ -1,14 +1,27 @@
 (function () {
   "use strict";
 
-  // All state lives in memory only, for the lifetime of this page. Nothing
-  // is written to localStorage, cookies, or anywhere else — reload the page
-  // and it's gone, by design.
+  // The session token lives in sessionStorage (cleared when the tab
+  // closes, unlike localStorage) so a reload doesn't force a re-login but
+  // nothing survives beyond this browser session. Everything else —
+  // server list, console state — is fetched fresh from the relay/database
+  // each time, never cached to disk.
+  var TOKEN_KEY = "nicon_token";
+  var USERNAME_KEY = "nicon_username";
+  var authToken = null;
+  var currentUsername = "";
+  try {
+    authToken = sessionStorage.getItem(TOKEN_KEY);
+    currentUsername = sessionStorage.getItem(USERNAME_KEY) || "";
+  } catch (e) {
+    // Some browser contexts (e.g. a private window with storage blocked)
+    // throw on access; fall back to session-memory-only auth.
+  }
+
   var servers = [];
 
   // One entry per currently-open console: serverId -> { server, socket,
-  // lines: [{kind, text}], pendingPlayersRequest }. Multiple can be open at
-  // once — switching the view back to Servers doesn't close any of them.
+  // lines: [{kind, text}], pendingPlayersRequest, authenticated }.
   var consoles = {};
   var activeConsoleId = null;
 
@@ -22,6 +35,13 @@
   var settingsClose = document.getElementById("settings-close");
   var relayForm = document.getElementById("relay-form");
   var relayUrlInput = document.getElementById("relay-url");
+
+  var usernameLabel = document.getElementById("username-label");
+  var logoutBtn = document.getElementById("logout-btn");
+
+  var viewLogin = document.getElementById("view-login");
+  var loginForm = document.getElementById("login-form");
+  var loginError = document.getElementById("login-error");
 
   var viewServers = document.getElementById("view-servers");
   var viewConsole = document.getElementById("view-console");
@@ -89,6 +109,90 @@
     if (e.target === settingsModal) settingsModal.close();
   });
 
+  // --- authenticated API calls ---
+
+  // Wraps fetch() with the Authorization header and central 401 handling:
+  // any authenticated call that comes back unauthorized (expired/invalid
+  // session) drops the user back to the login screen instead of failing
+  // silently or looping.
+  function apiFetch(path, options) {
+    options = options || {};
+    var headers = options.headers || {};
+    if (authToken) headers["Authorization"] = "Bearer " + authToken;
+    options.headers = headers;
+
+    return fetch(relayHttpUrl() + path, options).then(function (r) {
+      if (r.status === 401) {
+        sessionExpired();
+        throw new Error("session expired");
+      }
+      return r;
+    });
+  }
+
+  function sessionExpired() {
+    authToken = null;
+    try { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USERNAME_KEY); } catch (e) { /* ignore */ }
+    disconnectAllConsoles();
+    servers = [];
+    showLoginView();
+    loginError.textContent = "Your session expired — sign in again.";
+    loginError.hidden = false;
+  }
+
+  function disconnectAllConsoles() {
+    Object.keys(consoles).forEach(function (id) {
+      if (consoles[id].socket) consoles[id].socket.close();
+    });
+    consoles = {};
+    activeConsoleId = null;
+  }
+
+  // --- login / logout ---
+
+  loginForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var username = document.getElementById("login-username").value;
+    var password = document.getElementById("login-password").value;
+    loginError.hidden = true;
+
+    fetch(relayHttpUrl() + "/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: username, password: password }),
+    })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(t || "sign in failed"); });
+        return r.json();
+      })
+      .then(function (data) {
+        authToken = data.token;
+        currentUsername = username;
+        try {
+          sessionStorage.setItem(TOKEN_KEY, authToken);
+          sessionStorage.setItem(USERNAME_KEY, currentUsername);
+        } catch (e) { /* ignore */ }
+        return loadServers();
+      })
+      .then(function () {
+        loginForm.reset();
+        showServersView();
+      })
+      .catch(function (err) {
+        loginError.textContent = err.message || "Sign in failed.";
+        loginError.hidden = false;
+      });
+  });
+
+  logoutBtn.addEventListener("click", function () {
+    apiFetch("/api/logout", { method: "POST" }).catch(function () { /* logging out regardless */ });
+    authToken = null;
+    try { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(USERNAME_KEY); } catch (e) { /* ignore */ }
+    disconnectAllConsoles();
+    servers = [];
+    showLoginView();
+  });
+
   // --- add-server modal + tabs ---
 
   function openAddModal() {
@@ -116,6 +220,18 @@
 
   // --- server state ---
 
+  function loadServers() {
+    return apiFetch("/api/servers", { method: "GET" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("failed to load servers");
+        return r.json();
+      })
+      .then(function (list) {
+        servers = list || [];
+        renderServers();
+      });
+  }
+
   function findServer(id) {
     for (var i = 0; i < servers.length; i++) {
       if (servers[i].id === id) return servers[i];
@@ -123,19 +239,15 @@
     return null;
   }
 
-  function upsertServer(server) {
-    var existing = findServer(server.id);
-    if (existing) {
-      Object.assign(existing, server);
-    } else {
-      servers.push(server);
-    }
-  }
-
   function removeServer(id) {
-    servers = servers.filter(function (s) { return s.id !== id; });
-    if (consoles[id]) closeConsoleFor(id);
-    renderServers();
+    apiFetch("/api/servers/" + id, { method: "DELETE" })
+      .then(function (r) {
+        if (!r.ok && r.status !== 204) throw new Error("failed to remove server");
+        servers = servers.filter(function (s) { return s.id !== id; });
+        if (consoles[id]) closeConsoleFor(id);
+        renderServers();
+      })
+      .catch(function (err) { alert(err.message); });
   }
 
   function serverMeta(server) {
@@ -174,7 +286,7 @@
       var actions = document.createElement("div");
       actions.className = "server-card-actions";
 
-      if (!server.password) {
+      if (!server.has_password) {
         var pwInput = document.createElement("input");
         pwInput.type = "password";
         pwInput.placeholder = "RCON password";
@@ -187,8 +299,17 @@
         saveBtn.className = "btn-primary";
         saveBtn.textContent = "Save";
         saveBtn.addEventListener("click", function () {
-          server.password = pwInput.value;
-          renderServers();
+          apiFetch("/api/servers/" + server.id + "/password", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: pwInput.value }),
+          })
+            .then(function (r) {
+              if (!r.ok) throw new Error("failed to save password");
+              server.has_password = true;
+              renderServers();
+            })
+            .catch(function (err) { alert(err.message); });
         });
         actions.appendChild(saveBtn);
       } else {
@@ -221,7 +342,7 @@
     var token = nitradoTokenInput.value.trim();
     if (!token) return;
 
-    fetch(relayHttpUrl() + "/api/nitrado/sync", {
+    apiFetch("/api/nitrado/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: token }),
@@ -231,18 +352,7 @@
         return r.json();
       })
       .then(function (list) {
-        (list || []).forEach(function (item) {
-          upsertServer({
-            id: "nitrado-" + item.service_id,
-            name: item.name,
-            game: item.game,
-            host: item.host,
-            port: item.port,
-            password: null,
-            protocol: item.protocol || "source",
-            source: "nitrado",
-          });
-        });
+        servers = list || [];
         renderServers();
         addModal.close();
       })
@@ -259,24 +369,28 @@
 
   manualForm.addEventListener("submit", function (e) {
     e.preventDefault();
-    var name = document.getElementById("manual-name");
-    var host = document.getElementById("manual-host");
-    var port = document.getElementById("manual-port");
-    var password = document.getElementById("manual-password");
-    var protocol = document.getElementById("manual-protocol");
+    var name = document.getElementById("manual-name").value;
+    var host = document.getElementById("manual-host").value;
+    var port = parseInt(document.getElementById("manual-port").value, 10);
+    var password = document.getElementById("manual-password").value;
+    var protocol = document.getElementById("manual-protocol").value;
 
-    upsertServer({
-      id: "manual-" + crypto.randomUUID(),
-      name: name.value,
-      host: host.value,
-      port: parseInt(port.value, 10),
-      password: password.value,
-      protocol: protocol.value,
-      source: "manual",
-    });
-    renderServers();
-    manualForm.reset();
-    addModal.close();
+    apiFetch("/api/servers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name, host: host, port: port, password: password, protocol: protocol }),
+    })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+        return r.json();
+      })
+      .then(function (srv) {
+        servers.push(srv);
+        renderServers();
+        manualForm.reset();
+        addModal.close();
+      })
+      .catch(function (err) { alert("Could not add server: " + err.message); });
   });
 
   // --- view switching ---
@@ -284,10 +398,23 @@
   // switches which view is visible. Multiple consoles can stay connected
   // in the background at once.
 
-  function showServersView() {
+  function showLoginView() {
     if (infoModal.open) infoModal.close();
     viewConsole.hidden = true;
+    viewServers.hidden = true;
+    viewLogin.hidden = false;
+    usernameLabel.hidden = true;
+    logoutBtn.hidden = true;
+  }
+
+  function showServersView() {
+    if (infoModal.open) infoModal.close();
+    viewLogin.hidden = true;
+    viewConsole.hidden = true;
     viewServers.hidden = false;
+    usernameLabel.hidden = false;
+    usernameLabel.textContent = currentUsername;
+    logoutBtn.hidden = false;
     renderServers();
   }
 
@@ -310,6 +437,7 @@
       socket: null,
       lines: [],
       pendingPlayersRequest: false,
+      authenticated: false,
     };
     consoles[server.id] = c;
     appendConsoleLine(c, "system", "(connecting…)");
@@ -318,13 +446,7 @@
     c.socket = socket;
 
     socket.addEventListener("open", function () {
-      socket.send(JSON.stringify({
-        type: "connect",
-        host: server.host,
-        port: server.port,
-        password: server.password,
-        protocol: server.protocol || "source",
-      }));
+      socket.send(JSON.stringify({ type: "auth", token: authToken }));
     });
 
     socket.addEventListener("message", function (event) {
@@ -337,7 +459,10 @@
         return;
       }
 
-      if (msg.type === "connected") {
+      if (msg.type === "authenticated") {
+        c.authenticated = true;
+        socket.send(JSON.stringify({ type: "connect", server_id: server.id }));
+      } else if (msg.type === "connected") {
         appendConsoleLine(c, "system", "(connected)");
       } else if (msg.type === "response") {
         appendConsoleLine(c, "response", msg.output && msg.output.length ? msg.output : "(no output)");
@@ -404,11 +529,11 @@
       var c = consoles[id];
       var tab = document.createElement("button");
       tab.type = "button";
-      tab.className = "console-tab" + (id === activeConsoleId ? " active" : "");
+      tab.className = "console-tab" + (id === String(activeConsoleId) ? " active" : "");
       tab.setAttribute("role", "tab");
-      tab.setAttribute("aria-selected", id === activeConsoleId ? "true" : "false");
+      tab.setAttribute("aria-selected", id === String(activeConsoleId) ? "true" : "false");
       tab.addEventListener("click", function () {
-        activeConsoleId = id;
+        activeConsoleId = c.server.id;
         renderConsoleTabs();
         renderActiveConsole();
       });
@@ -422,7 +547,7 @@
       closeBtn.setAttribute("aria-label", "Disconnect " + c.server.name);
       closeBtn.addEventListener("click", function (e) {
         e.stopPropagation();
-        closeConsoleFor(id);
+        closeConsoleFor(c.server.id);
       });
       tab.appendChild(closeBtn);
 
@@ -574,6 +699,14 @@
     cmdInput.value = "";
   });
 
-  renderServers();
+  // --- boot ---
+
   checkRelay();
+  if (authToken) {
+    loadServers()
+      .then(function () { showServersView(); })
+      .catch(function () { /* apiFetch already routes 401s to sessionExpired() */ });
+  } else {
+    showLoginView();
+  }
 })();

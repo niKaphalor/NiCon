@@ -483,8 +483,35 @@ dialog::backdrop {
   font-weight: 600;
 }
 
+.login-box {
+  max-width: 360px;
+  margin: 3rem auto 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.login-box h1 {
+  margin: 0 0 0.4rem;
+  font-size: 1.4rem;
+}
+
+.login-box .stacked-form { margin-top: 1rem; }
+
+.login-error {
+  color: var(--alert);
+  margin-top: 0.75rem;
+  margin-bottom: 0;
+}
+
+#username-label {
+  font-family: var(--font-mono);
+}
+
 @media (max-width: 600px) {
   .server-grid { grid-template-columns: 1fr; }
   .console-heading h1 { font-size: 1.1rem; }
   main { padding: 1.25rem 1rem 2.5rem; }
+  .login-box { margin-top: 1.5rem; }
 }

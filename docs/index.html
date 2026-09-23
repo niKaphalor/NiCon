@@ -13,6 +13,8 @@
 <header class="topbar">
   <span class="wordmark">NiCon</span>
   <div class="topbar-right">
+    <span id="username-label" class="hint" hidden></span>
+    <button type="button" id="logout-btn" class="link-button" hidden>Sign out</button>
     <button type="button" id="relay-pill" class="relay-pill status-unknown">
       <span class="dot"></span> relay
     </button>
@@ -29,17 +31,30 @@
 </div>
 
 <main>
-  <section id="view-servers" class="view">
+  <section id="view-login" class="view">
+    <div class="login-box">
+      <h1>Sign in</h1>
+      <p class="hint">Your servers are tied to your NiCon account — sign in to see them.</p>
+      <form id="login-form" class="stacked-form">
+        <input id="login-username" type="text" placeholder="Username" required autocomplete="username" aria-label="Username">
+        <input id="login-password" type="password" placeholder="Password" required autocomplete="current-password" aria-label="Password">
+        <button type="submit" class="btn-primary">Sign in</button>
+      </form>
+      <p id="login-error" class="hint login-error" hidden></p>
+    </div>
+  </section>
+
+  <section id="view-servers" class="view" hidden>
     <div class="view-header">
       <h1>Servers</h1>
       <button type="button" id="add-server-btn" class="btn-primary">+ Add server</button>
     </div>
-    <p class="hint view-subhead">Nothing here is saved — reload the page and you'll start over, on purpose.</p>
+    <p class="hint view-subhead">Your server list and RCON passwords are stored for your account only — no one else can see, edit, or connect through them.</p>
 
     <div id="server-grid" class="server-grid"></div>
 
     <div id="empty-state" class="empty-state" hidden>
-      <p>No servers added this session.</p>
+      <p>No servers yet.</p>
       <button type="button" id="empty-add-btn" class="btn-primary">+ Add a server</button>
     </div>
   </section>
