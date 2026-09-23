@@ -97,7 +97,14 @@ The relay does three things:
   `sessionStorage`, not `localStorage`, so they don't outlive the tab.
   Register is the same, minus an existing account — it also requires
   `consent_accepted: true` (the frontend's required privacy-policy
-  checkbox) and rejects a taken username with 409. Account deletion
+  checkbox) and rejects a taken username with 409. It's also rate-limited
+  per client IP (3 immediately, then one every 15 minutes — a fixed
+  in-process limit, not configurable via a flag) to make it impractical to
+  spam accounts on your relay; a request over the limit gets 429 with a
+  `Retry-After` header. The limiter only ever sees the TCP connection's own
+  address, never an `X-Forwarded-For` header, so it's easy to spoof around
+  and not meaningful if the relay sits behind a reverse proxy (every
+  request would appear to come from the proxy's IP). Account deletion
   removes the user row; `sessions` and `servers` cascade-delete with it at
   the database level (`ON DELETE CASCADE`), so there's nothing left to
   clean up separately.
@@ -246,9 +253,9 @@ language.
   means the relay operator has to intervene directly in the database
 - Sharing a server between accounts, or any notion of teams/roles — server
   ownership is strictly one account per server today
-- Rate limiting or invite-gating on `/api/register` — signup is
-  completely open; anyone who can reach the frontend can create an
-  account on your relay
+- Invite-gating on `/api/register` — signup is open to anyone who can
+  reach the frontend (rate-limited per IP, see below, but not restricted
+  to people you've invited)
 
 ## Roadmap: becoming a full admin panel
 

@@ -15,19 +15,32 @@ package relay
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
+	"golang.org/x/time/rate"
 
 	"github.com/niKaphalor/NiCon/internal/auth"
 	"github.com/niKaphalor/NiCon/internal/store"
 )
 
+// registerRateLimit and registerRateBurst bound /api/register per client
+// IP: up to registerRateBurst attempts immediately, then one more every
+// registerRateLimit — e.g. 3 then one per 15 minutes, capping sustained
+// abuse from one source at a handful of accounts per hour without getting
+// in the way of a household signing up a few real accounts back to back.
+const (
+	registerRateLimit = 15 * time.Minute
+	registerRateBurst = 3
+)
+
 type Relay struct {
-	log            *log.Logger
-	allowedOrigins map[string]bool
-	upgrader       websocket.Upgrader
-	store          *store.Store
-	auth           *auth.Auth
+	log             *log.Logger
+	allowedOrigins  map[string]bool
+	upgrader        websocket.Upgrader
+	store           *store.Store
+	auth            *auth.Auth
+	registerLimiter *ipRateLimiter
 }
 
 func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.Auth) *Relay {
@@ -35,7 +48,13 @@ func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.
 	for _, o := range allowedOrigins {
 		origins[o] = true
 	}
-	rel := &Relay{log: logger, allowedOrigins: origins, store: st, auth: au}
+	rel := &Relay{
+		log:             logger,
+		allowedOrigins:  origins,
+		store:           st,
+		auth:            au,
+		registerLimiter: newIPRateLimiter(rate.Every(registerRateLimit), registerRateBurst),
+	}
 	rel.upgrader = websocket.Upgrader{CheckOrigin: rel.checkOrigin}
 	return rel
 }

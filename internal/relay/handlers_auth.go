@@ -75,6 +75,11 @@ func (rel *Relay) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if !rel.cors(w, r) {
 		return
 	}
+	if !rel.registerLimiter.allow(clientIP(r)) {
+		w.Header().Set("Retry-After", "900")
+		http.Error(w, "too many registration attempts from this address — try again later", http.StatusTooManyRequests)
+		return
+	}
 
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" || req.Password == "" {
