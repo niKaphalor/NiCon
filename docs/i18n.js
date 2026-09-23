@@ -25,6 +25,7 @@ window.NICON_I18N = (function () {
         unreachable: "NiCon can't reach its local relay — nothing will work until it's running.",
         getItHere: "Get it here",
         thenCheck: "then check the address in",
+        lnaHint: "If your browser shows a “local network” permission prompt, allow it — NiCon can't run without it.",
       },
       auth: {
         signIn: "Sign in",
@@ -142,6 +143,7 @@ window.NICON_I18N = (function () {
         unreachable: "NiCon kann den lokalen Relay nicht erreichen — nichts funktioniert, bis er läuft.",
         getItHere: "Hier herunterladen",
         thenCheck: "dann die Adresse in den",
+        lnaHint: "Falls dein Browser eine Berechtigungsabfrage fürs lokale Netzwerk zeigt, erlaube sie — ohne das kann NiCon nicht funktionieren.",
       },
       auth: {
         signIn: "Anmelden",
