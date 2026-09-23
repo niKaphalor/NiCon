@@ -24,19 +24,21 @@
   <h1>Datenschutzerklärung</h1>
   <p class="hint">
     Stand: 23. September 2026. Diese Erklärung gilt für die unter dieser
-    URL bereitgestellte Instanz von NiCon (Weboberfläche + der von dir
-    verwendete Relay). Siehe <a href="imprint.de.html">Impressum</a> für die
-    Kontaktangaben des Betreibers dieser Instanz.
+    URL bereitgestellte Instanz von NiCon — die Weboberfläche, ihre
+    Cloud-API (zuständig für dein Konto und deine Serverliste) sowie den
+    lokalen Relay, den du für die eigentliche Verbindung zur
+    Server-Konsole betreibst. Siehe <a href="imprint.de.html">Impressum</a>
+    für die Kontaktangaben des Betreibers dieser Instanz.
   </p>
 
   <h2>1. Verantwortlicher</h2>
   <p>
     Verantwortlich für die Datenverarbeitung im Sinne der DSGVO ist der im
     <a href="imprint.de.html">Impressum</a> genannte Betreiber dieser
-    NiCon-Instanz. NiCon ist Open-Source-Software; jeder, der seinen
-    eigenen Relay und seine eigene Kopie der Weboberfläche betreibt, ist
-    für die von ihm verarbeiteten Daten selbst verantwortlich — nicht die
-    Autoren des NiCon-Projekts.
+    NiCon-Instanz. NiCon ist Open-Source-Software; jeder, der seine
+    eigene Cloud-API, seinen eigenen Relay und seine eigene Kopie der
+    Weboberfläche betreibt, ist für die von ihm verarbeiteten Daten selbst
+    verantwortlich — nicht die Autoren des NiCon-Projekts.
   </p>
 
   <h2>2. Welche Daten wir verarbeiten</h2>
@@ -56,7 +58,7 @@
   <h2>3. Nitrado-API-Token</h2>
   <p>
     Wenn du Server über den "Von Nitrado synchronisieren"-Dialog importierst,
-    sendest du deinen Nitrado-API-Token einmalig an den Relay. Der Relay
+    sendest du deinen Nitrado-API-Token einmalig an die Cloud-API. Sie
     verwendet ihn ausschließlich, um in diesem einen Moment deine Server
     bei Nitrado abzufragen, und speichert ihn danach nicht — weder in der
     Datenbank noch sonst irgendwo. Bei jeder erneuten Synchronisierung
@@ -85,9 +87,10 @@
   <h2>6. Weitergabe an Dritte</h2>
   <p>
     Deine Kontodaten und gespeicherten Server werden nicht an Dritte
-    weitergegeben. Eine Verbindung zu deinem Spieleserver (RCON) sowie ein
-    Nitrado-Sync gehen direkt vom Relay aus, den du selbst kontrollierst
-    bzw. dem du vertraust — es sind keine weiteren Vermittler beteiligt.
+    weitergegeben. Eine Verbindung zu deinem Spieleserver (RCON) geht
+    direkt vom Relay aus, den du selbst kontrollierst bzw. dem du
+    vertraust; ein Nitrado-Sync geht direkt von der Cloud-API an Nitrados
+    eigene API — in beiden Fällen sind keine weiteren Vermittler beteiligt.
   </p>
 
   <h2>7. Deine Rechte</h2>
@@ -113,10 +116,15 @@
 
   <h2>8. Technische Hinweise</h2>
   <p>
-    Der Relay selbst führt kein Zugriffs-Logging mit IP-Adressen. Je nach
-    Netzwerkumgebung des Betreibers (z. B. Router, Internetanbieter) können
-    auf dieser Ebene technische Verbindungsdaten anfallen, worauf NiCon
-    keinen Einfluss hat.
+    Der Relay selbst führt kein Zugriffs-Logging mit IP-Adressen. Auch die
+    Cloud-API tut das auf Anwendungsebene nicht, läuft aber typischerweise
+    auf gewöhnlichem Webhosting, dessen Serversoftware (z. B. Apache)
+    standardmäßig oft eigene, kurzlebige Zugriffsprotokolle mit
+    IP-Adressen führt — das ist übliches Webserver-Verhalten außerhalb des
+    NiCon-Codes und unterliegt der eigenen Protokollierungs-Richtlinie des
+    Hosting-Anbieters. Je nach Netzwerkumgebung des Betreibers (z. B.
+    Router, Internetanbieter) können zusätzlich auf dieser Ebene
+    technische Verbindungsdaten anfallen.
   </p>
 </main>
 

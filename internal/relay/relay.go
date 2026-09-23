@@ -1,55 +1,37 @@
-// Package relay implements NiCon's local relay: a WebSocket<->RCON bridge,
-// a Nitrado API proxy, and the HTTP API for accounts and each user's
-// server list (backed by internal/store's MariaDB persistence).
+// Package relay implements NiCon's local relay: a WebSocket<->RCON bridge
+// backed by internal/store's MariaDB persistence.
 //
-// Every server-scoped operation is authenticated first and then scoped to
-// that user's own rows in the database — a user can never see, edit, or
-// connect through another user's server, enforced by the query itself
-// (internal/store), not just hidden in the UI. RCON passwords are stored
-// encrypted (internal/store/crypto.go) and, once saved, never need to
-// travel back to the browser: WebSocket "connect" messages reference a
-// server by ID, and the relay looks up and decrypts its credentials
-// server-side.
+// Everything else NiCon used to serve from here — accounts, registration,
+// per-user server CRUD, the admin panel — now lives in webspace/, a PHP
+// API meant for an always-on host (e.g. shared webspace), since none of it
+// actually needs the relay to be running. This relay's only remaining job
+// is the one thing that does need a persistent local process: bridging a
+// browser WebSocket to a game server's RCON port. See the README's
+// "Cloud API vs. relay" section for the split.
+//
+// A WebSocket "connect" message references a server by ID; the relay
+// looks up and decrypts its credentials itself (internal/store, sharing
+// the same database and encryption key as the PHP API) rather than
+// trusting the client, and confirms the session token's owner matches
+// before doing so.
 package relay
 
 import (
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/gorilla/websocket"
-	"golang.org/x/time/rate"
 
 	"github.com/niKaphalor/NiCon/internal/auth"
 	"github.com/niKaphalor/NiCon/internal/store"
 )
 
-// registerRateLimit and registerRateBurst bound /api/register per client
-// IP: up to registerRateBurst attempts immediately, then one more every
-// registerRateLimit — e.g. 3 then one per 15 minutes, capping sustained
-// abuse from one source at a handful of accounts per hour without getting
-// in the way of a household signing up a few real accounts back to back.
-//
-// resetPasswordRateLimit/Burst are tighter: this endpoint effectively lets
-// anyone who knows a username try a recovery code against it, so it gets a
-// stricter per-IP allowance even though the code itself is high-entropy
-// enough that brute-forcing it outright isn't practical.
-const (
-	registerRateLimit = 15 * time.Minute
-	registerRateBurst = 3
-
-	resetPasswordRateLimit = 15 * time.Minute
-	resetPasswordRateBurst = 2
-)
-
 type Relay struct {
-	log                  *log.Logger
-	allowedOrigins       map[string]bool
-	upgrader             websocket.Upgrader
-	store                *store.Store
-	auth                 *auth.Auth
-	registerLimiter      *ipRateLimiter
-	resetPasswordLimiter *ipRateLimiter
+	log            *log.Logger
+	allowedOrigins map[string]bool
+	upgrader       websocket.Upgrader
+	store          *store.Store
+	auth           *auth.Auth
 }
 
 func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.Auth) *Relay {
@@ -57,14 +39,7 @@ func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.
 	for _, o := range allowedOrigins {
 		origins[o] = true
 	}
-	rel := &Relay{
-		log:                  logger,
-		allowedOrigins:       origins,
-		store:                st,
-		auth:                 au,
-		registerLimiter:      newIPRateLimiter(rate.Every(registerRateLimit), registerRateBurst),
-		resetPasswordLimiter: newIPRateLimiter(rate.Every(resetPasswordRateLimit), resetPasswordRateBurst),
-	}
+	rel := &Relay{log: logger, allowedOrigins: origins, store: st, auth: au}
 	rel.upgrader = websocket.Upgrader{CheckOrigin: rel.checkOrigin}
 	return rel
 }
@@ -82,14 +57,14 @@ func (rel *Relay) checkOrigin(r *http.Request) bool {
 	return rel.allowedOrigins[origin]
 }
 
-// cors applies the same allow-list to plain HTTP requests and handles the
-// CORS preflight. It returns false if the caller should stop (preflight
-// already answered).
+// cors applies the same allow-list to plain HTTP requests (just /healthz
+// now) and handles the CORS preflight. It returns false if the caller
+// should stop (preflight already answered).
 func (rel *Relay) cors(w http.ResponseWriter, r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin != "" && rel.allowedOrigins[origin] {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	}
 	if r.Method == http.MethodOptions {
@@ -102,37 +77,8 @@ func (rel *Relay) cors(w http.ResponseWriter, r *http.Request) bool {
 func (rel *Relay) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", rel.handleHealth)
+	mux.HandleFunc("OPTIONS /healthz", rel.handleHealth)
 	mux.HandleFunc("GET /ws/rcon", rel.handleWS)
-
-	mux.HandleFunc("POST /api/login", rel.handleLogin)
-	mux.HandleFunc("OPTIONS /api/login", rel.handleLogin)
-	mux.HandleFunc("POST /api/logout", rel.handleLogout)
-	mux.HandleFunc("OPTIONS /api/logout", rel.handleLogout)
-	mux.HandleFunc("POST /api/register", rel.handleRegister)
-	mux.HandleFunc("OPTIONS /api/register", rel.handleRegister)
-	mux.HandleFunc("DELETE /api/account", rel.handleDeleteAccount)
-	mux.HandleFunc("OPTIONS /api/account", rel.handleDeleteAccount)
-	mux.HandleFunc("POST /api/reset-password", rel.handleResetPassword)
-	mux.HandleFunc("OPTIONS /api/reset-password", rel.handleResetPassword)
-
-	mux.HandleFunc("GET /api/servers", rel.handleListServers)
-	mux.HandleFunc("OPTIONS /api/servers", rel.handleListServers)
-	mux.HandleFunc("POST /api/servers", rel.handleCreateServer)
-	mux.HandleFunc("PUT /api/servers/{id}/password", rel.handleSetServerPassword)
-	mux.HandleFunc("OPTIONS /api/servers/{id}/password", rel.handleSetServerPassword)
-	mux.HandleFunc("DELETE /api/servers/{id}", rel.handleDeleteServer)
-	mux.HandleFunc("OPTIONS /api/servers/{id}", rel.handleDeleteServer)
-
-	mux.HandleFunc("POST /api/nitrado/sync", rel.handleNitradoSync)
-	mux.HandleFunc("OPTIONS /api/nitrado/sync", rel.handleNitradoSync)
-
-	mux.HandleFunc("GET /api/admin/users", rel.handleAdminListUsers)
-	mux.HandleFunc("OPTIONS /api/admin/users", rel.handleAdminListUsers)
-	mux.HandleFunc("DELETE /api/admin/users/{id}", rel.handleAdminDeleteUser)
-	mux.HandleFunc("OPTIONS /api/admin/users/{id}", rel.handleAdminDeleteUser)
-	mux.HandleFunc("POST /api/admin/users/{id}/recovery-code", rel.handleAdminRegenerateRecoveryCode)
-	mux.HandleFunc("OPTIONS /api/admin/users/{id}/recovery-code", rel.handleAdminRegenerateRecoveryCode)
-
 	return mux
 }
 
@@ -141,23 +87,4 @@ func (rel *Relay) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = w.Write([]byte("ok"))
-}
-
-// authenticateRequest resolves the "Authorization: Bearer <token>" header
-// to a user ID, or writes a 401 and returns ok=false.
-func (rel *Relay) authenticateRequest(w http.ResponseWriter, r *http.Request) (userID int64, ok bool) {
-	tokenHeader := r.Header.Get("Authorization")
-	const prefix = "Bearer "
-	if len(tokenHeader) <= len(prefix) || tokenHeader[:len(prefix)] != prefix {
-		http.Error(w, "missing bearer token", http.StatusUnauthorized)
-		return 0, false
-	}
-	token := tokenHeader[len(prefix):]
-
-	userID, err := rel.auth.Authenticate(r.Context(), token)
-	if err != nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return 0, false
-	}
-	return userID, true
 }

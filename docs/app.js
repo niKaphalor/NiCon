@@ -53,6 +53,12 @@
 
   // --- element refs ---
 
+  var apiPill = document.getElementById("api-pill");
+  var apiBanner = document.getElementById("api-banner");
+  var apiBannerSettingsBtn = document.getElementById("api-banner-settings-btn");
+  var apiForm = document.getElementById("api-form");
+  var apiUrlInput = document.getElementById("api-url");
+
   var relayPill = document.getElementById("relay-pill");
   var relayBanner = document.getElementById("relay-banner");
   var settingsBtn = document.getElementById("settings-btn");
@@ -128,7 +134,36 @@
   var infoModal = document.getElementById("info-modal");
   var infoClose = document.getElementById("info-close");
 
+  // --- cloud API address + status ---
+  // Handles everything except the actual RCON connection: sign-in,
+  // account, server list. A normal HTTPS address, expected to be
+  // reachable at all times regardless of whether the local relay is
+  // running.
+
+  function apiHttpUrl() {
+    return apiUrlInput.value.replace(/\/+$/, "");
+  }
+
+  function setApiStatus(ok) {
+    apiPill.className = "relay-pill " + (ok ? "status-ok" : "status-error");
+    apiBanner.hidden = ok;
+  }
+
+  function checkApi() {
+    fetch(apiHttpUrl() + "/healthz")
+      .then(function (r) { setApiStatus(r.ok); })
+      .catch(function () { setApiStatus(false); });
+  }
+
+  apiForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    checkApi();
+    settingsModal.close();
+  });
+
   // --- relay address + status ---
+  // Only used for the actual WebSocket<->RCON bridge (openOrFocusConsole
+  // below) — everything else goes through the cloud API.
 
   function relayHttpUrl() {
     return relayUrlInput.value.replace(/\/+$/, "");
@@ -171,6 +206,8 @@
 
   settingsBtn.addEventListener("click", function () { settingsModal.showModal(); });
   bannerSettingsBtn.addEventListener("click", function () { settingsModal.showModal(); });
+  apiBannerSettingsBtn.addEventListener("click", function () { settingsModal.showModal(); });
+  apiPill.addEventListener("click", function () { settingsModal.showModal(); });
   relayPill.addEventListener("click", function () { settingsModal.showModal(); });
   openSettingsFromSubhead.addEventListener("click", function () { settingsModal.showModal(); });
   settingsClose.addEventListener("click", function () { settingsModal.close(); });
@@ -190,7 +227,7 @@
     if (authToken) headers["Authorization"] = "Bearer " + authToken;
     options.headers = headers;
 
-    return fetch(relayHttpUrl() + path, options).then(function (r) {
+    return fetch(apiHttpUrl() + path, options).then(function (r) {
       if (r.status === 401) {
         sessionExpired();
         throw new Error("session expired");
@@ -224,7 +261,7 @@
     var password = document.getElementById("login-password").value;
     loginError.hidden = true;
 
-    fetch(relayHttpUrl() + "/api/login", {
+    fetch(apiHttpUrl() + "/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: username, password: password }),
@@ -279,7 +316,7 @@
       return;
     }
 
-    fetch(relayHttpUrl() + "/api/register", {
+    fetch(apiHttpUrl() + "/api/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: username, password: password, consent_accepted: consent }),
@@ -329,7 +366,7 @@
       return;
     }
 
-    fetch(relayHttpUrl() + "/api/reset-password", {
+    fetch(apiHttpUrl() + "/api/reset-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: username, recovery_code: code, new_password: newPassword }),
@@ -1023,6 +1060,7 @@
   // --- boot ---
 
   I18N.applyStatic(document);
+  checkApi();
   checkRelay();
   if (authToken) {
     loadServers()

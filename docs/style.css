@@ -595,6 +595,21 @@ dialog::backdrop {
   flex-shrink: 0;
 }
 
+/* --- settings modal sections --- */
+
+#settings-modal h3 {
+  margin: 1.3rem 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+#settings-modal h3:first-of-type {
+  margin-top: 0.5rem;
+}
+
+#settings-modal .hint {
+  margin-top: 0;
+}
+
 /* --- danger zone (settings modal) --- */
 
 .danger-zone {

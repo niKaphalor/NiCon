@@ -1,6 +1,8 @@
 // Command nicon-relay runs NiCon's local relay: a WebSocket<->RCON bridge
-// and a Nitrado API proxy for the static NiCon web UI, plus the MariaDB
-// -backed accounts and per-user server list behind it.
+// for the static NiCon web UI, reading server credentials from the same
+// MariaDB database the webspace/ PHP API manages. See the README's "Cloud
+// API vs. relay" section — accounts, registration, and per-user server
+// CRUD live in that PHP API now, not here.
 package main
 
 import (
@@ -71,7 +73,7 @@ func runServer() {
 	fs := flag.NewFlagSet("nicon-relay", flag.ExitOnError)
 	addr := fs.String("addr", "localhost:8765", "address to listen on")
 	allowOrigin := fs.String("allow-origin", "https://nikaphalor.github.io,http://localhost:8765",
-		"comma-separated list of origins allowed to connect")
+		"comma-separated list of origins allowed to open a WebSocket (or call /healthz)")
 	dsn, encKey := dbFlags(fs)
 	fs.Parse(os.Args[1:])
 

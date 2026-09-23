@@ -24,17 +24,19 @@
   <h1>Privacy policy</h1>
   <p class="hint">
     Last updated: September 23, 2026. This policy applies to the instance
-    of NiCon served at this URL (the web frontend, plus the relay you use
-    with it). See the <a href="imprint.html">imprint</a> for this
-    instance's operator contact details.
+    of NiCon served at this URL — the web frontend, its Cloud API (which
+    handles your account and server list), and the local relay you run to
+    actually connect to a server's console. See the
+    <a href="imprint.html">imprint</a> for this instance's operator
+    contact details.
   </p>
 
   <h2>1. Who's responsible</h2>
   <p>
     The operator named in the <a href="imprint.html">imprint</a> is
     responsible for data processing on this instance under the GDPR. NiCon
-    is open-source software; anyone running their own relay and their own
-    copy of the frontend is responsible for the data they process —
+    is open-source software; anyone running their own Cloud API, relay,
+    and copy of the frontend is responsible for the data they process —
     not the authors of the NiCon project.
   </p>
 
@@ -55,10 +57,10 @@
   <h2>3. Nitrado API token</h2>
   <p>
     When you import servers through the "Sync from Nitrado" dialog, your
-    Nitrado API token is sent to the relay once. The relay uses it only in
-    that moment, to look up your servers at Nitrado, and doesn't store it
-    afterward — not in the database, not anywhere else. You'll need to
-    enter it again for each future sync.
+    Nitrado API token is sent to the Cloud API once. It uses the token
+    only in that moment, to look up your servers at Nitrado, and doesn't
+    store it afterward — not in the database, not anywhere else. You'll
+    need to enter it again for each future sync.
   </p>
 
   <h2>4. Purpose and legal basis</h2>
@@ -82,9 +84,10 @@
   <h2>6. Sharing with third parties</h2>
   <p>
     Your account data and stored servers are not shared with third
-    parties. A connection to your game server (RCON) or a Nitrado sync
-    goes directly from the relay you control or trust — no other
-    intermediaries are involved.
+    parties. A connection to your game server (RCON) goes directly from
+    the relay you control or trust; a Nitrado sync goes directly from the
+    Cloud API to Nitrado's own API — no other intermediaries are involved
+    in either case.
   </p>
 
   <h2>7. Your rights</h2>
@@ -109,10 +112,14 @@
 
   <h2>8. Technical notes</h2>
   <p>
-    The relay itself does not keep access logs with IP addresses.
-    Depending on the operator's network environment (e.g. router, internet
-    provider), technical connection data may still be logged at that
-    layer, which is outside NiCon's control.
+    The relay itself does not keep access logs with IP addresses. The
+    Cloud API doesn't either at the application level, but it typically
+    runs on ordinary web hosting whose server software (e.g. Apache)
+    commonly keeps its own short-lived access logs with IP addresses by
+    default — this is standard web server behavior outside NiCon's code,
+    governed by the hosting provider's own logging policy. Depending on
+    the operator's network environment (e.g. router, internet provider),
+    technical connection data may also be logged at that layer.
   </p>
 </main>
 

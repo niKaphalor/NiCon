@@ -20,20 +20,31 @@
       <option value="en">EN</option>
       <option value="de">DE</option>
     </select>
+    <button type="button" id="api-pill" class="relay-pill status-unknown">
+      <span class="dot"></span> <span data-i18n="nav.api">API</span>
+    </button>
     <button type="button" id="relay-pill" class="relay-pill status-unknown">
       <span class="dot"></span> <span data-i18n="nav.relay">relay</span>
     </button>
-    <button type="button" id="settings-btn" class="icon-btn" aria-label="Relay settings" title="Relay settings" data-i18n-aria-label="nav.relaySettings" data-i18n-title="nav.relaySettings">⚙</button>
+    <button type="button" id="settings-btn" class="icon-btn" aria-label="Connection settings" title="Connection settings" data-i18n-aria-label="nav.connectionSettings" data-i18n-title="nav.connectionSettings">⚙</button>
   </div>
 </header>
 
+<div id="api-banner" class="relay-banner" hidden>
+  <p>
+    <span data-i18n="banner.apiUnreachable">NiCon can't reach its cloud API — sign-in, your server list, and account management won't work until it's reachable.</span>
+    <span data-i18n="banner.apiThenCheck">Check the address in</span>
+    <button type="button" id="api-banner-settings-btn" class="link-button" data-i18n="nav.settingsLink">settings</button>.
+  </p>
+</div>
+
 <div id="relay-banner" class="relay-banner" hidden>
   <p>
-    <span data-i18n="banner.unreachable">NiCon can't reach its local relay — nothing will work until it's running.</span>
+    <span data-i18n="banner.unreachable">NiCon can't reach its local relay — you can still sign in and manage your server list, but connecting to a server's console needs it running.</span>
     <a href="https://github.com/niKaphalor/NiCon#relay" target="_blank" rel="noopener" data-i18n="banner.getItHere">Get it here</a>,
     <span data-i18n="banner.thenCheck">then check the address in</span>
     <button type="button" id="banner-settings-btn" class="link-button" data-i18n="nav.settingsLink">settings</button>.
-    <span data-i18n="banner.lnaHint">If your browser shows a "local network" permission prompt, allow it — NiCon can't run without it.</span>
+    <span data-i18n="banner.lnaHint">If your browser shows a "local network" permission prompt, allow it — NiCon can't connect to a server without it.</span>
   </p>
 </div>
 
@@ -199,11 +210,20 @@
 
 <dialog id="settings-modal">
   <div class="modal-header">
-    <h2 data-i18n="settings.title">Relay</h2>
+    <h2 data-i18n="settings.title">Connection</h2>
     <button type="button" id="settings-close" class="link-button" data-i18n="common.close">Close</button>
   </div>
+
+  <h3 data-i18n="settings.apiTitle">Cloud API</h3>
+  <p class="hint" data-i18n="settings.apiHint">Handles sign-in, your account, and your server list — a normal web address, reachable whether or not your computer is on.</p>
+  <form id="api-form" class="form-row">
+    <input id="api-url" type="text" value="https://your-domain.example/nicon-api" aria-label="Cloud API address" data-i18n-aria-label="settings.apiAddressAriaLabel">
+    <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
+  </form>
+
+  <h3 data-i18n="settings.relayTitle">Relay</h3>
   <p class="hint">
-    <span data-i18n="settings.hintBefore">NiCon needs a small local relay running on your machine to speak RCON — browsers can't open raw TCP or WebRCON sockets on their own.</span>
+    <span data-i18n="settings.hintBefore">NiCon needs a small local relay running on your machine to actually speak RCON to a server — browsers can't open raw TCP or WebRCON sockets on their own.</span>
     <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener" data-i18n="settings.getItHereLink">Get it here.</a>
   </p>
   <form id="relay-form" class="form-row">

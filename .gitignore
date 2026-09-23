@@ -1,3 +1,4 @@
 /nicon-relay
 *.db
 *.exe
+/webspace/config.local.php

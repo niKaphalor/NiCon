@@ -1,0 +1,8 @@
+# The only secret-bearing file directly in this directory. lib/ and
+# handlers/ protect themselves (see their own .htaccess) — every file in
+# them only defines functions/constants, so even unprotected they'd just
+# return a blank response, but a self-contained per-directory deny is more
+# robust than trying to carve out exceptions from a single top-level rule.
+<FilesMatch "^(config\.local\.php|schema\.sql)$">
+  Require all denied
+</FilesMatch>
