@@ -266,14 +266,27 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .players-card .card-kicker { display: flex; align-items: center; justify-content: space-between; }
 .players-card > .hint { font-size: 0.78rem; line-height: 1.45; }
 #players-panel { margin-top: 5px; overflow: visible; }
-#players-panel table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 0.76rem; table-layout: auto; }
-#players-panel th, #players-panel td { padding: 9px 6px; border-bottom: 1px solid var(--color-border); text-align: left; font-family: var(--font-mono); overflow-wrap: anywhere; white-space: normal; }
-#players-panel th { color: var(--color-muted); font-family: var(--font-body); font-size: 0.7rem; font-weight: 700; }
-#players-panel td.player-actions { white-space: nowrap; }
-#players-panel .player-actions-row { display: flex; gap: 5px; }
+.players-list { display: flex; flex-direction: column; }
+.player-row { padding: 8px 0; border-bottom: 1px solid var(--color-border); }
+.player-row:last-child { border-bottom: 0; }
+.player-row-main { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.player-name { min-width: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 0.8rem; }
+#players-panel .player-actions-row { display: flex; flex-shrink: 0; gap: 5px; }
 #players-panel .btn-xs { padding: 4px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: transparent; color: var(--color-text-soft); font-size: 0.7rem; cursor: pointer; }
 #players-panel .btn-xs:hover { background: var(--color-surface-2); border-color: var(--color-border-strong); }
 #players-panel .btn-xs.btn-xs-danger { border-color: rgba(239, 107, 115, 0.6); color: var(--color-error); }
+/* Everything besides name + kick/ban (SteamID, ping, address, …) — real
+   data, just not needed at a glance, so it's a spoiler instead of
+   widening every row. The default marker triangle is replaced with a
+   manual one so open/closed reads the same way in every browser. */
+.player-details { margin-top: 4px; }
+.player-details summary { list-style: none; cursor: pointer; color: var(--color-muted); font-size: 0.72rem; }
+.player-details summary::-webkit-details-marker { display: none; }
+.player-details summary::before { content: "▸ "; }
+.player-details[open] summary::before { content: "▾ "; }
+.player-details dl { display: grid; grid-template-columns: max-content 1fr; margin: 6px 0 0; gap: 3px 10px; font-family: var(--font-mono); font-size: 0.74rem; }
+.player-details dt { color: var(--color-muted); }
+.player-details dd { margin: 0; overflow-wrap: anywhere; }
 #players-panel .btn-xs.btn-xs-danger:hover { background: rgba(239, 107, 115, 0.14); }
 
 /* Settings and administration */

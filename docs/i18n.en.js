@@ -213,6 +213,7 @@ window.NICON_I18N_STRINGS.en = {
     ban: "Ban",
     kickConfirm: "Kick {{name}} from this server?",
     banConfirm: "Ban {{name}} from this server? This can't be undone.",
+    details: "Details",
     col: {
       name: "Name",
       steamid: "SteamID",

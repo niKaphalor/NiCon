@@ -214,6 +214,7 @@ window.NICON_I18N_STRINGS.de = {
     ban: "Bann",
     kickConfirm: "{{name}} vom Server kicken?",
     banConfirm: "{{name}} vom Server bannen? Das kann nicht rückgängig gemacht werden.",
+    details: "Details",
     col: {
       name: "Name",
       steamid: "SteamID",

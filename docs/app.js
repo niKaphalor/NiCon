@@ -1698,56 +1698,73 @@
     var players = c.lastParsed.players;
     if (!players.length) return;
 
-    var table = document.createElement("table");
-    var thead = document.createElement("thead");
-    var headRow = document.createElement("tr");
+    // columns[0] is always the display name (every games.js entry puts it
+    // first) — that plus kick/ban is what actually matters at a glance,
+    // so only those sit in the main row; every other column (SteamID,
+    // ping, address, …) is real but rarely needed, so it's tucked behind
+    // a <details> instead of squeezing a wide table into the sidebar.
     var columns = c.lastParsed.columns;
-    columns.forEach(function (col) {
-      var th = document.createElement("th");
-      th.textContent = columnLabel(col);
-      headRow.appendChild(th);
-    });
-    headRow.appendChild(document.createElement("th"));
-    thead.appendChild(headRow);
-    table.appendChild(thead);
+    var list = document.createElement("div");
+    list.className = "players-list";
 
-    var tbody = document.createElement("tbody");
     players.forEach(function (player) {
-      var tr = document.createElement("tr");
-      player.cells.forEach(function (cell) {
-        var td = document.createElement("td");
-        td.textContent = cell;
-        tr.appendChild(td);
-      });
+      var row = document.createElement("div");
+      row.className = "player-row";
 
-      var actionsTd = document.createElement("td");
-      actionsTd.className = "player-actions";
+      var main = document.createElement("div");
+      main.className = "player-row-main";
+
+      var name = document.createElement("span");
+      name.className = "player-name";
+      name.textContent = player.cells[0] || player.id;
+      main.appendChild(name);
+
       if (player.isAdmin) {
         var rank = document.createElement("span");
         rank.className = "tag tag-rank";
         rank.textContent = I18N.t("admin.roleAdmin");
-        actionsTd.appendChild(rank);
+        main.appendChild(rank);
       } else {
         var kickCmd = game.kick ? game.kick(player) : null;
         var banCmd = game.ban ? game.ban(player) : null;
         if (kickCmd || banCmd) {
-          var row = document.createElement("div");
-          row.className = "player-actions-row";
+          var actions = document.createElement("div");
+          actions.className = "player-actions-row";
           var label = player.cells[0] || player.id;
-          if (kickCmd) row.appendChild(playerActionButton(I18N.t("players.kick"), false, function () {
+          if (kickCmd) actions.appendChild(playerActionButton(I18N.t("players.kick"), false, function () {
             sendPlayerAction(c, kickCmd, I18N.t("players.kickConfirm", { name: label }));
           }));
-          if (banCmd) row.appendChild(playerActionButton(I18N.t("players.ban"), true, function () {
+          if (banCmd) actions.appendChild(playerActionButton(I18N.t("players.ban"), true, function () {
             sendPlayerAction(c, banCmd, I18N.t("players.banConfirm", { name: label }));
           }));
-          actionsTd.appendChild(row);
+          main.appendChild(actions);
         }
       }
-      tr.appendChild(actionsTd);
-      tbody.appendChild(tr);
+      row.appendChild(main);
+
+      if (columns.length > 1) {
+        var details = document.createElement("details");
+        details.className = "player-details";
+        var summaryEl = document.createElement("summary");
+        summaryEl.textContent = I18N.t("players.details");
+        details.appendChild(summaryEl);
+
+        var dl = document.createElement("dl");
+        for (var i = 1; i < columns.length; i++) {
+          var dt = document.createElement("dt");
+          dt.textContent = columnLabel(columns[i]);
+          var dd = document.createElement("dd");
+          dd.textContent = player.cells[i];
+          dl.appendChild(dt);
+          dl.appendChild(dd);
+        }
+        details.appendChild(dl);
+        row.appendChild(details);
+      }
+
+      list.appendChild(row);
     });
-    table.appendChild(tbody);
-    playersPanel.appendChild(table);
+    playersPanel.appendChild(list);
   }
 
   function playerActionButton(text, danger, onClick) {
