@@ -577,6 +577,8 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
 .settings-inner h1 { font-size: 1.45rem; }
 .settings-inner .field-row { display: flex; flex-direction: column; gap: var(--space-2); }
 .settings-inner .card .form-row { margin-top: var(--space-2); }
+.settings-inner .card .stacked-form { margin-top: var(--space-3); }
+.settings-inner .card .login-error { margin-top: var(--space-1); }
 .settings-inner .card .row {
   display: flex;
   align-items: center;
@@ -586,6 +588,51 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
 }
 
 .danger-card .card-kicker { color: var(--color-error); }
+.card-kicker-danger { color: var(--color-error); }
+.card-section-danger {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* --- notifications (admin-authored, shown to every signed-in user) --- */
+
+#notifications-area { display: flex; flex-direction: column; }
+.notification-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-divider);
+  border-left: 3px solid var(--color-accent);
+}
+.notification-banner p { flex: 1; font-size: 0.88rem; max-width: 1000px; margin: 0 auto; }
+.notification-banner .icon-btn { flex-shrink: 0; }
+.notification-banner.type-info { border-left-color: var(--color-accent); }
+.notification-banner.type-success { border-left-color: var(--color-success); }
+.notification-banner.type-warning { border-left-color: var(--color-warn); }
+.notification-banner.type-error { border-left-color: var(--color-error); }
+
+.admin-section-header { margin-top: var(--space-6); }
+.admin-notifications-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.admin-notification-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border-left: 3px solid var(--color-accent);
+}
+.admin-notification-row.type-success { border-left-color: var(--color-success); }
+.admin-notification-row.type-warning { border-left-color: var(--color-warn); }
+.admin-notification-row.type-error { border-left-color: var(--color-error); }
+.admin-notification-row .tag { flex-shrink: 0; text-transform: capitalize; }
+.admin-notification-row p { flex: 1; font-size: 0.88rem; margin: 0; }
+.admin-notification-row .hint { flex-shrink: 0; font-size: 0.78rem; }
 
 /* --- admin page --- */
 

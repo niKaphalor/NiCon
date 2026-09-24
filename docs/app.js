@@ -118,12 +118,29 @@
   var head = document.getElementById("head");
 
   var viewSettings = document.getElementById("view-settings");
+  var privacyCard = document.getElementById("privacy-card");
   var accountCard = document.getElementById("account-card");
+  var accountUsernameLine = document.getElementById("account-username-line");
   var accountDangerZone = document.getElementById("account-danger-zone");
   var deleteAccountBtn = document.getElementById("delete-account-btn");
+  var changeUsernameForm = document.getElementById("change-username-form");
+  var newUsernameInput = document.getElementById("new-username-input");
+  var usernameCurrentPasswordInput = document.getElementById("username-current-password-input");
+  var changeUsernameError = document.getElementById("change-username-error");
+  var changePasswordForm = document.getElementById("change-password-form");
+  var passwordCurrentPasswordInput = document.getElementById("password-current-password-input");
+  var newPasswordInput = document.getElementById("new-password-input");
+  var newPasswordConfirmInput = document.getElementById("new-password-confirm-input");
+  var changePasswordError = document.getElementById("change-password-error");
+
+  var notificationsArea = document.getElementById("notifications-area");
 
   var viewAdmin = document.getElementById("view-admin");
   var adminUsersBody = document.getElementById("admin-users-body");
+  var notificationForm = document.getElementById("notification-form");
+  var notificationType = document.getElementById("notification-type");
+  var notificationMessage = document.getElementById("notification-message");
+  var adminNotificationsList = document.getElementById("admin-notifications-list");
 
   var addModal = document.getElementById("add-modal");
   var addClose = document.getElementById("add-close");
@@ -268,6 +285,7 @@
     renderLangCurrent();
     renderServers();
     renderContent();
+    if (authToken) accountUsernameLine.textContent = I18N.t("settings.accountUsernameLine", { username: currentUsername });
   });
 
   apiPill.addEventListener("click", showSettingsView);
@@ -488,6 +506,65 @@
     var cb = pendingRecoveryContinue;
     pendingRecoveryContinue = null;
     if (cb) cb();
+  });
+
+  // --- change username / change password (self-service, current password required) ---
+
+  changeUsernameForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    changeUsernameError.hidden = true;
+
+    apiFetch("/api/account/username", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        new_username: newUsernameInput.value.trim(),
+        current_password: usernameCurrentPasswordInput.value,
+      }),
+    })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(t || I18N.t("errors.usernameChangeFailed")); });
+        return r.json();
+      })
+      .then(function (data) {
+        currentUsername = data.username;
+        try { sessionStorage.setItem(USERNAME_KEY, currentUsername); } catch (err) { /* ignore */ }
+        usernameLabel.textContent = currentUsername;
+        accountUsernameLine.textContent = I18N.t("settings.accountUsernameLine", { username: currentUsername });
+        changeUsernameForm.reset();
+      })
+      .catch(function (err) {
+        changeUsernameError.textContent = err.message;
+        changeUsernameError.hidden = false;
+      });
+  });
+
+  changePasswordForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    changePasswordError.hidden = true;
+
+    if (newPasswordInput.value !== newPasswordConfirmInput.value) {
+      changePasswordError.textContent = I18N.t("errors.passwordMismatch");
+      changePasswordError.hidden = false;
+      return;
+    }
+
+    apiFetch("/api/account/password", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        current_password: passwordCurrentPasswordInput.value,
+        new_password: newPasswordInput.value,
+      }),
+    })
+      .then(function (r) {
+        if (!r.ok && r.status !== 204) return r.text().then(function (t) { throw new Error(t || I18N.t("errors.passwordChangeFailed")); });
+        changePasswordForm.reset();
+      })
+      .catch(function (err) {
+        changePasswordError.textContent = err.message;
+        changePasswordError.hidden = false;
+      });
   });
 
   // --- account deletion (self-service, Art. 17 GDPR) ---
@@ -737,6 +814,8 @@
     addServerBtn.hidden = true;
     accountDangerZone.hidden = true;
     accountCard.hidden = true;
+    privacyCard.hidden = true;
+    notificationsArea.innerHTML = "";
   }
 
   function showRegisterView() {
@@ -762,6 +841,9 @@
     addServerBtn.hidden = false;
     accountDangerZone.hidden = false;
     accountCard.hidden = false;
+    privacyCard.hidden = false;
+    accountUsernameLine.textContent = I18N.t("settings.accountUsernameLine", { username: currentUsername });
+    loadNotifications();
     setActiveNav(navServersBtn);
     renderServers();
     renderContent();
@@ -796,6 +878,7 @@
 
   adminNavBtn.addEventListener("click", function () {
     loadAdminUsers();
+    loadAdminNotifications();
     showAdminView();
   });
 
@@ -874,6 +957,138 @@
 
       tr.appendChild(actionsTd);
       adminUsersBody.appendChild(tr);
+    });
+  }
+
+  // --- admin: notifications (broadcast to every signed-in user) ---
+
+  function loadAdminNotifications() {
+    return apiFetch("/api/notifications", { method: "GET" })
+      .then(function (r) {
+        if (!r.ok) throw new Error(I18N.t("errors.notificationsLoadFailed"));
+        return r.json();
+      })
+      .then(function (list) { renderAdminNotifications(list || []); })
+      .catch(function (err) { alert(err.message); });
+  }
+
+  function renderAdminNotifications(list) {
+    adminNotificationsList.innerHTML = "";
+    if (!list.length) {
+      var empty = document.createElement("p");
+      empty.className = "hint";
+      empty.textContent = I18N.t("admin.notificationsEmpty");
+      adminNotificationsList.appendChild(empty);
+      return;
+    }
+    list.forEach(function (n) {
+      var row = document.createElement("div");
+      row.className = "admin-notification-row type-" + n.type;
+
+      var tag = document.createElement("span");
+      tag.className = "tag tag-neutral";
+      tag.textContent = I18N.t("admin.notificationType" + n.type.charAt(0).toUpperCase() + n.type.slice(1));
+      row.appendChild(tag);
+
+      var msg = document.createElement("p");
+      msg.textContent = n.message;
+      row.appendChild(msg);
+
+      var when = document.createElement("span");
+      when.className = "hint";
+      when.textContent = new Date(n.created_at).toLocaleString();
+      row.appendChild(when);
+
+      var deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn-secondary btn-danger";
+      deleteBtn.textContent = I18N.t("admin.delete");
+      deleteBtn.addEventListener("click", function () {
+        apiFetch("/api/admin/notifications/" + n.id, { method: "DELETE" })
+          .then(function (r) {
+            if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.notificationDeleteFailed"));
+            loadAdminNotifications();
+          })
+          .catch(function (err) { alert(err.message); });
+      });
+      row.appendChild(deleteBtn);
+
+      adminNotificationsList.appendChild(row);
+    });
+  }
+
+  notificationForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var message = notificationMessage.value.trim();
+    if (!message) return;
+
+    apiFetch("/api/admin/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: notificationType.value, message: message }),
+    })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(t || I18N.t("errors.notificationCreateFailed")); });
+        return r.json();
+      })
+      .then(function () {
+        notificationForm.reset();
+        loadAdminNotifications();
+      })
+      .catch(function (err) { alert(err.message); });
+  });
+
+  // --- notifications (admin-authored, shown to every signed-in user) ---
+  // Dismissal is per-browser (localStorage), not server-side — simple,
+  // and good enough since there's no cross-device "mark as read" need
+  // for a handful of operator broadcasts.
+
+  var DISMISSED_NOTIFICATIONS_KEY = "nicon_dismissed_notifications";
+
+  function dismissedNotificationIds() {
+    try {
+      return JSON.parse(localStorage.getItem(DISMISSED_NOTIFICATIONS_KEY) || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function dismissNotification(id) {
+    var ids = dismissedNotificationIds();
+    if (ids.indexOf(id) === -1) ids.push(id);
+    try { localStorage.setItem(DISMISSED_NOTIFICATIONS_KEY, JSON.stringify(ids)); } catch (e) { /* ignore */ }
+  }
+
+  function loadNotifications() {
+    apiFetch("/api/notifications", { method: "GET" })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (list) { renderNotifications(list || []); })
+      .catch(function () { /* notifications are a nice-to-have, fail silently */ });
+  }
+
+  function renderNotifications(list) {
+    var dismissed = dismissedNotificationIds();
+    notificationsArea.innerHTML = "";
+    list.filter(function (n) { return dismissed.indexOf(n.id) === -1; }).forEach(function (n) {
+      var banner = document.createElement("div");
+      banner.className = "notification-banner type-" + n.type;
+
+      var p = document.createElement("p");
+      p.textContent = n.message;
+      banner.appendChild(p);
+
+      var closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "icon-btn";
+      closeBtn.setAttribute("aria-label", I18N.t("notifications.dismiss"));
+      closeBtn.textContent = "×";
+      closeBtn.addEventListener("click", function () {
+        dismissNotification(n.id);
+        banner.remove();
+      });
+      banner.appendChild(closeBtn);
+
+      notificationsArea.appendChild(banner);
     });
   }
 

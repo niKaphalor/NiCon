@@ -47,3 +47,14 @@ CREATE TABLE IF NOT EXISTS rate_limits (
 	count INT UNSIGNED NOT NULL DEFAULT 0,
 	PRIMARY KEY (bucket_key, window_start)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Admin-authored, shown to every signed-in user until they dismiss it
+-- (tracked client-side, not here) or an admin deletes it. Another
+-- PHP-only table, like rate_limits — the Go relay has no reason to know
+-- about it.
+CREATE TABLE IF NOT EXISTS notifications (
+	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	type VARCHAR(16) NOT NULL DEFAULT 'info',
+	message TEXT NOT NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
