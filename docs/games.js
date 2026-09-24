@@ -9,13 +9,16 @@
 //
 // parse(text) returns either null, or:
 //   {
-//     columns: [...],       // display column headers
+//     columns: [...],       // canonical lowercase column keys (e.g.
+//                            // "steamid", "connectedSeconds") — display
+//                            // labels are looked up via i18n in app.js,
+//                            // not decided here
 //     summary: "...",       // e.g. "3 / 20 players online"
 //     players: [
 //       { cells: [...values matching columns...],
 //         id: "...",        // identifier passed to kick()/ban()
-//         isAdmin: false,   // true suppresses the kick/ban buttons
-//         rank: null },     // shown instead, when isAdmin is true
+//         isAdmin: false },  // true suppresses the kick/ban buttons,
+//                            // shows a rank badge instead
 //       ...
 //     ],
 //   }
@@ -39,9 +42,9 @@ window.NICON_GAMES = {
         .map(function (s) { return s.trim(); })
         .filter(function (s) { return s.length > 0; });
       return {
-        columns: ["Name"],
+        columns: ["name"],
         summary: m[1] + " / " + m[2] + " players online",
-        players: names.map(function (n) { return { cells: [n], id: n, isAdmin: false, rank: null }; }),
+        players: names.map(function (n) { return { cells: [n], id: n, isAdmin: false }; }),
       };
     },
     // The `list` command doesn't expose op status, so there's nothing to
@@ -62,7 +65,7 @@ window.NICON_GAMES = {
       }
       if (!Array.isArray(data)) return null;
       return {
-        columns: ["Name", "SteamID", "Ping", "Address", "Connected (s)"],
+        columns: ["name", "steamid", "ping", "address", "connectedSeconds"],
         summary: data.length + " player" + (data.length === 1 ? "" : "s") + " online",
         players: data.map(function (p) {
           // Some server/plugin combinations (e.g. Oxide/uMod) add an admin
@@ -74,7 +77,6 @@ window.NICON_GAMES = {
             cells: [p.DisplayName, p.SteamID, p.Ping, p.Address, p.ConnectedSeconds],
             id: p.SteamID,
             isAdmin: isAdmin,
-            rank: isAdmin ? "Admin" : null,
           };
         }),
       };
@@ -92,11 +94,11 @@ window.NICON_GAMES = {
       var players = [];
       lines.forEach(function (line) {
         var m = line.match(/^\d+\.\s*(.+?),\s*(\d{5,})\s*$/);
-        if (m) players.push({ cells: [m[1], m[2]], id: m[2], isAdmin: false, rank: null });
+        if (m) players.push({ cells: [m[1], m[2]], id: m[2], isAdmin: false });
       });
       if (!players.length) return null;
       return {
-        columns: ["Name", "SteamID"],
+        columns: ["name", "steamid"],
         summary: players.length + " player" + (players.length === 1 ? "" : "s") + " online",
         players: players,
       };
@@ -119,10 +121,10 @@ window.NICON_GAMES = {
         .filter(function (l) { return l.length > 0; })
         .map(function (l) { return l.split(","); });
       return {
-        columns: header,
+        columns: header.map(function (h) { return h.toLowerCase(); }),
         summary: rows.length + " player" + (rows.length === 1 ? "" : "s") + " online",
         players: rows.map(function (cells) {
-          return { cells: cells, id: uidIndex !== -1 ? cells[uidIndex] : null, isAdmin: false, rank: null };
+          return { cells: cells, id: uidIndex !== -1 ? cells[uidIndex] : null, isAdmin: false };
         }),
       };
     },

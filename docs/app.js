@@ -70,7 +70,11 @@
 
   var usernameLabel = document.getElementById("username-label");
   var logoutBtn = document.getElementById("logout-btn");
-  var langSelect = document.getElementById("lang-select");
+  var langWidget = document.getElementById("lang-widget");
+  var langCurrentBtn = document.getElementById("lang-current");
+  var langCurrentFlag = document.getElementById("lang-current-flag");
+  var langCurrentName = document.getElementById("lang-current-name");
+  var langOptions = document.getElementById("lang-options");
 
   var navServersBtn = document.getElementById("nav-servers-btn");
   var navSettingsBtn = document.getElementById("nav-settings-btn");
@@ -192,15 +196,76 @@
   });
 
   // --- language ---
+  // A custom dropdown rather than a native <select> — the language name is
+  // shown in full, in its own language, with a flag, none of which a plain
+  // <option> can render (and native option-list styling doesn't reliably
+  // pick up the page's dark theme either).
 
-  langSelect.value = I18N.getLang();
-  langSelect.addEventListener("change", function () {
-    I18N.setLang(langSelect.value);
+  function findLanguage(code) {
+    for (var i = 0; i < I18N.LANGUAGES.length; i++) {
+      if (I18N.LANGUAGES[i].code === code) return I18N.LANGUAGES[i];
+    }
+    return I18N.LANGUAGES[0];
+  }
+
+  function renderLangCurrent() {
+    var lang = findLanguage(I18N.getLang());
+    langCurrentFlag.textContent = lang.flag;
+    langCurrentName.textContent = lang.name;
+  }
+
+  function renderLangOptions() {
+    langOptions.innerHTML = "";
+    I18N.LANGUAGES.forEach(function (lang) {
+      var li = document.createElement("li");
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", String(lang.code === I18N.getLang()));
+      li.dataset.lang = lang.code;
+
+      var flag = document.createElement("span");
+      flag.className = "flag";
+      flag.setAttribute("aria-hidden", "true");
+      flag.textContent = lang.flag;
+      li.appendChild(flag);
+      li.appendChild(document.createTextNode(lang.name));
+
+      li.addEventListener("click", function () {
+        I18N.setLang(lang.code);
+        closeLangOptions();
+      });
+      langOptions.appendChild(li);
+    });
+  }
+
+  function openLangOptions() {
+    renderLangOptions();
+    langOptions.hidden = false;
+    langCurrentBtn.setAttribute("aria-expanded", "true");
+  }
+
+  function closeLangOptions() {
+    langOptions.hidden = true;
+    langCurrentBtn.setAttribute("aria-expanded", "false");
+  }
+
+  langCurrentBtn.addEventListener("click", function () {
+    if (langOptions.hidden) openLangOptions();
+    else closeLangOptions();
   });
+  document.addEventListener("click", function (e) {
+    if (!langOptions.hidden && !langWidget.contains(e.target)) closeLangOptions();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !langOptions.hidden) closeLangOptions();
+  });
+
+  renderLangCurrent();
+
   document.addEventListener("nicon:langchange", function () {
     // Static text re-renders itself via data-i18n attributes; anything
     // built from JS strings (sidebar rows, console content already on
     // screen) needs an explicit re-render.
+    renderLangCurrent();
     renderServers();
     renderContent();
   });
@@ -510,7 +575,7 @@
   function serverMeta(server) {
     var parts = [];
     if (server.game) parts.push(server.game);
-    if (server.protocol === "webrcon") parts.push("WebRCON");
+    if (server.protocol === "webrcon") parts.push(I18N.t("common.webrcon"));
     parts.push(server.host + ":" + server.port);
     return parts.join(" · ");
   }
@@ -882,13 +947,13 @@
 
     var protoTag = document.createElement("span");
     protoTag.className = "tag tag-outline";
-    protoTag.textContent = server.protocol === "webrcon" ? "Rust WebRCON" : "Source RCON";
+    protoTag.textContent = server.protocol === "webrcon" ? I18N.t("addModal.protocolWebrcon") : I18N.t("common.protocolSource");
     head.appendChild(protoTag);
 
     if (server.source === "nitrado") {
       var nitradoTag = document.createElement("span");
       nitradoTag.className = "tag tag-nitrado";
-      nitradoTag.textContent = "Nitrado";
+      nitradoTag.textContent = I18N.t("common.nitrado");
       head.appendChild(nitradoTag);
     }
 
@@ -1122,6 +1187,16 @@
     c.socket.send(JSON.stringify({ type: "command", command: game.command }));
   }
 
+  // Column identifiers from games.js are canonical lowercase keys (e.g.
+  // "steamid", "connectedSeconds"), not display text, so every game's
+  // table header goes through i18n — including Palworld's, whose columns
+  // come from the server's own CSV response and fall back to the raw
+  // header text when it's not one of the well-known ones.
+  function columnLabel(key) {
+    var label = I18N.t("players.col." + key);
+    return label === "players.col." + key ? key : label;
+  }
+
   function playersHint(text) {
     playersPanel.innerHTML = "";
     var notice = document.createElement("p");
@@ -1159,7 +1234,7 @@
     var columns = c.lastParsed.columns;
     columns.forEach(function (col) {
       var th = document.createElement("th");
-      th.textContent = col;
+      th.textContent = columnLabel(col);
       headRow.appendChild(th);
     });
     headRow.appendChild(document.createElement("th"));
@@ -1180,7 +1255,7 @@
       if (player.isAdmin) {
         var rank = document.createElement("span");
         rank.className = "tag tag-rank";
-        rank.textContent = player.rank || I18N.t("admin.roleAdmin");
+        rank.textContent = I18N.t("admin.roleAdmin");
         actionsTd.appendChild(rank);
       } else {
         var kickCmd = game.kick ? game.kick(player) : null;

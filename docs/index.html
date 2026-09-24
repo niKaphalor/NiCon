@@ -20,10 +20,14 @@
   <div class="topbar-right">
     <span id="username-label" class="hint" hidden></span>
     <button type="button" id="logout-btn" class="link-button" data-i18n="nav.signOut" hidden>Sign out</button>
-    <select id="lang-select" class="lang-select" aria-label="Language" data-i18n-aria-label="nav.language">
-      <option value="en">EN</option>
-      <option value="de">DE</option>
-    </select>
+    <div class="lang-widget" id="lang-widget">
+      <button type="button" id="lang-current" class="lang-current" aria-haspopup="listbox" aria-expanded="false" data-i18n-aria-label="nav.language" aria-label="Language">
+        <span class="flag" id="lang-current-flag" aria-hidden="true"></span>
+        <span id="lang-current-name"></span>
+        <svg class="lang-chevron" width="10" height="10" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>
+      </button>
+      <ul id="lang-options" class="lang-options" role="listbox" hidden></ul>
+    </div>
     <button type="button" id="api-pill" class="relay-pill status-unknown">
       <span class="dot"></span> <span data-i18n="nav.api">API</span>
     </button>
@@ -44,7 +48,7 @@
 
 <div id="relay-banner" class="relay-banner" hidden>
   <p>
-    <span data-i18n="banner.unreachable">NiCon can't reach its local relay — you can still sign in and manage your server list, but connecting to a server's console needs it running.</span>
+    <span data-i18n="banner.unreachable">NiCon can't reach its relay — you can still sign in and manage your server list, but connecting to a server's console needs it running.</span>
     <a href="https://github.com/niKaphalor/NiCon#relay" target="_blank" rel="noopener" data-i18n="banner.getItHere">Get it here</a>,
     <span data-i18n="banner.thenCheck">then check the address in</span>
     <button type="button" id="banner-settings-btn" class="link-button" data-i18n="settings.navLabel">settings</button>.
@@ -153,7 +157,7 @@
         <div class="card">
           <div class="card-kicker" data-i18n="settings.relayTitle">Relay</div>
           <p class="card-body">
-            <span data-i18n="settings.hintBefore">NiCon needs a small local relay running on your machine to actually speak RCON to a server — browsers can't open raw TCP or WebRCON sockets on their own.</span>
+            <span data-i18n="settings.hintBefore">NiCon needs a relay — a small bridge process — to actually speak RCON to a server: browsers can't open raw TCP or WebRCON sockets on their own.</span>
             <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener" data-i18n="settings.getItHereLink">Get it here.</a>
           </p>
           <form id="relay-form" class="form-row">
@@ -270,6 +274,8 @@
   <a href="privacy.html" target="_blank" rel="noopener" data-i18n="nav.privacy" data-i18n-doc="privacy">Privacy</a>
 </footer>
 
+<script src="i18n.en.js"></script>
+<script src="i18n.de.js"></script>
 <script src="i18n.js"></script>
 <script src="games.js"></script>
 <script src="app.js"></script>

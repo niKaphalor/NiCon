@@ -317,7 +317,12 @@ input:focus-visible, select:focus-visible, button:focus-visible { border-color: 
 .relay-pill.status-error .dot { background: var(--color-error); border-color: var(--color-error); box-shadow: 0 0 6px var(--color-error); }
 .relay-pill.status-unknown .dot { background: var(--color-neutral-500); border-color: var(--color-neutral-500); }
 
-.lang-select {
+.lang-widget { position: relative; }
+
+.lang-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: none;
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-md);
@@ -327,7 +332,36 @@ input:focus-visible, select:focus-visible, button:focus-visible { border-color: 
   padding: 5px 8px;
   cursor: pointer;
 }
-.lang-select:hover { color: var(--color-text); border-color: var(--color-neutral-500); }
+.lang-current:hover { color: var(--color-text); border-color: var(--color-neutral-500); }
+.lang-current .lang-chevron { opacity: 0.6; }
+
+.lang-options {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 160px;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+.lang-options li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 0.85rem;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.lang-options li:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+.lang-options li[aria-selected="true"] { color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+
+.flag { font-size: 1rem; line-height: 1; }
 
 /* --- status banners --- */
 
