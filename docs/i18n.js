@@ -102,6 +102,8 @@ window.NICON_I18N = (function () {
         rconPasswordAriaLabel: "RCON password for {{name}}",
         removeAriaLabel: "Remove {{name}}",
         connectedTooltip: "Connected",
+        searchPlaceholder: "Search servers…",
+        noSearchResults: "No servers match your search.",
       },
       console: {
         back: "← Servers",
@@ -131,6 +133,7 @@ window.NICON_I18N = (function () {
         protocolWebrcon: "Rust WebRCON",
       },
       settings: {
+        navLabel: "Settings",
         title: "Connection",
         apiTitle: "Cloud API",
         apiHint: "Handles sign-in, your account, and your server list — a normal web address, reachable whether or not your computer is on.",
@@ -139,6 +142,8 @@ window.NICON_I18N = (function () {
         hintBefore: "NiCon needs a small local relay running on your machine to actually speak RCON to a server — browsers can't open raw TCP or WebRCON sockets on their own.",
         getItHereLink: "Get it here.",
         relayAddressAriaLabel: "Relay address",
+        privacyKicker: "Privacy",
+        privacyForDetails: " for details.",
         deleteAccountTitle: "Delete account",
         deleteAccountHint: "Permanently deletes your account and every server you've added — RCON passwords included. This can't be undone.",
         deleteAccountButton: "Delete my account",
@@ -150,6 +155,12 @@ window.NICON_I18N = (function () {
         genericOption: "Generic (no parsing)",
         showPlayers: "Show players",
         couldNotParse: "Could not parse the {{game}} response — see the raw output in the console.",
+      },
+      content: {
+        selectPrompt: "Select a server from the list to see its console.",
+        passwordHint: "Enter this server's RCON password to connect.",
+        notConnectedHint: "Not connected.",
+        disconnect: "Disconnect",
       },
       errors: {
         sessionExpired: "Your session expired — sign in again.",
@@ -260,6 +271,8 @@ window.NICON_I18N = (function () {
         rconPasswordAriaLabel: "RCON-Passwort für {{name}}",
         removeAriaLabel: "{{name}} entfernen",
         connectedTooltip: "Verbunden",
+        searchPlaceholder: "Server durchsuchen…",
+        noSearchResults: "Keine Server gefunden.",
       },
       console: {
         back: "← Server",
@@ -289,6 +302,7 @@ window.NICON_I18N = (function () {
         protocolWebrcon: "Rust WebRCON",
       },
       settings: {
+        navLabel: "Einstellungen",
         title: "Verbindung",
         apiTitle: "Cloud-API",
         apiHint: "Zuständig für Anmeldung, dein Konto und deine Serverliste — eine normale Web-Adresse, erreichbar egal ob dein Rechner an ist.",
@@ -297,6 +311,8 @@ window.NICON_I18N = (function () {
         hintBefore: "NiCon benötigt einen kleinen lokalen Relay auf deinem Rechner, um tatsächlich RCON mit einem Server zu sprechen — Browser können von sich aus keine rohen TCP- oder WebRCON-Sockets öffnen.",
         getItHereLink: "Hier herunterladen.",
         relayAddressAriaLabel: "Relay-Adresse",
+        privacyKicker: "Datenschutz",
+        privacyForDetails: ".",
         deleteAccountTitle: "Konto löschen",
         deleteAccountHint: "Löscht dein Konto und alle von dir hinzugefügten Server dauerhaft — inklusive RCON-Passwörter. Das kann nicht rückgängig gemacht werden.",
         deleteAccountButton: "Mein Konto löschen",
@@ -308,6 +324,12 @@ window.NICON_I18N = (function () {
         genericOption: "Allgemein (kein Parsing)",
         showPlayers: "Spieler anzeigen",
         couldNotParse: "Die {{game}}-Antwort konnte nicht verarbeitet werden — siehe die Rohausgabe in der Konsole.",
+      },
+      content: {
+        selectPrompt: "Wähle einen Server aus der Liste, um seine Konsole zu sehen.",
+        passwordHint: "Gib das RCON-Passwort dieses Servers ein, um dich zu verbinden.",
+        notConnectedHint: "Nicht verbunden.",
+        disconnect: "Trennen",
       },
       errors: {
         sessionExpired: "Deine Sitzung ist abgelaufen — melde dich erneut an.",

@@ -45,11 +45,14 @@
   }
 
   var servers = [];
+  var searchQuery = "";
 
   // One entry per currently-open console: serverId -> { server, socket,
-  // lines: [{kind, text}], pendingPlayersRequest, authenticated }.
+  // lines: [{kind, text}], pendingPlayersRequest, authenticated }. A
+  // server can be selected in the sidebar without a console entry (not
+  // connected yet, or missing a saved password).
   var consoles = {};
-  var activeConsoleId = null;
+  var selectedServerId = null;
 
   // --- element refs ---
 
@@ -61,10 +64,7 @@
 
   var relayPill = document.getElementById("relay-pill");
   var relayBanner = document.getElementById("relay-banner");
-  var settingsBtn = document.getElementById("settings-btn");
   var bannerSettingsBtn = document.getElementById("banner-settings-btn");
-  var settingsModal = document.getElementById("settings-modal");
-  var settingsClose = document.getElementById("settings-close");
   var relayForm = document.getElementById("relay-form");
   var relayUrlInput = document.getElementById("relay-url");
 
@@ -72,10 +72,10 @@
   var logoutBtn = document.getElementById("logout-btn");
   var langSelect = document.getElementById("lang-select");
 
+  var navServersBtn = document.getElementById("nav-servers-btn");
+  var navSettingsBtn = document.getElementById("nav-settings-btn");
   var adminNavBtn = document.getElementById("admin-nav-btn");
-  var viewAdmin = document.getElementById("view-admin");
-  var adminBackBtn = document.getElementById("admin-back-btn");
-  var adminUsersBody = document.getElementById("admin-users-body");
+  var addServerBtn = document.getElementById("add-server-btn");
 
   var viewLogin = document.getElementById("view-login");
   var loginForm = document.getElementById("login-form");
@@ -99,16 +99,27 @@
   var recoveryAckCheckbox = document.getElementById("recovery-ack");
   var recoveryContinueBtn = document.getElementById("recovery-continue-btn");
 
-  var viewServers = document.getElementById("view-servers");
-  var viewConsole = document.getElementById("view-console");
-  var serverGrid = document.getElementById("server-grid");
-  var emptyState = document.getElementById("empty-state");
-  var addServerBtn = document.getElementById("add-server-btn");
-  var emptyAddBtn = document.getElementById("empty-add-btn");
-  var openSettingsFromSubhead = document.getElementById("open-settings-from-subhead");
+  var viewApp = document.getElementById("view-app");
+  var serverSearch = document.getElementById("server-search");
+  var serverList = document.getElementById("server-list");
 
+  var contentEmpty = document.getElementById("content-empty");
+  var contentEmptyText = document.getElementById("content-empty-text");
+  var emptyAddBtn = document.getElementById("empty-add-btn");
+  var contentPassword = document.getElementById("content-password");
+  var passwordServerName = document.getElementById("password-server-name");
+  var passwordForm = document.getElementById("password-form");
+  var passwordInput = document.getElementById("password-input");
+  var contentConsole = document.getElementById("content-console");
+  var head = document.getElementById("head");
+
+  var viewSettings = document.getElementById("view-settings");
+  var accountCard = document.getElementById("account-card");
   var accountDangerZone = document.getElementById("account-danger-zone");
   var deleteAccountBtn = document.getElementById("delete-account-btn");
+
+  var viewAdmin = document.getElementById("view-admin");
+  var adminUsersBody = document.getElementById("admin-users-body");
 
   var addModal = document.getElementById("add-modal");
   var addClose = document.getElementById("add-close");
@@ -118,21 +129,15 @@
   var nitradoTokenInput = document.getElementById("nitrado-token");
   var manualForm = document.getElementById("manual-form");
 
-  var backBtn = document.getElementById("back-btn");
-  var consoleTitle = document.getElementById("console-title");
-  var consoleBadge = document.getElementById("console-badge");
-  var consoleTabs = document.getElementById("console-tabs");
   var filterInput = document.getElementById("filter-input");
-  var infoBtn = document.getElementById("info-btn");
   var log = document.getElementById("log");
   var cmdForm = document.getElementById("cmd-form");
   var cmdInput = document.getElementById("cmd-input");
+  var cmdSendBtn = cmdForm.querySelector("button[type=submit]");
 
   var gameSelect = document.getElementById("game-select");
   var playersBtn = document.getElementById("players-btn");
   var playersPanel = document.getElementById("players-panel");
-  var infoModal = document.getElementById("info-modal");
-  var infoClose = document.getElementById("info-close");
 
   // --- cloud API address + status ---
   // Handles everything except the actual RCON connection: sign-in,
@@ -158,11 +163,10 @@
   apiForm.addEventListener("submit", function (e) {
     e.preventDefault();
     checkApi();
-    settingsModal.close();
   });
 
   // --- relay address + status ---
-  // Only used for the actual WebSocket<->RCON bridge (openOrFocusConsole
+  // Only used for the actual WebSocket<->RCON bridge (createConsole
   // below) — everything else goes through the cloud API.
 
   function relayHttpUrl() {
@@ -187,7 +191,6 @@
   relayForm.addEventListener("submit", function (e) {
     e.preventDefault();
     checkRelay();
-    settingsModal.close();
   });
 
   // --- language ---
@@ -198,21 +201,24 @@
   });
   document.addEventListener("nicon:langchange", function () {
     // Static text re-renders itself via data-i18n attributes; anything
-    // built from JS strings (server cards, console status lines already on
+    // built from JS strings (sidebar rows, console content already on
     // screen) needs an explicit re-render.
     renderServers();
-    if (activeConsoleId !== null) renderActiveConsole();
+    renderContent();
   });
 
-  settingsBtn.addEventListener("click", function () { settingsModal.showModal(); });
-  bannerSettingsBtn.addEventListener("click", function () { settingsModal.showModal(); });
-  apiBannerSettingsBtn.addEventListener("click", function () { settingsModal.showModal(); });
-  apiPill.addEventListener("click", function () { settingsModal.showModal(); });
-  relayPill.addEventListener("click", function () { settingsModal.showModal(); });
-  openSettingsFromSubhead.addEventListener("click", function () { settingsModal.showModal(); });
-  settingsClose.addEventListener("click", function () { settingsModal.close(); });
-  settingsModal.addEventListener("click", function (e) {
-    if (e.target === settingsModal) settingsModal.close();
+  apiPill.addEventListener("click", showSettingsView);
+  relayPill.addEventListener("click", showSettingsView);
+  bannerSettingsBtn.addEventListener("click", showSettingsView);
+  apiBannerSettingsBtn.addEventListener("click", showSettingsView);
+  navSettingsBtn.addEventListener("click", showSettingsView);
+
+  // The brand mark doubles as a "home" link — the only way back from the
+  // (always-reachable) settings page when signed out, and a quick way
+  // back to the server list from anywhere when signed in.
+  document.querySelector(".wordmark").addEventListener("click", function () {
+    if (authToken) showAppView();
+    else showLoginView();
   });
 
   // --- authenticated API calls ---
@@ -250,7 +256,7 @@
       if (consoles[id].socket) consoles[id].socket.close();
     });
     consoles = {};
-    activeConsoleId = null;
+    selectedServerId = null;
   }
 
   // --- login / logout ---
@@ -276,7 +282,7 @@
       })
       .then(function () {
         loginForm.reset();
-        showServersView();
+        showAppView();
       })
       .catch(function (err) {
         loginError.textContent = err.message || I18N.t("errors.signInFailed");
@@ -330,7 +336,7 @@
         registerForm.reset();
         showRecoveryCodeModal(data.recovery_code, function () {
           loadServers()
-            .then(showServersView)
+            .then(showAppView)
             .catch(function () { /* apiFetch already routes 401s to sessionExpired() */ });
         });
       })
@@ -429,7 +435,6 @@
     apiFetch("/api/account", { method: "DELETE" })
       .then(function (r) {
         if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.failedToDeleteAccount"));
-        settingsModal.close();
         clearAuthState();
         disconnectAllConsoles();
         servers = [];
@@ -474,6 +479,7 @@
       .then(function (list) {
         servers = list || [];
         renderServers();
+        renderContent();
       });
   }
 
@@ -489,8 +495,13 @@
       .then(function (r) {
         if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.failedToRemoveServer"));
         servers = servers.filter(function (s) { return s.id !== id; });
-        if (consoles[id]) closeConsoleFor(id);
+        if (consoles[id]) {
+          if (consoles[id].socket) consoles[id].socket.close();
+          delete consoles[id];
+        }
+        if (selectedServerId === id) selectedServerId = null;
         renderServers();
+        renderContent();
       })
       .catch(function (err) { alert(err.message); });
   }
@@ -503,80 +514,55 @@
     return parts.join(" · ");
   }
 
+  // --- sidebar: search + server list ---
+
+  serverSearch.addEventListener("input", function () {
+    searchQuery = serverSearch.value;
+    renderServers();
+  });
+
+  function filteredServers() {
+    var q = searchQuery.trim().toLowerCase();
+    if (!q) return servers;
+    return servers.filter(function (s) {
+      return s.name.toLowerCase().indexOf(q) !== -1 || (s.game || "").toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
   function renderServers() {
-    serverGrid.innerHTML = "";
-    emptyState.hidden = servers.length > 0;
-    serverGrid.hidden = servers.length === 0;
+    serverList.innerHTML = "";
+    var list = filteredServers();
 
-    servers.forEach(function (server) {
-      var card = document.createElement("article");
-      card.className = "server-card";
+    if (!list.length) {
+      var empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = servers.length ? I18N.t("servers.noSearchResults") : I18N.t("servers.emptyTitle");
+      serverList.appendChild(empty);
+      return;
+    }
 
-      var main = document.createElement("div");
-      var h3 = document.createElement("h3");
-      if (consoles[server.id]) {
-        var dot = document.createElement("span");
-        dot.className = "connected-dot";
-        dot.title = I18N.t("servers.connectedTooltip");
-        h3.appendChild(dot);
-      }
-      h3.appendChild(document.createTextNode(server.name));
-      main.appendChild(h3);
-      var meta = document.createElement("p");
-      meta.className = "server-meta";
+    list.forEach(function (server) {
+      var row = document.createElement("button");
+      row.type = "button";
+      row.className = "server-row";
+      row.setAttribute("aria-current", String(server.id === selectedServerId));
+
+      var nameLine = document.createElement("span");
+      nameLine.className = "name";
+      var dot = document.createElement("span");
+      dot.className = "dot " + (consoles[server.id] ? "on" : "off");
+      if (consoles[server.id]) dot.title = I18N.t("servers.connectedTooltip");
+      nameLine.appendChild(dot);
+      nameLine.appendChild(document.createTextNode(server.name));
+      row.appendChild(nameLine);
+
+      var meta = document.createElement("span");
+      meta.className = "meta";
       meta.textContent = serverMeta(server);
-      main.appendChild(meta);
-      card.appendChild(main);
+      row.appendChild(meta);
 
-      var actions = document.createElement("div");
-      actions.className = "server-card-actions";
-
-      if (!server.has_password) {
-        var pwInput = document.createElement("input");
-        pwInput.type = "password";
-        pwInput.placeholder = I18N.t("common.rconPassword");
-        pwInput.autocomplete = "off";
-        pwInput.setAttribute("aria-label", I18N.t("servers.rconPasswordAriaLabel", { name: server.name }));
-        actions.appendChild(pwInput);
-
-        var saveBtn = document.createElement("button");
-        saveBtn.type = "button";
-        saveBtn.className = "btn-primary";
-        saveBtn.textContent = I18N.t("common.save");
-        saveBtn.addEventListener("click", function () {
-          apiFetch("/api/servers/" + server.id + "/password", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ password: pwInput.value }),
-          })
-            .then(function (r) {
-              if (!r.ok) throw new Error(I18N.t("errors.failedToSavePassword"));
-              server.has_password = true;
-              renderServers();
-            })
-            .catch(function (err) { alert(err.message); });
-        });
-        actions.appendChild(saveBtn);
-      } else {
-        var connectBtn = document.createElement("button");
-        connectBtn.type = "button";
-        connectBtn.className = "btn-primary";
-        connectBtn.textContent = consoles[server.id] ? I18N.t("servers.openConsole") : I18N.t("servers.connect");
-        connectBtn.addEventListener("click", function () { openOrFocusConsole(server); });
-        actions.appendChild(connectBtn);
-      }
-
-      var removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "icon-btn small";
-      removeBtn.title = I18N.t("common.remove");
-      removeBtn.setAttribute("aria-label", I18N.t("servers.removeAriaLabel", { name: server.name }));
-      removeBtn.textContent = "×";
-      removeBtn.addEventListener("click", function () { removeServer(server.id); });
-      actions.appendChild(removeBtn);
-
-      card.appendChild(actions);
-      serverGrid.appendChild(card);
+      row.addEventListener("click", function () { selectServer(server.id); });
+      serverList.appendChild(row);
     });
   }
 
@@ -599,6 +585,7 @@
       .then(function (list) {
         servers = list || [];
         renderServers();
+        renderContent();
         addModal.close();
       })
       .catch(function (err) {
@@ -632,6 +619,7 @@
       .then(function (srv) {
         servers.push(srv);
         renderServers();
+        renderContent();
         manualForm.reset();
         addModal.close();
       })
@@ -639,61 +627,83 @@
   });
 
   // --- view switching ---
-  // Going back to the server list never closes any open console — it just
-  // switches which view is visible. Multiple consoles can stay connected
-  // in the background at once.
+  // Selecting a server never closes any other open console — it just
+  // changes which one is shown. Multiple consoles can stay connected in
+  // the background at once; switching views (Servers/Settings/Admin)
+  // doesn't touch them either.
+
+  function setActiveNav(btn) {
+    [navServersBtn, navSettingsBtn, adminNavBtn].forEach(function (b) {
+      if (b === btn) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
+  }
 
   function showLoginView() {
-    if (infoModal.open) infoModal.close();
-    viewConsole.hidden = true;
-    viewServers.hidden = true;
+    viewApp.hidden = true;
+    viewSettings.hidden = true;
     viewRegister.hidden = true;
     viewAdmin.hidden = true;
     viewLogin.hidden = false;
     usernameLabel.hidden = true;
     logoutBtn.hidden = true;
+    navServersBtn.hidden = true;
     adminNavBtn.hidden = true;
+    addServerBtn.hidden = true;
     accountDangerZone.hidden = true;
+    accountCard.hidden = true;
   }
 
   function showRegisterView() {
-    if (infoModal.open) infoModal.close();
-    viewConsole.hidden = true;
-    viewServers.hidden = true;
+    viewApp.hidden = true;
+    viewSettings.hidden = true;
     viewLogin.hidden = true;
     registerError.hidden = true;
     viewRegister.hidden = false;
   }
 
-  function showServersView() {
-    if (infoModal.open) infoModal.close();
+  function showAppView() {
     viewLogin.hidden = true;
     viewRegister.hidden = true;
-    viewConsole.hidden = true;
+    viewSettings.hidden = true;
     viewAdmin.hidden = true;
-    viewServers.hidden = false;
+    viewApp.hidden = false;
     usernameLabel.hidden = false;
     usernameLabel.textContent = currentUsername;
     logoutBtn.hidden = false;
+    navServersBtn.hidden = false;
     adminNavBtn.hidden = !currentIsAdmin;
+    addServerBtn.hidden = false;
     accountDangerZone.hidden = false;
+    accountCard.hidden = false;
+    setActiveNav(navServersBtn);
     renderServers();
+    renderContent();
   }
 
-  backBtn.addEventListener("click", showServersView);
+  navServersBtn.addEventListener("click", showAppView);
+
+  function showSettingsView() {
+    viewLogin.hidden = true;
+    viewRegister.hidden = true;
+    viewApp.hidden = true;
+    viewAdmin.hidden = true;
+    viewSettings.hidden = false;
+    addServerBtn.hidden = true;
+    if (authToken) setActiveNav(navSettingsBtn);
+  }
 
   // --- admin panel ---
 
   function showAdminView() {
-    if (infoModal.open) infoModal.close();
     viewLogin.hidden = true;
     viewRegister.hidden = true;
-    viewServers.hidden = true;
-    viewConsole.hidden = true;
+    viewApp.hidden = true;
+    viewSettings.hidden = true;
     viewAdmin.hidden = false;
+    addServerBtn.hidden = true;
+    setActiveNav(adminNavBtn);
   }
-
-  adminBackBtn.addEventListener("click", showServersView);
 
   adminNavBtn.addEventListener("click", function () {
     loadAdminUsers();
@@ -778,26 +788,159 @@
     });
   }
 
-  // --- console (multiple, tabbed) ---
+  // --- server selection + detail pane ---
 
-  function openOrFocusConsole(server) {
-    if (!consoles[server.id]) createConsole(server);
-    activeConsoleId = server.id;
-    viewServers.hidden = true;
-    viewConsole.hidden = false;
-    renderConsoleTabs();
-    renderActiveConsole();
+  // A console entry, once created, stays around for the session (so its
+  // log history survives a manual disconnect) — "connected" is a
+  // question about the socket's readyState, not whether the entry exists.
+  function isConnected(id) {
+    var c = consoles[id];
+    return !!(c && c.socket && (c.socket.readyState === WebSocket.OPEN || c.socket.readyState === WebSocket.CONNECTING));
   }
 
-  function createConsole(server) {
-    var c = {
-      server: server,
-      socket: null,
-      lines: [],
-      pendingPlayersRequest: false,
-      authenticated: false,
-    };
-    consoles[server.id] = c;
+  function selectServer(id) {
+    selectedServerId = id;
+    var server = findServer(id);
+    if (server && server.has_password && !isConnected(id)) ensureConsole(server);
+    renderServers();
+    renderContent();
+  }
+
+  // --- password entry (server has no saved RCON password yet) ---
+
+  passwordForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var server = findServer(selectedServerId);
+    if (!server) return;
+    apiFetch("/api/servers/" + server.id + "/password", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: passwordInput.value }),
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error(I18N.t("errors.failedToSavePassword"));
+        server.has_password = true;
+        passwordInput.value = "";
+        ensureConsole(server);
+        renderServers();
+        renderContent();
+      })
+      .catch(function (err) { alert(err.message); });
+  });
+
+  // --- content pane rendering ---
+
+  function renderContent() {
+    var server = findServer(selectedServerId);
+    if (!server) selectedServerId = null;
+
+    contentEmpty.hidden = !!server;
+    contentPassword.hidden = true;
+    contentConsole.hidden = true;
+
+    if (!server) {
+      contentEmptyText.textContent = servers.length ? I18N.t("content.selectPrompt") : I18N.t("servers.emptyTitle");
+      emptyAddBtn.hidden = servers.length > 0;
+      return;
+    }
+
+    if (!server.has_password) {
+      contentPassword.hidden = false;
+      passwordServerName.textContent = server.name;
+      return;
+    }
+
+    contentConsole.hidden = false;
+    renderHead(server);
+    renderLog(consoles[server.id]);
+    updatePlayersCard(server);
+    updateCmdBarState();
+  }
+
+  function renderHead(server) {
+    head.innerHTML = "";
+
+    var h1 = document.createElement("h1");
+    var dot = document.createElement("span");
+    dot.className = "dot " + (isConnected(server.id) ? "on" : "off");
+    h1.appendChild(dot);
+    h1.appendChild(document.createTextNode(server.name));
+    head.appendChild(h1);
+
+    var protoTag = document.createElement("span");
+    protoTag.className = "tag tag-outline";
+    protoTag.textContent = server.protocol === "webrcon" ? "Rust WebRCON" : "Source RCON";
+    head.appendChild(protoTag);
+
+    if (server.source === "nitrado") {
+      var nitradoTag = document.createElement("span");
+      nitradoTag.className = "tag tag-accent";
+      nitradoTag.textContent = "Nitrado";
+      head.appendChild(nitradoTag);
+    }
+
+    var hostTag = document.createElement("span");
+    hostTag.className = "tag tag-neutral mono";
+    hostTag.textContent = server.host + ":" + server.port;
+    head.appendChild(hostTag);
+
+    var actions = document.createElement("div");
+    actions.className = "head-actions";
+
+    var toggleBtn = document.createElement("button");
+    toggleBtn.type = "button";
+    toggleBtn.className = "btn-secondary";
+    if (isConnected(server.id)) {
+      toggleBtn.textContent = I18N.t("content.disconnect");
+      toggleBtn.addEventListener("click", function () {
+        if (consoles[server.id] && consoles[server.id].socket) consoles[server.id].socket.close();
+        renderServers();
+        renderContent();
+      });
+    } else {
+      toggleBtn.textContent = I18N.t("servers.connect");
+      toggleBtn.addEventListener("click", function () {
+        ensureConsole(server);
+        renderServers();
+        renderContent();
+      });
+    }
+    actions.appendChild(toggleBtn);
+
+    var removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn-secondary btn-danger";
+    removeBtn.textContent = I18N.t("common.remove");
+    removeBtn.setAttribute("aria-label", I18N.t("servers.removeAriaLabel", { name: server.name }));
+    removeBtn.addEventListener("click", function () { removeServer(server.id); });
+    actions.appendChild(removeBtn);
+
+    head.appendChild(actions);
+  }
+
+  function updateCmdBarState() {
+    var c = consoles[selectedServerId];
+    var ready = !!(c && c.socket && c.socket.readyState === WebSocket.OPEN);
+    cmdSendBtn.disabled = !ready;
+  }
+
+  // --- console (background sockets keyed by server id) ---
+  // An entry, once created, is kept around for the whole session so its
+  // log history survives a manual disconnect — reconnecting reuses the
+  // same entry and appends to the same log instead of starting fresh.
+
+  function ensureConsole(server) {
+    var c = consoles[server.id];
+    if (!c) {
+      c = {
+        server: server,
+        socket: null,
+        lines: [],
+        pendingPlayersRequest: false,
+        authenticated: false,
+      };
+      consoles[server.id] = c;
+    }
     appendConsoleLine(c, "system", I18N.t("console.connecting"));
 
     var socket = new WebSocket(relayWsUrl() + "/ws/rcon");
@@ -822,6 +965,7 @@
         socket.send(JSON.stringify({ type: "connect", server_id: server.id }));
       } else if (msg.type === "connected") {
         appendConsoleLine(c, "system", I18N.t("console.connected"));
+        renderServers();
       } else if (msg.type === "response") {
         appendConsoleLine(c, "response", msg.output && msg.output.length ? msg.output : I18N.t("console.noOutput"));
         if (c.pendingPlayersRequest) {
@@ -835,7 +979,7 @@
         appendConsoleLine(c, "error", msg.message);
         if (c.pendingPlayersRequest) {
           c.pendingPlayersRequest = false;
-          if (activeConsoleId === server.id) playersPanel.innerHTML = "";
+          if (selectedServerId === server.id) playersPanel.innerHTML = "";
         }
       }
       refreshIfActive(c);
@@ -843,8 +987,8 @@
 
     socket.addEventListener("close", function () {
       appendConsoleLine(c, "system", I18N.t("console.disconnected"));
-      refreshIfActive(c);
-      if (viewServers.hidden === false) renderServers();
+      renderServers();
+      if (selectedServerId === server.id) renderContent();
     });
 
     socket.addEventListener("error", function () {
@@ -853,73 +997,15 @@
     });
   }
 
-  function closeConsoleFor(id) {
-    var c = consoles[id];
-    if (!c) return;
-    if (c.socket) c.socket.close();
-    delete consoles[id];
-    renderConsoleTabs();
-
-    if (activeConsoleId === id) {
-      var remaining = Object.keys(consoles);
-      if (remaining.length) {
-        activeConsoleId = remaining[0];
-        renderConsoleTabs();
-        renderActiveConsole();
-      } else {
-        activeConsoleId = null;
-        showServersView();
-      }
-    }
-  }
-
   function appendConsoleLine(c, kind, text) {
     c.lines.push({ kind: kind, text: text });
   }
 
   function refreshIfActive(c) {
-    if (activeConsoleId === c.server.id) renderActiveConsole();
-  }
-
-  function renderConsoleTabs() {
-    consoleTabs.innerHTML = "";
-    Object.keys(consoles).forEach(function (id) {
-      var c = consoles[id];
-      var tab = document.createElement("button");
-      tab.type = "button";
-      tab.className = "console-tab" + (id === String(activeConsoleId) ? " active" : "");
-      tab.setAttribute("role", "tab");
-      tab.setAttribute("aria-selected", id === String(activeConsoleId) ? "true" : "false");
-      tab.addEventListener("click", function () {
-        activeConsoleId = c.server.id;
-        renderConsoleTabs();
-        renderActiveConsole();
-      });
-
-      tab.appendChild(document.createTextNode(c.server.name));
-
-      var closeBtn = document.createElement("span");
-      closeBtn.className = "tab-close";
-      closeBtn.textContent = "×";
-      closeBtn.setAttribute("role", "button");
-      closeBtn.setAttribute("aria-label", "Disconnect " + c.server.name);
-      closeBtn.addEventListener("click", function (e) {
-        e.stopPropagation();
-        closeConsoleFor(c.server.id);
-      });
-      tab.appendChild(closeBtn);
-
-      consoleTabs.appendChild(tab);
-    });
-  }
-
-  function renderActiveConsole() {
-    var c = consoles[activeConsoleId];
-    if (!c) return;
-    consoleTitle.textContent = c.server.name;
-    consoleBadge.textContent = serverMeta(c.server);
-    gameSelect.value = window.NICON_GUESS_GAME(c.server.game);
-    renderLog(c);
+    if (selectedServerId === c.server.id) {
+      renderLog(c);
+      updateCmdBarState();
+    }
   }
 
   // --- console log: filtering + highlighting ---
@@ -936,6 +1022,7 @@
 
   function renderLog(c) {
     log.innerHTML = "";
+    if (!c) return;
     var regex = activeFilterRegex();
 
     c.lines.forEach(function (line) {
@@ -975,17 +1062,15 @@
   }
 
   filterInput.addEventListener("input", function () {
-    var c = consoles[activeConsoleId];
-    if (c) renderLog(c);
+    renderLog(consoles[selectedServerId]);
   });
 
-  // --- players info modal ---
+  // --- players card (inline, next to the console) ---
 
-  infoBtn.addEventListener("click", function () { infoModal.showModal(); });
-  infoClose.addEventListener("click", function () { infoModal.close(); });
-  infoModal.addEventListener("click", function (e) {
-    if (e.target === infoModal) infoModal.close();
-  });
+  function updatePlayersCard(server) {
+    gameSelect.value = window.NICON_GUESS_GAME(server.game);
+    playersPanel.innerHTML = "";
+  }
 
   function renderPlayersPanel(rawOutput) {
     playersPanel.innerHTML = "";
@@ -1033,7 +1118,7 @@
   }
 
   playersBtn.addEventListener("click", function () {
-    var c = consoles[activeConsoleId];
+    var c = consoles[selectedServerId];
     if (!c || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
     var key = gameSelect.value;
     if (!key) return;
@@ -1048,7 +1133,7 @@
 
   cmdForm.addEventListener("submit", function (e) {
     e.preventDefault();
-    var c = consoles[activeConsoleId];
+    var c = consoles[selectedServerId];
     var command = cmdInput.value.trim();
     if (!command || !c || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
     appendConsoleLine(c, "sent", "> " + command);
@@ -1064,7 +1149,7 @@
   checkRelay();
   if (authToken) {
     loadServers()
-      .then(function () { showServersView(); })
+      .then(function () { showAppView(); })
       .catch(function () { /* apiFetch already routes 401s to sessionExpired() */ });
   } else {
     showLoginView();

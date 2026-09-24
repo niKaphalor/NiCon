@@ -5,16 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NiCon</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <header class="topbar">
   <span class="wordmark">NiCon</span>
+  <nav class="topbar-nav" aria-label="Main">
+    <button type="button" id="nav-servers-btn" class="navlink" data-i18n="servers.title" hidden>Servers</button>
+    <button type="button" id="nav-settings-btn" class="navlink" data-i18n="settings.navLabel">Settings</button>
+    <button type="button" id="admin-nav-btn" class="navlink" data-i18n="admin.navLabel" hidden>Admin</button>
+  </nav>
   <div class="topbar-right">
     <span id="username-label" class="hint" hidden></span>
-    <button type="button" id="admin-nav-btn" class="link-button" data-i18n="admin.navLabel" hidden>Admin</button>
     <button type="button" id="logout-btn" class="link-button" data-i18n="nav.signOut" hidden>Sign out</button>
     <select id="lang-select" class="lang-select" aria-label="Language" data-i18n-aria-label="nav.language">
       <option value="en">EN</option>
@@ -26,7 +30,7 @@
     <button type="button" id="relay-pill" class="relay-pill status-unknown">
       <span class="dot"></span> <span data-i18n="nav.relay">relay</span>
     </button>
-    <button type="button" id="settings-btn" class="icon-btn" aria-label="Connection settings" title="Connection settings" data-i18n-aria-label="nav.connectionSettings" data-i18n-title="nav.connectionSettings">⚙</button>
+    <button type="button" id="add-server-btn" class="btn-primary" data-i18n="servers.addServer" hidden>+ Add server</button>
   </div>
 </header>
 
@@ -34,7 +38,7 @@
   <p>
     <span data-i18n="banner.apiUnreachable">NiCon can't reach its cloud API — sign-in, your server list, and account management won't work until it's reachable.</span>
     <span data-i18n="banner.apiThenCheck">Check the address in</span>
-    <button type="button" id="api-banner-settings-btn" class="link-button" data-i18n="nav.settingsLink">settings</button>.
+    <button type="button" id="api-banner-settings-btn" class="link-button" data-i18n="settings.navLabel">settings</button>.
   </p>
 </div>
 
@@ -43,7 +47,7 @@
     <span data-i18n="banner.unreachable">NiCon can't reach its local relay — you can still sign in and manage your server list, but connecting to a server's console needs it running.</span>
     <a href="https://github.com/niKaphalor/NiCon#relay" target="_blank" rel="noopener" data-i18n="banner.getItHere">Get it here</a>,
     <span data-i18n="banner.thenCheck">then check the address in</span>
-    <button type="button" id="banner-settings-btn" class="link-button" data-i18n="nav.settingsLink">settings</button>.
+    <button type="button" id="banner-settings-btn" class="link-button" data-i18n="settings.navLabel">settings</button>.
     <span data-i18n="banner.lnaHint">If your browser shows a "local network" permission prompt, allow it — NiCon can't connect to a server without it.</span>
   </p>
 </div>
@@ -83,62 +87,124 @@
     </div>
   </section>
 
-  <section id="view-servers" class="view" hidden>
-    <div class="view-header">
-      <h1 data-i18n="servers.title">Servers</h1>
-      <button type="button" id="add-server-btn" class="btn-primary" data-i18n="servers.addServer">+ Add server</button>
-    </div>
-    <p class="hint view-subhead"><span data-i18n="servers.subheadPart1">Your server list and RCON passwords are stored for your account only — no one else can see, edit, or connect through them.</span> <span data-i18n="servers.seeThe">See the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a> <span data-i18n="servers.subheadPart2">for details, or delete your account any time in</span> <button type="button" id="open-settings-from-subhead" class="link-button" data-i18n="nav.settingsLink">settings</button>.</p>
+  <section id="view-app" class="view" hidden>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="search">
+          <input id="server-search" type="text" placeholder="Search servers…" autocomplete="off" aria-label="Search servers" data-i18n-placeholder="servers.searchPlaceholder" data-i18n-aria-label="servers.searchPlaceholder">
+        </div>
+        <div class="server-list" id="server-list"></div>
+      </aside>
 
-    <div id="server-grid" class="server-grid"></div>
+      <main class="content" id="content">
+        <div id="content-empty" class="content-empty" hidden>
+          <p class="hint" id="content-empty-text"></p>
+          <button type="button" id="empty-add-btn" class="btn-primary" data-i18n="servers.emptyAdd" hidden>+ Add a server</button>
+        </div>
 
-    <div id="empty-state" class="empty-state" hidden>
-      <p data-i18n="servers.emptyTitle">No servers yet.</p>
-      <button type="button" id="empty-add-btn" class="btn-primary" data-i18n="servers.emptyAdd">+ Add a server</button>
+        <div id="content-password" class="card password-card" hidden>
+          <div class="card-title" id="password-server-name"></div>
+          <p class="card-body" data-i18n="content.passwordHint">Enter this server's RCON password to connect.</p>
+          <form id="password-form" class="stacked-form">
+            <input id="password-input" type="password" placeholder="RCON password" required autocomplete="off" aria-label="RCON password" data-i18n-placeholder="common.rconPassword" data-i18n-aria-label="common.rconPassword">
+            <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
+          </form>
+        </div>
+
+        <div id="content-console" hidden>
+          <div class="head" id="head"></div>
+          <div class="work">
+            <div class="console">
+              <div class="console-toolbar">
+                <input id="filter-input" type="text" placeholder="Filter (regex)…" aria-label="Filter console output" data-i18n-placeholder="console.filterPlaceholder">
+              </div>
+              <div id="log" class="console-log" role="log" aria-live="polite"></div>
+              <form id="cmd-form" class="cmd-bar">
+                <input id="cmd-input" type="text" autocomplete="off" placeholder="Type a command…" aria-label="RCON command" data-i18n-placeholder="console.commandPlaceholder">
+                <button type="submit" data-i18n="console.send">Send</button>
+              </form>
+            </div>
+
+            <div class="card players-card">
+              <div class="card-kicker" data-i18n="console.players">Players</div>
+              <p class="hint" data-i18n="info.parsingHint">Parsing is best-effort, based on documented command formats, not verified against a live server of each game — if it looks wrong, the raw response is still visible in the console.</p>
+              <div class="form-row">
+                <select id="game-select" aria-label="Game" data-i18n-aria-label="info.gameAriaLabel">
+                  <option value="" data-i18n="info.genericOption">Generic (no parsing)</option>
+                  <option value="minecraft">Minecraft</option>
+                  <option value="rust">Rust</option>
+                  <option value="ark">ARK: Survival Evolved</option>
+                  <option value="palworld">Palworld</option>
+                </select>
+                <button type="button" id="players-btn" class="btn-primary" data-i18n="info.showPlayers">Show players</button>
+              </div>
+              <div id="players-panel"></div>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   </section>
 
-  <section id="view-console" class="view" hidden>
-    <div class="console-header">
-      <button type="button" id="back-btn" class="link-button" data-i18n="console.back">← Servers</button>
-      <div class="console-heading">
-        <h1 id="console-title"></h1>
-        <span id="console-badge" class="badge"></span>
+  <section id="view-settings" class="view" hidden>
+    <div class="settings-page">
+      <div class="settings-inner">
+        <h1 data-i18n="settings.title">Connection</h1>
+
+        <div class="card">
+          <div class="card-kicker" data-i18n="settings.apiTitle">Cloud API</div>
+          <p class="card-body" data-i18n="settings.apiHint">Handles sign-in, your account, and your server list — a normal web address, reachable whether or not your computer is on.</p>
+          <form id="api-form" class="form-row">
+            <input id="api-url" type="text" value="https://nicon.mylss.de" aria-label="Cloud API address" data-i18n-aria-label="settings.apiAddressAriaLabel">
+            <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-kicker" data-i18n="settings.relayTitle">Relay</div>
+          <p class="card-body">
+            <span data-i18n="settings.hintBefore">NiCon needs a small local relay running on your machine to actually speak RCON to a server — browsers can't open raw TCP or WebRCON sockets on their own.</span>
+            <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener" data-i18n="settings.getItHereLink">Get it here.</a>
+          </p>
+          <form id="relay-form" class="form-row">
+            <input id="relay-url" type="text" value="http://localhost:8765" aria-label="Relay address" data-i18n-aria-label="settings.relayAddressAriaLabel">
+            <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
+          </form>
+        </div>
+
+        <div id="account-card" class="card" hidden>
+          <div class="card-kicker" data-i18n="settings.privacyKicker">Privacy</div>
+          <p class="card-body"><span data-i18n="servers.subheadPart1">Your server list and RCON passwords are stored for your account only — no one else can see, edit, or connect through them.</span> <span data-i18n="servers.seeThe">See the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a><span data-i18n="settings.privacyForDetails"> for details.</span></p>
+        </div>
+
+        <div id="account-danger-zone" class="card danger-card" hidden>
+          <div class="card-kicker" data-i18n="settings.deleteAccountTitle">Delete account</div>
+          <p class="card-body" data-i18n="settings.deleteAccountHint">Permanently deletes your account and every server you've added — RCON passwords included. This can't be undone.</p>
+          <button type="button" id="delete-account-btn" class="btn-secondary btn-danger" data-i18n="settings.deleteAccountButton">Delete my account</button>
+        </div>
       </div>
-      <button type="button" id="info-btn" class="btn-secondary" data-i18n="console.players">Players</button>
     </div>
-
-    <div id="console-tabs" class="console-tabs" role="tablist" aria-label="Open server consoles"></div>
-
-    <div class="console-toolbar">
-      <input id="filter-input" type="text" placeholder="Filter (regex)…" aria-label="Filter console output" data-i18n-placeholder="console.filterPlaceholder">
-    </div>
-
-    <div id="log" class="console-log" role="log" aria-live="polite"></div>
-    <form id="cmd-form" class="cmd-bar">
-      <input id="cmd-input" type="text" autocomplete="off" placeholder="Type a command…" aria-label="RCON command" data-i18n-placeholder="console.commandPlaceholder">
-      <button type="submit" data-i18n="console.send">Send</button>
-    </form>
   </section>
 
   <section id="view-admin" class="view" hidden>
-    <div class="view-header">
-      <h1 data-i18n="admin.title">Admin</h1>
-      <button type="button" id="admin-back-btn" class="link-button" data-i18n="admin.backToServers">← Servers</button>
+    <div class="admin-page">
+      <div class="view-header">
+        <h1 data-i18n="admin.title">Admin</h1>
+      </div>
+      <p class="hint view-subhead" data-i18n="admin.subhead">Every account on this NiCon instance. Regenerating a code or deleting an account takes effect immediately — hand any regenerated code to that person yourself, there's no email to send it to.</p>
+      <table class="admin-users-table">
+        <thead>
+          <tr>
+            <th data-i18n="common.username">Username</th>
+            <th data-i18n="admin.colCreated">Created</th>
+            <th data-i18n="admin.colServers">Servers</th>
+            <th data-i18n="admin.colRole">Role</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="admin-users-body"></tbody>
+      </table>
     </div>
-    <p class="hint view-subhead" data-i18n="admin.subhead">Every account on this relay. Regenerating a code or deleting an account takes effect immediately — hand any regenerated code to that person yourself, there's no email to send it to.</p>
-    <table class="admin-users-table">
-      <thead>
-        <tr>
-          <th data-i18n="common.username">Username</th>
-          <th data-i18n="admin.colCreated">Created</th>
-          <th data-i18n="admin.colServers">Servers</th>
-          <th data-i18n="admin.colRole">Role</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="admin-users-body"></tbody>
-    </table>
   </section>
 </main>
 
@@ -184,7 +250,7 @@
   </div>
 
   <div class="tab-panel" data-panel="nitrado">
-    <p class="hint" data-i18n="addModal.nitradoHint">Your token is sent once to the relay to list servers whose current game supports RCON, then discarded — nothing is stored, here or there.</p>
+    <p class="hint" data-i18n="addModal.nitradoHint">Your token is sent once to the cloud API to list servers whose current game supports RCON, then discarded — nothing is stored, here or there.</p>
     <form id="nitrado-form" class="stacked-form">
       <input id="nitrado-token" type="password" placeholder="Nitrado API token" autocomplete="off" aria-label="Nitrado API token" data-i18n-placeholder="addModal.nitradoTokenPlaceholder" data-i18n-aria-label="addModal.nitradoTokenPlaceholder">
       <button type="submit" class="btn-primary" data-i18n="addModal.syncServers">Sync servers</button>
@@ -206,59 +272,6 @@
       <button type="submit" class="btn-primary" data-i18n="addModal.addServerSubmit">Add server</button>
     </form>
   </div>
-</dialog>
-
-<dialog id="settings-modal">
-  <div class="modal-header">
-    <h2 data-i18n="settings.title">Connection</h2>
-    <button type="button" id="settings-close" class="link-button" data-i18n="common.close">Close</button>
-  </div>
-
-  <h3 data-i18n="settings.apiTitle">Cloud API</h3>
-  <p class="hint" data-i18n="settings.apiHint">Handles sign-in, your account, and your server list — a normal web address, reachable whether or not your computer is on.</p>
-  <form id="api-form" class="form-row">
-    <input id="api-url" type="text" value="https://nicon.mylss.de" aria-label="Cloud API address" data-i18n-aria-label="settings.apiAddressAriaLabel">
-    <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
-  </form>
-
-  <h3 data-i18n="settings.relayTitle">Relay</h3>
-  <p class="hint">
-    <span data-i18n="settings.hintBefore">NiCon needs a small local relay running on your machine to actually speak RCON to a server — browsers can't open raw TCP or WebRCON sockets on their own.</span>
-    <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener" data-i18n="settings.getItHereLink">Get it here.</a>
-  </p>
-  <form id="relay-form" class="form-row">
-    <input id="relay-url" type="text" value="http://localhost:8765" aria-label="Relay address" data-i18n-aria-label="settings.relayAddressAriaLabel">
-    <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
-  </form>
-
-  <div id="account-danger-zone" class="danger-zone" hidden>
-    <h3 data-i18n="settings.deleteAccountTitle">Delete account</h3>
-    <p class="hint" data-i18n="settings.deleteAccountHint">Permanently deletes your account and every server you've added — RCON passwords included. This can't be undone.</p>
-    <button type="button" id="delete-account-btn" class="btn-secondary btn-danger" data-i18n="settings.deleteAccountButton">Delete my account</button>
-  </div>
-</dialog>
-
-<dialog id="info-modal">
-  <div class="modal-header">
-    <h2 data-i18n="console.players">Players</h2>
-    <button type="button" id="info-close" class="link-button" data-i18n="common.close">Close</button>
-  </div>
-  <p class="hint" data-i18n="info.parsingHint">
-    Parsing is best-effort, based on documented command formats, not
-    verified against a live server of each game — if it looks wrong, the
-    raw response is still visible in the console.
-  </p>
-  <div class="form-row">
-    <select id="game-select" aria-label="Game" data-i18n-aria-label="info.gameAriaLabel">
-      <option value="" data-i18n="info.genericOption">Generic (no parsing)</option>
-      <option value="minecraft">Minecraft</option>
-      <option value="rust">Rust</option>
-      <option value="ark">ARK: Survival Evolved</option>
-      <option value="palworld">Palworld</option>
-    </select>
-    <button type="button" id="players-btn" class="btn-primary" data-i18n="info.showPlayers">Show players</button>
-  </div>
-  <div id="players-panel"></div>
 </dialog>
 
 <footer class="site-footer">
