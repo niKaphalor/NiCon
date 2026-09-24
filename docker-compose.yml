@@ -1,0 +1,32 @@
+# Runs the relay behind Caddy, which handles TLS automatically (Let's
+# Encrypt) — needed because the frontend is served over https, and a
+# browser page loaded over https can only open a *secure* WebSocket
+# (wss://) to anything other than localhost. See README.md's "Running the
+# relay in Docker" section for the one-time setup this depends on
+# (a .env file, and the domain in Caddyfile).
+
+services:
+  relay:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "8765"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - relay
+
+volumes:
+  caddy_data:
+  caddy_config:

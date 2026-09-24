@@ -287,6 +287,47 @@ Cloud API), so they work the same way regardless of which machine you run
 them from, as long as `-db-dsn`/`-encryption-key` point at the right
 database.
 
+### Running the relay in Docker (e.g. on a cloud VM)
+
+The relay doesn't have to run on your own machine — an always-on VM (a
+cloud provider's free tier works fine, since the relay is tiny and mostly
+idle) is a reasonable place for it too. Two things are different from a
+local run, though:
+
+- **It needs TLS.** The frontend is served over `https://`, and a page
+  loaded over `https://` may only open a *secure* WebSocket (`wss://`) to
+  anything other than `localhost` — browsers block a plain `ws://`
+  connection to a public host as mixed content. `docker-compose.yml` runs
+  [Caddy](https://caddyserver.com/) in front of the relay for exactly
+  this: it gets a Let's Encrypt certificate automatically and proxies
+  straight through (WebSocket included, no extra config needed).
+- **Its port(s) need to be reachable from the internet** — both `80` and
+  `443` (Caddy needs `80` for the ACME HTTP challenge, then serves on
+  `443`), through whatever firewall(s) sit in front of the VM. Cloud
+  providers commonly filter inbound traffic in *two* places — a
+  cloud-level firewall/security-group **and** the VM's own OS firewall
+  (`iptables`/`ufw`/`firewalld`) — and both need the rule, not just one.
+
+Setup, once Docker (with the `compose` plugin) is installed and you've
+cloned this repo onto the VM:
+
+```sh
+cp .env.example .env
+# edit .env: NICON_DB_DSN, NICON_ENCRYPTION_KEY (same as the Cloud API's
+# config.local.php), and RELAY_DOMAIN — a hostname that resolves to this
+# VM's public IP. No domain of your own? relay.<public-ip>.sslip.io
+# resolves to <public-ip> for free, no setup, and works fine with Caddy.
+
+docker compose up -d --build
+docker compose logs -f caddy   # first run: watch it obtain the certificate
+```
+
+Once it's up, `https://<RELAY_DOMAIN>/healthz` should return `ok`. Put
+`https://<RELAY_DOMAIN>` in the frontend's Settings → Relay address field,
+in place of `http://localhost:8765` — the frontend derives the `wss://`
+WebSocket URL from it automatically, the same way it derives `ws://` from
+`http://localhost:8765` today.
+
 ## User accounts
 
 Anyone who can reach the frontend can create their own account from the
