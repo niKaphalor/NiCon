@@ -28,12 +28,12 @@
       </button>
       <ul id="lang-options" class="lang-options" role="listbox" hidden></ul>
     </div>
-    <button type="button" id="api-pill" class="relay-pill status-unknown">
+    <span id="api-pill" class="relay-pill status-unknown">
       <span class="dot"></span> <span data-i18n="nav.api">API</span>
-    </button>
-    <button type="button" id="relay-pill" class="relay-pill status-unknown">
+    </span>
+    <span id="relay-pill" class="relay-pill status-unknown">
       <span class="dot"></span> <span data-i18n="nav.relay">relay</span>
-    </button>
+    </span>
     <button type="button" id="notifications-bell-btn" class="icon-btn" aria-label="Notifications" data-i18n-aria-label="notifications.bellAriaLabel" hidden>
       <svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.8,175.94C216.25,166.38,208,139.33,208,104a80,80,0,1,0-160,0c0,35.34-8.26,62.38-13.81,71.94A16,16,0,0,0,48,200H88.81a40,40,0,0,0,78.38,0H208a16,16,0,0,0,13.8-24.06ZM128,216a24,24,0,0,1-22.62-16h45.24A24,24,0,0,1,128,216ZM48,184c7.7-13.24,16-43.92,16-80a64,64,0,1,1,128,0c0,36.05,8.28,66.73,16,80Z"/></svg>
       <span id="notifications-badge" class="notif-badge" hidden></span>
@@ -43,21 +43,11 @@
 </header>
 
 <div id="api-banner" class="relay-banner" hidden>
-  <p>
-    <span data-i18n="banner.apiUnreachable">NiCon can't reach its cloud API — sign-in, your server list, and account management won't work until it's reachable.</span>
-    <span data-i18n="banner.apiThenCheck">Check the address in</span>
-    <button type="button" id="api-banner-settings-btn" class="link-button" data-i18n="settings.navLabel">settings</button>.
-  </p>
+  <p data-i18n="banner.apiUnreachable">NiCon can't reach its cloud API right now — sign-in, your server list, and account management won't work until it's back. Try again in a moment.</p>
 </div>
 
 <div id="relay-banner" class="relay-banner" hidden>
-  <p>
-    <span data-i18n="banner.unreachable">NiCon can't reach its relay — you can still sign in and manage your server list, but connecting to a server's console needs it running.</span>
-    <a href="https://github.com/niKaphalor/NiCon#relay" target="_blank" rel="noopener" data-i18n="banner.getItHere">Get it here</a>,
-    <span data-i18n="banner.thenCheck">then check the address in</span>
-    <button type="button" id="banner-settings-btn" class="link-button" data-i18n="settings.navLabel">settings</button>.
-    <span data-i18n="banner.lnaHint">If your browser shows a "local network" permission prompt, allow it — NiCon can't connect to a server without it.</span>
-  </p>
+  <p data-i18n="banner.unreachable">NiCon can't reach its relay right now — you can still sign in and manage your server list, but connecting to a server's console needs it. Try again in a moment.</p>
 </div>
 
 
@@ -187,68 +177,36 @@
       <div class="settings-inner">
         <h1 data-i18n="settings.title">Settings</h1>
 
-        <div class="settings-columns">
-          <div class="settings-col">
-            <div id="account-card" class="card" hidden>
-              <div class="card-kicker" data-i18n="settings.accountKicker">Account</div>
-              <p class="card-body" id="account-username-line"></p>
+        <div class="settings-col">
+          <div id="account-card" class="card" hidden>
+            <div class="card-kicker" data-i18n="settings.accountKicker">Account</div>
+            <p class="card-body" id="account-username-line"></p>
 
-              <form id="change-username-form" class="stacked-form">
-                <input id="new-username-input" type="text" placeholder="New username (3–32 characters)" required autocomplete="off" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.\-]+" aria-label="New username" data-i18n-placeholder="settings.newUsernamePlaceholder" data-i18n-aria-label="settings.newUsernamePlaceholder">
-                <input id="username-current-password-input" type="password" placeholder="Current password" required autocomplete="current-password" aria-label="Current password" data-i18n-placeholder="settings.currentPasswordPlaceholder" data-i18n-aria-label="settings.currentPasswordPlaceholder">
-                <button type="submit" class="btn-secondary" data-i18n="settings.changeUsernameButton">Change username</button>
-              </form>
-              <p id="change-username-error" class="hint login-error" hidden></p>
+            <form id="change-username-form" class="stacked-form">
+              <input id="new-username-input" type="text" placeholder="New username (3–32 characters)" required autocomplete="off" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.\-]+" aria-label="New username" data-i18n-placeholder="settings.newUsernamePlaceholder" data-i18n-aria-label="settings.newUsernamePlaceholder">
+              <input id="username-current-password-input" type="password" placeholder="Current password" required autocomplete="current-password" aria-label="Current password" data-i18n-placeholder="settings.currentPasswordPlaceholder" data-i18n-aria-label="settings.currentPasswordPlaceholder">
+              <button type="submit" class="btn-secondary" data-i18n="settings.changeUsernameButton">Change username</button>
+            </form>
+            <p id="change-username-error" class="hint login-error" hidden></p>
 
-              <form id="change-password-form" class="stacked-form">
-                <input id="password-current-password-input" type="password" placeholder="Current password" required autocomplete="current-password" aria-label="Current password" data-i18n-placeholder="settings.currentPasswordPlaceholder" data-i18n-aria-label="settings.currentPasswordPlaceholder">
-                <input id="new-password-input" type="password" placeholder="New password (min. 8 characters)" required autocomplete="new-password" minlength="8" aria-label="New password" data-i18n-placeholder="reset.newPasswordPlaceholder" data-i18n-aria-label="reset.newPasswordPlaceholder">
-                <input id="new-password-confirm-input" type="password" placeholder="Confirm new password" required autocomplete="new-password" minlength="8" aria-label="Confirm new password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
-                <button type="submit" class="btn-secondary" data-i18n="settings.changePasswordButton">Change password</button>
-              </form>
-              <p id="change-password-error" class="hint login-error" hidden></p>
+            <form id="change-password-form" class="stacked-form">
+              <input id="password-current-password-input" type="password" placeholder="Current password" required autocomplete="current-password" aria-label="Current password" data-i18n-placeholder="settings.currentPasswordPlaceholder" data-i18n-aria-label="settings.currentPasswordPlaceholder">
+              <input id="new-password-input" type="password" placeholder="New password (min. 8 characters)" required autocomplete="new-password" minlength="8" aria-label="New password" data-i18n-placeholder="reset.newPasswordPlaceholder" data-i18n-aria-label="reset.newPasswordPlaceholder">
+              <input id="new-password-confirm-input" type="password" placeholder="Confirm new password" required autocomplete="new-password" minlength="8" aria-label="Confirm new password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
+              <button type="submit" class="btn-secondary" data-i18n="settings.changePasswordButton">Change password</button>
+            </form>
+            <p id="change-password-error" class="hint login-error" hidden></p>
 
-              <div id="account-danger-zone" class="card-section-danger" hidden>
-                <div class="card-kicker card-kicker-danger" data-i18n="settings.deleteAccountTitle">Delete account</div>
-                <p class="card-body" data-i18n="settings.deleteAccountHint">Permanently deletes your account and every server you've added — RCON passwords included. This can't be undone.</p>
-                <button type="button" id="delete-account-btn" class="btn-secondary btn-danger" data-i18n="settings.deleteAccountButton">Delete my account</button>
-              </div>
-            </div>
-
-            <div id="privacy-card" class="card" hidden>
-              <div class="card-kicker" data-i18n="settings.privacyKicker">Privacy</div>
-              <p class="card-body"><span data-i18n="servers.subheadPart1">Your server list and RCON passwords are stored for your account only — no one else can see, edit, or connect through them.</span> <span data-i18n="servers.seeThe">See the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a><span data-i18n="settings.privacyForDetails"> for details.</span></p>
+            <div id="account-danger-zone" class="card-section-danger" hidden>
+              <div class="card-kicker card-kicker-danger" data-i18n="settings.deleteAccountTitle">Delete account</div>
+              <p class="card-body" data-i18n="settings.deleteAccountHint">Permanently deletes your account and every server you've added — RCON passwords included. This can't be undone.</p>
+              <button type="button" id="delete-account-btn" class="btn-secondary btn-danger" data-i18n="settings.deleteAccountButton">Delete my account</button>
             </div>
           </div>
 
-          <div class="settings-col">
-            <div class="card">
-              <div class="card-kicker" data-i18n="settings.apiTitle">Cloud API</div>
-              <p class="card-body" data-i18n="settings.apiHint">Handles sign-in, your account, and your server list — a normal web address, reachable whether or not your computer is on.</p>
-              <form id="api-form" class="form-row">
-                <input id="api-url" type="text" value="https://nicon.mylss.de" aria-label="Cloud API address" data-i18n-aria-label="settings.apiAddressAriaLabel">
-                <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
-              </form>
-            </div>
-
-            <div class="card">
-              <div class="card-kicker" data-i18n="settings.relayTitle">Relay</div>
-              <p class="card-body">
-                <span data-i18n="settings.hintBefore">NiCon needs a relay — a small bridge process — to actually speak RCON to a server: browsers can't open raw TCP or WebRCON sockets on their own.</span>
-                <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener" data-i18n="settings.getItHereLink">Get it here.</a>
-              </p>
-              <div class="row">
-                <div class="segmented" id="relay-preset-group" role="radiogroup" aria-label="Relay preset">
-                  <label class="segment"><input type="radio" name="relay-preset" id="relay-preset-local" value="local"> <span data-i18n="settings.relayPresetLocal">Local</span></label>
-                  <label class="segment"><input type="radio" name="relay-preset" id="relay-preset-oracle" value="oracle"> <span data-i18n="settings.relayPresetOracle">Oracle Cloud</span></label>
-                  <label class="segment"><input type="radio" name="relay-preset" id="relay-preset-custom" value="custom"> <span data-i18n="settings.relayPresetCustom">Custom</span></label>
-                </div>
-              </div>
-              <form id="relay-form" class="form-row">
-                <input id="relay-url" type="text" value="http://localhost:8765" aria-label="Relay address" data-i18n-aria-label="settings.relayAddressAriaLabel">
-                <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
-              </form>
-            </div>
+          <div id="privacy-card" class="card" hidden>
+            <div class="card-kicker" data-i18n="settings.privacyKicker">Privacy</div>
+            <p class="card-body"><span data-i18n="servers.subheadPart1">Your server list and RCON passwords are stored for your account only — no one else can see, edit, or connect through them.</span> <span data-i18n="servers.seeThe">See the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a><span data-i18n="settings.privacyForDetails"> for details.</span></p>
           </div>
         </div>
       </div>

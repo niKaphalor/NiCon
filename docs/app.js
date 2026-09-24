@@ -58,18 +58,9 @@
 
   var apiPill = document.getElementById("api-pill");
   var apiBanner = document.getElementById("api-banner");
-  var apiBannerSettingsBtn = document.getElementById("api-banner-settings-btn");
-  var apiForm = document.getElementById("api-form");
-  var apiUrlInput = document.getElementById("api-url");
 
   var relayPill = document.getElementById("relay-pill");
   var relayBanner = document.getElementById("relay-banner");
-  var bannerSettingsBtn = document.getElementById("banner-settings-btn");
-  var relayForm = document.getElementById("relay-form");
-  var relayUrlInput = document.getElementById("relay-url");
-  var relayPresetLocal = document.getElementById("relay-preset-local");
-  var relayPresetOracle = document.getElementById("relay-preset-oracle");
-  var relayPresetCustom = document.getElementById("relay-preset-custom");
 
   var usernameLabel = document.getElementById("username-label");
   var logoutBtn = document.getElementById("logout-btn");
@@ -169,14 +160,18 @@
 
   var playersPanel = document.getElementById("players-panel");
 
-  // --- cloud API address + status ---
-  // Handles everything except the actual RCON connection: sign-in,
-  // account, server list. A normal HTTPS address, expected to be
-  // reachable at all times regardless of whether the local relay is
-  // running.
+  // --- cloud API + relay addresses ---
+  // Both fixed to this instance's own infrastructure — not user-
+  // configurable. Handles sign-in/account/server list (API, HTTPS,
+  // always-on) and the actual WebSocket<->RCON bridge (relay) separately;
+  // see checkApi()/checkRelay() below for why each gets its own status
+  // pill even though neither address can be changed from the UI anymore.
+
+  var API_URL = "https://nicon.mylss.de";
+  var RELAY_URL = "https://relay.130.61.8.150.sslip.io";
 
   function apiHttpUrl() {
-    return apiUrlInput.value.replace(/\/+$/, "");
+    return API_URL;
   }
 
   function setApiStatus(ok) {
@@ -190,30 +185,8 @@
       .catch(function () { setApiStatus(false); });
   }
 
-  apiForm.addEventListener("submit", function (e) {
-    e.preventDefault();
-    checkApi();
-  });
-
-  // --- relay address + status ---
-  // Only used for the actual WebSocket<->RCON bridge (createConsole
-  // below) — everything else goes through the cloud API. The address
-  // itself is remembered per-browser (localStorage) so picking a preset
-  // sticks across reloads instead of resetting to the page's default.
-
-  var RELAY_URL_KEY = "nicon_relay_url";
-  var RELAY_PRESETS = {
-    local: "http://localhost:8765",
-    oracle: "https://relay.130.61.8.150.sslip.io",
-  };
-
-  try {
-    var savedRelayUrl = localStorage.getItem(RELAY_URL_KEY);
-    if (savedRelayUrl) relayUrlInput.value = savedRelayUrl;
-  } catch (e) { /* ignore — falls back to the page's default */ }
-
   function relayHttpUrl() {
-    return relayUrlInput.value.replace(/\/+$/, "");
+    return RELAY_URL;
   }
 
   function relayWsUrl() {
@@ -230,38 +203,6 @@
       .then(function (r) { setRelayStatus(r.ok); })
       .catch(function () { setRelayStatus(false); });
   }
-
-  function saveRelayUrl() {
-    try { localStorage.setItem(RELAY_URL_KEY, relayUrlInput.value); } catch (e) { /* ignore */ }
-  }
-
-  // Reflects the current address in the radio group — "custom" covers
-  // both an intentionally custom address and the page's initial default
-  // before any preset has been picked.
-  function syncRelayPreset() {
-    var url = relayUrlInput.value.replace(/\/+$/, "");
-    if (url === RELAY_PRESETS.local) relayPresetLocal.checked = true;
-    else if (url === RELAY_PRESETS.oracle) relayPresetOracle.checked = true;
-    else relayPresetCustom.checked = true;
-  }
-  syncRelayPreset();
-
-  [relayPresetLocal, relayPresetOracle, relayPresetCustom].forEach(function (radio) {
-    radio.addEventListener("change", function () {
-      if (radio === relayPresetLocal) relayUrlInput.value = RELAY_PRESETS.local;
-      else if (radio === relayPresetOracle) relayUrlInput.value = RELAY_PRESETS.oracle;
-      else { relayUrlInput.focus(); return; } // "custom" — just hand back to the text field
-      saveRelayUrl();
-      checkRelay();
-    });
-  });
-
-  relayForm.addEventListener("submit", function (e) {
-    e.preventDefault();
-    saveRelayUrl();
-    syncRelayPreset();
-    checkRelay();
-  });
 
   // --- language ---
   // A custom dropdown rather than a native <select> — the language name is
@@ -340,10 +281,6 @@
     if (authToken) accountUsernameLine.textContent = I18N.t("settings.accountUsernameLine", { username: currentUsername });
   });
 
-  apiPill.addEventListener("click", showSettingsView);
-  relayPill.addEventListener("click", showSettingsView);
-  bannerSettingsBtn.addEventListener("click", showSettingsView);
-  apiBannerSettingsBtn.addEventListener("click", showSettingsView);
   navSettingsBtn.addEventListener("click", showSettingsView);
 
   // The brand mark doubles as a "home" link — the only way back from the
