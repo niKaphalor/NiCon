@@ -23,7 +23,15 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          # Bumped from 1.22: govulncheck was flagging ~30 findings every
+          # single run, all of them fixed-upstream Go stdlib CVEs (net/http,
+          # crypto/tls, net/url, ...) tied to building with an old toolchain
+          # — none were about this repo's own code or its dependencies. On a
+          # current patch release those findings go away on their own, so
+          # the check starts actually meaning something again. go.mod's own
+          # `go 1.23` directive is the floor; setup-go still resolves the
+          # latest 1.26.x patch here.
+          go-version: "1.26"
 
       # No Docker health-cmd on the service above: mariadb's own
       # mysqladmin-based health check reported unhealthy well past 90s in
