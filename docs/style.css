@@ -248,9 +248,10 @@ input:focus-visible, select:focus-visible, button:focus-visible { border-color: 
   border-radius: 6px;
   white-space: nowrap;
 }
-.tag-accent { background: var(--color-accent-800); color: var(--color-accent-300); }
 .tag-neutral { background: var(--color-neutral-800); color: var(--color-neutral-100); }
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
+.tag-nitrado { background: #ffd744; color: #000; }
+.tag-rank { background: var(--color-accent-800); color: var(--color-accent-300); }
 
 /* --- topbar / nav --- */
 
@@ -501,8 +502,8 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
 .players-card { flex: 1 1 240px; min-width: 240px; }
 .players-card .form-row { margin-top: var(--space-1); }
 
-#players-panel { margin-top: var(--space-2); }
-#players-panel table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+#players-panel { margin-top: var(--space-2); overflow-x: auto; }
+#players-panel table { width: 100%; min-width: max-content; border-collapse: collapse; font-size: 0.85rem; }
 #players-panel th, #players-panel td {
   text-align: left;
   padding: 0.35rem 0.4rem;
@@ -510,6 +511,22 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
   font-family: var(--font-mono);
 }
 #players-panel th { font-family: var(--font-body); color: color-mix(in srgb, var(--color-text) 65%, transparent); font-weight: 600; }
+#players-panel td.player-actions { font-family: var(--font-body); white-space: nowrap; }
+#players-panel .player-actions-row { display: flex; gap: 6px; }
+#players-panel .btn-xs {
+  font-family: var(--font-heading);
+  font-weight: 500;
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+#players-panel .btn-xs:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+#players-panel .btn-xs.btn-xs-danger { border-color: var(--color-error); color: var(--color-error); }
+#players-panel .btn-xs.btn-xs-danger:hover { background: color-mix(in srgb, var(--color-error) 16%, transparent); }
 
 /* --- settings page --- */
 

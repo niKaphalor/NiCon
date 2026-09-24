@@ -135,8 +135,6 @@
   var cmdInput = document.getElementById("cmd-input");
   var cmdSendBtn = cmdForm.querySelector("button[type=submit]");
 
-  var gameSelect = document.getElementById("game-select");
-  var playersBtn = document.getElementById("players-btn");
   var playersPanel = document.getElementById("players-panel");
 
   // --- cloud API address + status ---
@@ -499,7 +497,10 @@
           if (consoles[id].socket) consoles[id].socket.close();
           delete consoles[id];
         }
-        if (selectedServerId === id) selectedServerId = null;
+        if (selectedServerId === id) {
+          selectedServerId = null;
+          stopPlayersAutoRefresh();
+        }
         renderServers();
         renderContent();
       })
@@ -640,6 +641,7 @@
   }
 
   function showLoginView() {
+    stopPlayersAutoRefresh();
     viewApp.hidden = true;
     viewSettings.hidden = true;
     viewRegister.hidden = true;
@@ -655,6 +657,7 @@
   }
 
   function showRegisterView() {
+    stopPlayersAutoRefresh();
     viewApp.hidden = true;
     viewSettings.hidden = true;
     viewLogin.hidden = true;
@@ -679,11 +682,13 @@
     setActiveNav(navServersBtn);
     renderServers();
     renderContent();
+    if (selectedServerId !== null && isConnected(selectedServerId)) startPlayersAutoRefresh(consoles[selectedServerId]);
   }
 
   navServersBtn.addEventListener("click", showAppView);
 
   function showSettingsView() {
+    stopPlayersAutoRefresh();
     viewLogin.hidden = true;
     viewRegister.hidden = true;
     viewApp.hidden = true;
@@ -696,6 +701,7 @@
   // --- admin panel ---
 
   function showAdminView() {
+    stopPlayersAutoRefresh();
     viewLogin.hidden = true;
     viewRegister.hidden = true;
     viewApp.hidden = true;
@@ -799,9 +805,16 @@
   }
 
   function selectServer(id) {
+    stopPlayersAutoRefresh();
     selectedServerId = id;
     var server = findServer(id);
-    if (server && server.has_password && !isConnected(id)) ensureConsole(server);
+    if (server && server.has_password) {
+      if (!isConnected(id)) {
+        ensureConsole(server); // players auto-refresh starts once "connected" arrives
+      } else {
+        startPlayersAutoRefresh(consoles[id]);
+      }
+    }
     renderServers();
     renderContent();
   }
@@ -853,7 +866,7 @@
     contentConsole.hidden = false;
     renderHead(server);
     renderLog(consoles[server.id]);
-    updatePlayersCard(server);
+    renderPlayersPanel(consoles[server.id]);
     updateCmdBarState();
   }
 
@@ -874,7 +887,7 @@
 
     if (server.source === "nitrado") {
       var nitradoTag = document.createElement("span");
-      nitradoTag.className = "tag tag-accent";
+      nitradoTag.className = "tag tag-nitrado";
       nitradoTag.textContent = "Nitrado";
       head.appendChild(nitradoTag);
     }
@@ -893,6 +906,7 @@
     if (isConnected(server.id)) {
       toggleBtn.textContent = I18N.t("content.disconnect");
       toggleBtn.addEventListener("click", function () {
+        stopPlayersAutoRefresh();
         if (consoles[server.id] && consoles[server.id].socket) consoles[server.id].socket.close();
         renderServers();
         renderContent();
@@ -938,6 +952,8 @@
         lines: [],
         pendingPlayersRequest: false,
         authenticated: false,
+        gameKey: window.NICON_GUESS_GAME(server.game),
+        lastParsed: null,
       };
       consoles[server.id] = c;
     }
@@ -966,21 +982,24 @@
       } else if (msg.type === "connected") {
         appendConsoleLine(c, "system", I18N.t("console.connected"));
         renderServers();
+        if (selectedServerId === server.id) startPlayersAutoRefresh(c);
       } else if (msg.type === "response") {
         appendConsoleLine(c, "response", msg.output && msg.output.length ? msg.output : I18N.t("console.noOutput"));
         if (c.pendingPlayersRequest) {
           c.pendingPlayersRequest = false;
-          renderPlayersPanel(msg.output || "");
+          var game = window.NICON_GAMES[c.gameKey];
+          var parsed = game.parse(msg.output || "");
+          c.lastParsed = parsed
+            ? { ok: true, summary: parsed.summary, columns: parsed.columns, players: parsed.players }
+            : { ok: false };
+          if (selectedServerId === server.id) renderPlayersPanel(c);
         }
       } else if (msg.type === "broadcast") {
         // WebRCON servers (Rust) push chat/log lines unsolicited.
         appendConsoleLine(c, "broadcast", msg.output || "");
       } else if (msg.type === "error") {
         appendConsoleLine(c, "error", msg.message);
-        if (c.pendingPlayersRequest) {
-          c.pendingPlayersRequest = false;
-          if (selectedServerId === server.id) playersPanel.innerHTML = "";
-        }
+        c.pendingPlayersRequest = false;
       }
       refreshIfActive(c);
     });
@@ -988,7 +1007,10 @@
     socket.addEventListener("close", function () {
       appendConsoleLine(c, "system", I18N.t("console.disconnected"));
       renderServers();
-      if (selectedServerId === server.id) renderContent();
+      if (selectedServerId === server.id) {
+        stopPlayersAutoRefresh();
+        renderContent();
+      }
     });
 
     socket.addEventListener("error", function () {
@@ -1066,68 +1088,140 @@
   });
 
   // --- players card (inline, next to the console) ---
+  // Auto-detected from the server's game, auto-fetched on connect/select,
+  // and kept fresh with a background poll while that server is the one
+  // being viewed — no manual game picker or refresh button.
 
-  function updatePlayersCard(server) {
-    gameSelect.value = window.NICON_GUESS_GAME(server.game);
-    playersPanel.innerHTML = "";
+  var PLAYERS_REFRESH_MS = 10000;
+  var activePlayersTimer = null;
+
+  function stopPlayersAutoRefresh() {
+    if (activePlayersTimer) {
+      clearInterval(activePlayersTimer);
+      activePlayersTimer = null;
+    }
   }
 
-  function renderPlayersPanel(rawOutput) {
-    playersPanel.innerHTML = "";
-    var key = gameSelect.value;
-    if (!key) return;
+  function startPlayersAutoRefresh(c) {
+    stopPlayersAutoRefresh();
+    if (!c) return;
+    requestPlayers(c);
+    activePlayersTimer = setInterval(function () { requestPlayers(c); }, PLAYERS_REFRESH_MS);
+  }
 
-    var game = window.NICON_GAMES[key];
-    var parsed = game.parse(rawOutput);
-    if (!parsed) {
-      var notice = document.createElement("p");
-      notice.className = "hint";
-      notice.textContent = I18N.t("info.couldNotParse", { game: game.label });
-      playersPanel.appendChild(notice);
+  function requestPlayers(c) {
+    if (!c.gameKey) {
+      if (selectedServerId === c.server.id) renderPlayersPanel(c);
+      return;
+    }
+    if (!c.socket || c.socket.readyState !== WebSocket.OPEN) return;
+    var game = window.NICON_GAMES[c.gameKey];
+    c.pendingPlayersRequest = true;
+    appendConsoleLine(c, "sent", "> " + game.command);
+    refreshIfActive(c);
+    c.socket.send(JSON.stringify({ type: "command", command: game.command }));
+  }
+
+  function playersHint(text) {
+    playersPanel.innerHTML = "";
+    var notice = document.createElement("p");
+    notice.className = "hint";
+    notice.textContent = text;
+    playersPanel.appendChild(notice);
+  }
+
+  function renderPlayersPanel(c) {
+    playersPanel.innerHTML = "";
+    if (!c) return;
+    if (!c.gameKey) {
+      playersHint(I18N.t("info.genericOption"));
+      return;
+    }
+    if (!c.lastParsed) return; // waiting on the first response
+
+    var game = window.NICON_GAMES[c.gameKey];
+    if (!c.lastParsed.ok) {
+      playersHint(I18N.t("info.couldNotParse", { game: game.label }));
       return;
     }
 
     var summary = document.createElement("p");
     summary.className = "hint";
-    summary.textContent = parsed.summary;
+    summary.textContent = c.lastParsed.summary;
     playersPanel.appendChild(summary);
+
+    var players = c.lastParsed.players;
+    if (!players.length) return;
 
     var table = document.createElement("table");
     var thead = document.createElement("thead");
     var headRow = document.createElement("tr");
-    parsed.columns.forEach(function (col) {
+    var columns = c.lastParsed.columns;
+    columns.forEach(function (col) {
       var th = document.createElement("th");
       th.textContent = col;
       headRow.appendChild(th);
     });
+    headRow.appendChild(document.createElement("th"));
     thead.appendChild(headRow);
     table.appendChild(thead);
 
     var tbody = document.createElement("tbody");
-    parsed.rows.forEach(function (row) {
+    players.forEach(function (player) {
       var tr = document.createElement("tr");
-      row.forEach(function (cell) {
+      player.cells.forEach(function (cell) {
         var td = document.createElement("td");
         td.textContent = cell;
         tr.appendChild(td);
       });
+
+      var actionsTd = document.createElement("td");
+      actionsTd.className = "player-actions";
+      if (player.isAdmin) {
+        var rank = document.createElement("span");
+        rank.className = "tag tag-rank";
+        rank.textContent = player.rank || I18N.t("admin.roleAdmin");
+        actionsTd.appendChild(rank);
+      } else {
+        var kickCmd = game.kick ? game.kick(player) : null;
+        var banCmd = game.ban ? game.ban(player) : null;
+        if (kickCmd || banCmd) {
+          var row = document.createElement("div");
+          row.className = "player-actions-row";
+          var label = player.cells[0] || player.id;
+          if (kickCmd) row.appendChild(playerActionButton(I18N.t("players.kick"), false, function () {
+            sendPlayerAction(c, kickCmd, I18N.t("players.kickConfirm", { name: label }));
+          }));
+          if (banCmd) row.appendChild(playerActionButton(I18N.t("players.ban"), true, function () {
+            sendPlayerAction(c, banCmd, I18N.t("players.banConfirm", { name: label }));
+          }));
+          actionsTd.appendChild(row);
+        }
+      }
+      tr.appendChild(actionsTd);
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
     playersPanel.appendChild(table);
   }
 
-  playersBtn.addEventListener("click", function () {
-    var c = consoles[selectedServerId];
-    if (!c || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
-    var key = gameSelect.value;
-    if (!key) return;
-    var command = window.NICON_GAMES[key].command;
-    c.pendingPlayersRequest = true;
+  function playerActionButton(text, danger, onClick) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-xs" + (danger ? " btn-xs-danger" : "");
+    btn.textContent = text;
+    btn.addEventListener("click", onClick);
+    return btn;
+  }
+
+  function sendPlayerAction(c, command, confirmMessage) {
+    if (!confirm(confirmMessage)) return;
+    if (!c.socket || c.socket.readyState !== WebSocket.OPEN) return;
     appendConsoleLine(c, "sent", "> " + command);
     refreshIfActive(c);
     c.socket.send(JSON.stringify({ type: "command", command: command }));
-  });
+    setTimeout(function () { requestPlayers(c); }, 1200);
+  }
 
   // --- command bar ---
 

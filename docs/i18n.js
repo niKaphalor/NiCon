@@ -162,6 +162,12 @@ window.NICON_I18N = (function () {
         notConnectedHint: "Not connected.",
         disconnect: "Disconnect",
       },
+      players: {
+        kick: "Kick",
+        ban: "Ban",
+        kickConfirm: "Kick {{name}} from this server?",
+        banConfirm: "Ban {{name}} from this server? This can't be undone.",
+      },
       errors: {
         sessionExpired: "Your session expired — sign in again.",
         signInFailed: "Sign in failed.",
@@ -330,6 +336,12 @@ window.NICON_I18N = (function () {
         passwordHint: "Gib das RCON-Passwort dieses Servers ein, um dich zu verbinden.",
         notConnectedHint: "Nicht verbunden.",
         disconnect: "Trennen",
+      },
+      players: {
+        kick: "Kick",
+        ban: "Bann",
+        kickConfirm: "{{name}} vom Server kicken?",
+        banConfirm: "{{name}} vom Server bannen? Das kann nicht rückgängig gemacht werden.",
       },
       errors: {
         sessionExpired: "Deine Sitzung ist abgelaufen — melde dich erneut an.",
