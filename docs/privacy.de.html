@@ -48,6 +48,7 @@
     <li><strong>Passwort</strong> — wird nie im Klartext gespeichert, sondern ausschließlich als bcrypt-Hash.</li>
     <li><strong>Wiederherstellungscode</strong> — ein 20-stelliger, einmaliger Code, der bei Kontoerstellung (bzw. beim letzten Zurücksetzen) erzeugt und dir genau einmal angezeigt wird. Wie beim Passwort wird nur sein bcrypt-Hash gespeichert — er ist der einzige Weg, dein Passwort zurückzusetzen, da keine E-Mail-Adresse hinterlegt ist.</li>
     <li><strong>Server-Daten, die du selbst hinzufügst</strong> — Name, Host, Port und Spiel eines Spieleservers, sowie dessen RCON-Passwort. Das RCON-Passwort wird verschlüsselt (AES-256-GCM) gespeichert, mit einem Schlüssel, der getrennt von der Datenbank verwaltet wird.</li>
+    <li><strong>Nitrado-API-Token</strong> (nur falls du "Von Nitrado synchronisieren" nutzt) — wird genauso verschlüsselt gespeichert wie ein RCON-Passwort, damit du ihn nicht bei jedem Sync erneut eingeben musst. Siehe Abschnitt 3.</li>
     <li><strong>Sitzungs-Token</strong> — ein zufälliger Token, der dich nach dem Login für bis zu 7 Tage identifiziert. Er wird serverseitig in der Datenbank sowie browserseitig in <code>sessionStorage</code> (nicht <code>localStorage</code>) gespeichert und beim Schließen des Browser-Tabs aus dem Browser entfernt.</li>
   </ul>
   <p>
@@ -58,11 +59,14 @@
   <h2>3. Nitrado-API-Token</h2>
   <p>
     Wenn du Server über den "Von Nitrado synchronisieren"-Dialog importierst,
-    sendest du deinen Nitrado-API-Token einmalig an die Cloud-API. Sie
-    verwendet ihn ausschließlich, um in diesem einen Moment deine Server
-    bei Nitrado abzufragen, und speichert ihn danach nicht — weder in der
-    Datenbank noch sonst irgendwo. Bei jeder erneuten Synchronisierung
-    musst du ihn erneut eingeben.
+    wird dein Nitrado-API-Token verschlüsselt gespeichert (AES-256-GCM,
+    dasselbe Verfahren wie bei den RCON-Passwörtern deiner Server), mit
+    einem Schlüssel, der getrennt von der Datenbank verwaltet wird — damit
+    musst du ihn nicht bei jeder zukünftigen Synchronisierung erneut
+    eingeben. Er wird dir nach der Eingabe nie wieder angezeigt und
+    ausschließlich genutzt, um deine Server bei Nitrado abzufragen — für
+    nichts anderes verlässt er die Cloud-API. Du kannst ihn jederzeit über
+    den "Von Nitrado synchronisieren"-Dialog wieder entfernen.
   </p>
 
   <h2>4. Zweck und Rechtsgrundlage der Verarbeitung</h2>

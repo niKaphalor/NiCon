@@ -67,6 +67,9 @@
   var bannerSettingsBtn = document.getElementById("banner-settings-btn");
   var relayForm = document.getElementById("relay-form");
   var relayUrlInput = document.getElementById("relay-url");
+  var relayPresetLocal = document.getElementById("relay-preset-local");
+  var relayPresetOracle = document.getElementById("relay-preset-oracle");
+  var relayPresetCustom = document.getElementById("relay-preset-custom");
 
   var usernameLabel = document.getElementById("username-label");
   var logoutBtn = document.getElementById("logout-btn");
@@ -148,6 +151,8 @@
   var addTabPanels = document.querySelectorAll(".tab-panel");
   var nitradoForm = document.getElementById("nitrado-form");
   var nitradoTokenInput = document.getElementById("nitrado-token");
+  var nitradoTokenStatus = document.getElementById("nitrado-token-status");
+  var forgetNitradoTokenBtn = document.getElementById("forget-nitrado-token-btn");
   var manualForm = document.getElementById("manual-form");
 
   var filterInput = document.getElementById("filter-input");
@@ -186,7 +191,20 @@
 
   // --- relay address + status ---
   // Only used for the actual WebSocket<->RCON bridge (createConsole
-  // below) — everything else goes through the cloud API.
+  // below) — everything else goes through the cloud API. The address
+  // itself is remembered per-browser (localStorage) so picking a preset
+  // sticks across reloads instead of resetting to the page's default.
+
+  var RELAY_URL_KEY = "nicon_relay_url";
+  var RELAY_PRESETS = {
+    local: "http://localhost:8765",
+    oracle: "https://relay.130.61.8.150.sslip.io",
+  };
+
+  try {
+    var savedRelayUrl = localStorage.getItem(RELAY_URL_KEY);
+    if (savedRelayUrl) relayUrlInput.value = savedRelayUrl;
+  } catch (e) { /* ignore — falls back to the page's default */ }
 
   function relayHttpUrl() {
     return relayUrlInput.value.replace(/\/+$/, "");
@@ -207,8 +225,35 @@
       .catch(function () { setRelayStatus(false); });
   }
 
+  function saveRelayUrl() {
+    try { localStorage.setItem(RELAY_URL_KEY, relayUrlInput.value); } catch (e) { /* ignore */ }
+  }
+
+  // Reflects the current address in the radio group — "custom" covers
+  // both an intentionally custom address and the page's initial default
+  // before any preset has been picked.
+  function syncRelayPreset() {
+    var url = relayUrlInput.value.replace(/\/+$/, "");
+    if (url === RELAY_PRESETS.local) relayPresetLocal.checked = true;
+    else if (url === RELAY_PRESETS.oracle) relayPresetOracle.checked = true;
+    else relayPresetCustom.checked = true;
+  }
+  syncRelayPreset();
+
+  [relayPresetLocal, relayPresetOracle, relayPresetCustom].forEach(function (radio) {
+    radio.addEventListener("change", function () {
+      if (radio === relayPresetLocal) relayUrlInput.value = RELAY_PRESETS.local;
+      else if (radio === relayPresetOracle) relayUrlInput.value = RELAY_PRESETS.oracle;
+      else { relayUrlInput.focus(); return; } // "custom" — just hand back to the text field
+      saveRelayUrl();
+      checkRelay();
+    });
+  });
+
   relayForm.addEventListener("submit", function (e) {
     e.preventDefault();
+    saveRelayUrl();
+    syncRelayPreset();
     checkRelay();
   });
 
@@ -583,9 +628,40 @@
       .catch(function (err) { alert(err.message); });
   });
 
+  // --- account info (currently just: is a Nitrado token already saved?) ---
+
+  var hasNitradoToken = false;
+
+  function loadAccountInfo() {
+    return apiFetch("/api/account", { method: "GET" })
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .then(function (data) {
+        hasNitradoToken = !!(data && data.has_nitrado_token);
+        renderNitradoTokenStatus();
+      })
+      .catch(function () { /* the sync form still works without this */ });
+  }
+
+  function renderNitradoTokenStatus() {
+    nitradoTokenStatus.hidden = !hasNitradoToken;
+    nitradoTokenInput.required = !hasNitradoToken;
+  }
+
+  forgetNitradoTokenBtn.addEventListener("click", function () {
+    if (!confirm(I18N.t("addModal.forgetTokenConfirm"))) return;
+    apiFetch("/api/account/nitrado-token", { method: "DELETE" })
+      .then(function (r) {
+        if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.forgetTokenFailed"));
+        hasNitradoToken = false;
+        renderNitradoTokenStatus();
+      })
+      .catch(function (err) { alert(err.message); });
+  });
+
   // --- add-server modal + tabs ---
 
   function openAddModal() {
+    loadAccountInfo();
     addModal.showModal();
   }
 
@@ -732,12 +808,12 @@
   nitradoForm.addEventListener("submit", function (e) {
     e.preventDefault();
     var token = nitradoTokenInput.value.trim();
-    if (!token) return;
+    if (!token && !hasNitradoToken) return; // required attribute already blocks this, belt and suspenders
 
     apiFetch("/api/nitrado/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: token }),
+      body: JSON.stringify(token ? { token: token } : {}),
     })
       .then(function (r) {
         if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
@@ -748,6 +824,7 @@
         renderServers();
         renderContent();
         addModal.close();
+        if (token) loadAccountInfo(); // a new token was just saved
       })
       .catch(function (err) {
         alert(I18N.t("errors.nitradoSyncFailed", { message: err.message }));
@@ -844,6 +921,7 @@
     privacyCard.hidden = false;
     accountUsernameLine.textContent = I18N.t("settings.accountUsernameLine", { username: currentUsername });
     loadNotifications();
+    loadAccountInfo();
     setActiveNav(navServersBtn);
     renderServers();
     renderContent();

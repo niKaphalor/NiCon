@@ -200,6 +200,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { border-color: 
   cursor: pointer;
 }
 .checkbox-row input[type="checkbox"] { margin-top: 0.2rem; flex-shrink: 0; accent-color: var(--color-accent); }
+.checkbox-row input[type="radio"] { flex-shrink: 0; accent-color: var(--color-accent); }
 
 /* segmented control (add-server tabs) */
 
@@ -566,7 +567,7 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
 
 .settings-page { flex: 1; overflow-y: auto; }
 .settings-inner {
-  max-width: 680px;
+  max-width: 1000px;
   width: 100%;
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-8);
@@ -575,6 +576,8 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
   gap: var(--space-4);
 }
 .settings-inner h1 { font-size: 1.45rem; }
+.settings-columns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: start; }
+.settings-col { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .settings-inner .field-row { display: flex; flex-direction: column; gap: var(--space-2); }
 .settings-inner .card .form-row { margin-top: var(--space-2); }
 .settings-inner .card .stacked-form { margin-top: var(--space-3); }
@@ -586,6 +589,8 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
   flex-wrap: wrap;
   margin-top: var(--space-2);
 }
+.settings-inner .card .row .checkbox-row { gap: 5px; }
+.settings-inner .card .row + .form-row { margin-top: var(--space-2); }
 
 .danger-card .card-kicker { color: var(--color-error); }
 .card-kicker-danger { color: var(--color-error); }
@@ -706,6 +711,7 @@ dialog::backdrop { background: color-mix(in srgb, var(--color-surface-sunken) 65
   .app-shell { flex-direction: column; overflow-y: auto; }
   .sidebar { width: 100%; border-right: 0; border-bottom: 1px solid var(--color-divider); max-height: 260px; flex-shrink: 0; }
   .content { overflow: visible; }
+  .settings-columns { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 600px) {

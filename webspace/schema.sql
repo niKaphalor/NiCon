@@ -13,6 +13,11 @@ CREATE TABLE IF NOT EXISTS users (
 	password_hash VARCHAR(255) NOT NULL,
 	recovery_code_hash VARCHAR(255) NULL,
 	is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+	-- Same AES-256-GCM scheme as servers.password_enc (see lib/crypto.php)
+	-- — encrypted, not hashed: a Nitrado sync needs the actual token back
+	-- to call Nitrado's API with, which a one-way hash can't give back.
+	-- PHP-only column; the Go relay never touches Nitrado sync.
+	nitrado_token_enc VARBINARY(2048) NULL,
 	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

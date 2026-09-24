@@ -1,6 +1,25 @@
 <?php
 declare(strict_types=1);
 
+// nicon_handle_get_account is small, deliberately: just the one bit of
+// account state the frontend needs to decide how to present the Nitrado
+// sync form (token field required vs. optional-with-a-saved-one).
+function nicon_handle_get_account(int $userId): void
+{
+    $stmt = nicon_db()->prepare('SELECT nitrado_token_enc FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    nicon_send_json(['has_nitrado_token' => $stmt->fetchColumn() !== null]);
+}
+
+// nicon_handle_delete_nitrado_token: self-service removal of the saved
+// Nitrado token, independent of deleting the whole account — Art. 17
+// GDPR applies to this stored credential same as to an RCON password.
+function nicon_handle_delete_nitrado_token(int $userId): void
+{
+    nicon_db()->prepare('UPDATE users SET nitrado_token_enc = NULL WHERE id = ?')->execute([$userId]);
+    http_response_code(204);
+}
+
 // nicon_handle_delete_account is the self-service "right to erasure" path:
 // permanently deletes the authenticated account. sessions and servers
 // cascade with it via ON DELETE CASCADE.

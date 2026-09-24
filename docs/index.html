@@ -145,58 +145,69 @@
   <section id="view-settings" class="view" hidden>
     <div class="settings-page">
       <div class="settings-inner">
-        <h1 data-i18n="settings.title">Connection</h1>
+        <h1 data-i18n="settings.title">Settings</h1>
 
-        <div class="card">
-          <div class="card-kicker" data-i18n="settings.apiTitle">Cloud API</div>
-          <p class="card-body" data-i18n="settings.apiHint">Handles sign-in, your account, and your server list — a normal web address, reachable whether or not your computer is on.</p>
-          <form id="api-form" class="form-row">
-            <input id="api-url" type="text" value="https://nicon.mylss.de" aria-label="Cloud API address" data-i18n-aria-label="settings.apiAddressAriaLabel">
-            <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
-          </form>
-        </div>
+        <div class="settings-columns">
+          <div class="settings-col">
+            <div id="account-card" class="card" hidden>
+              <div class="card-kicker" data-i18n="settings.accountKicker">Account</div>
+              <p class="card-body" id="account-username-line"></p>
 
-        <div class="card">
-          <div class="card-kicker" data-i18n="settings.relayTitle">Relay</div>
-          <p class="card-body">
-            <span data-i18n="settings.hintBefore">NiCon needs a relay — a small bridge process — to actually speak RCON to a server: browsers can't open raw TCP or WebRCON sockets on their own.</span>
-            <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener" data-i18n="settings.getItHereLink">Get it here.</a>
-          </p>
-          <form id="relay-form" class="form-row">
-            <input id="relay-url" type="text" value="http://localhost:8765" aria-label="Relay address" data-i18n-aria-label="settings.relayAddressAriaLabel">
-            <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
-          </form>
-        </div>
+              <form id="change-username-form" class="stacked-form">
+                <input id="new-username-input" type="text" placeholder="New username (3–32 characters)" required autocomplete="off" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.\-]+" aria-label="New username" data-i18n-placeholder="settings.newUsernamePlaceholder" data-i18n-aria-label="settings.newUsernamePlaceholder">
+                <input id="username-current-password-input" type="password" placeholder="Current password" required autocomplete="current-password" aria-label="Current password" data-i18n-placeholder="settings.currentPasswordPlaceholder" data-i18n-aria-label="settings.currentPasswordPlaceholder">
+                <button type="submit" class="btn-secondary" data-i18n="settings.changeUsernameButton">Change username</button>
+              </form>
+              <p id="change-username-error" class="hint login-error" hidden></p>
 
-        <div id="account-card" class="card" hidden>
-          <div class="card-kicker" data-i18n="settings.accountKicker">Account</div>
-          <p class="card-body" id="account-username-line"></p>
+              <form id="change-password-form" class="stacked-form">
+                <input id="password-current-password-input" type="password" placeholder="Current password" required autocomplete="current-password" aria-label="Current password" data-i18n-placeholder="settings.currentPasswordPlaceholder" data-i18n-aria-label="settings.currentPasswordPlaceholder">
+                <input id="new-password-input" type="password" placeholder="New password (min. 8 characters)" required autocomplete="new-password" minlength="8" aria-label="New password" data-i18n-placeholder="reset.newPasswordPlaceholder" data-i18n-aria-label="reset.newPasswordPlaceholder">
+                <input id="new-password-confirm-input" type="password" placeholder="Confirm new password" required autocomplete="new-password" minlength="8" aria-label="Confirm new password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
+                <button type="submit" class="btn-secondary" data-i18n="settings.changePasswordButton">Change password</button>
+              </form>
+              <p id="change-password-error" class="hint login-error" hidden></p>
 
-          <form id="change-username-form" class="stacked-form">
-            <input id="new-username-input" type="text" placeholder="New username (3–32 characters)" required autocomplete="off" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.\-]+" aria-label="New username" data-i18n-placeholder="settings.newUsernamePlaceholder" data-i18n-aria-label="settings.newUsernamePlaceholder">
-            <input id="username-current-password-input" type="password" placeholder="Current password" required autocomplete="current-password" aria-label="Current password" data-i18n-placeholder="settings.currentPasswordPlaceholder" data-i18n-aria-label="settings.currentPasswordPlaceholder">
-            <button type="submit" class="btn-secondary" data-i18n="settings.changeUsernameButton">Change username</button>
-          </form>
-          <p id="change-username-error" class="hint login-error" hidden></p>
+              <div id="account-danger-zone" class="card-section-danger" hidden>
+                <div class="card-kicker card-kicker-danger" data-i18n="settings.deleteAccountTitle">Delete account</div>
+                <p class="card-body" data-i18n="settings.deleteAccountHint">Permanently deletes your account and every server you've added — RCON passwords included. This can't be undone.</p>
+                <button type="button" id="delete-account-btn" class="btn-secondary btn-danger" data-i18n="settings.deleteAccountButton">Delete my account</button>
+              </div>
+            </div>
 
-          <form id="change-password-form" class="stacked-form">
-            <input id="password-current-password-input" type="password" placeholder="Current password" required autocomplete="current-password" aria-label="Current password" data-i18n-placeholder="settings.currentPasswordPlaceholder" data-i18n-aria-label="settings.currentPasswordPlaceholder">
-            <input id="new-password-input" type="password" placeholder="New password (min. 8 characters)" required autocomplete="new-password" minlength="8" aria-label="New password" data-i18n-placeholder="reset.newPasswordPlaceholder" data-i18n-aria-label="reset.newPasswordPlaceholder">
-            <input id="new-password-confirm-input" type="password" placeholder="Confirm new password" required autocomplete="new-password" minlength="8" aria-label="Confirm new password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
-            <button type="submit" class="btn-secondary" data-i18n="settings.changePasswordButton">Change password</button>
-          </form>
-          <p id="change-password-error" class="hint login-error" hidden></p>
-
-          <div id="account-danger-zone" class="card-section-danger" hidden>
-            <div class="card-kicker card-kicker-danger" data-i18n="settings.deleteAccountTitle">Delete account</div>
-            <p class="card-body" data-i18n="settings.deleteAccountHint">Permanently deletes your account and every server you've added — RCON passwords included. This can't be undone.</p>
-            <button type="button" id="delete-account-btn" class="btn-secondary btn-danger" data-i18n="settings.deleteAccountButton">Delete my account</button>
+            <div id="privacy-card" class="card" hidden>
+              <div class="card-kicker" data-i18n="settings.privacyKicker">Privacy</div>
+              <p class="card-body"><span data-i18n="servers.subheadPart1">Your server list and RCON passwords are stored for your account only — no one else can see, edit, or connect through them.</span> <span data-i18n="servers.seeThe">See the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a><span data-i18n="settings.privacyForDetails"> for details.</span></p>
+            </div>
           </div>
-        </div>
 
-        <div id="privacy-card" class="card" hidden>
-          <div class="card-kicker" data-i18n="settings.privacyKicker">Privacy</div>
-          <p class="card-body"><span data-i18n="servers.subheadPart1">Your server list and RCON passwords are stored for your account only — no one else can see, edit, or connect through them.</span> <span data-i18n="servers.seeThe">See the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a><span data-i18n="settings.privacyForDetails"> for details.</span></p>
+          <div class="settings-col">
+            <div class="card">
+              <div class="card-kicker" data-i18n="settings.apiTitle">Cloud API</div>
+              <p class="card-body" data-i18n="settings.apiHint">Handles sign-in, your account, and your server list — a normal web address, reachable whether or not your computer is on.</p>
+              <form id="api-form" class="form-row">
+                <input id="api-url" type="text" value="https://nicon.mylss.de" aria-label="Cloud API address" data-i18n-aria-label="settings.apiAddressAriaLabel">
+                <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
+              </form>
+            </div>
+
+            <div class="card">
+              <div class="card-kicker" data-i18n="settings.relayTitle">Relay</div>
+              <p class="card-body">
+                <span data-i18n="settings.hintBefore">NiCon needs a relay — a small bridge process — to actually speak RCON to a server: browsers can't open raw TCP or WebRCON sockets on their own.</span>
+                <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener" data-i18n="settings.getItHereLink">Get it here.</a>
+              </p>
+              <div class="row" id="relay-preset-group">
+                <label class="checkbox-row"><input type="radio" name="relay-preset" id="relay-preset-local" value="local"> <span data-i18n="settings.relayPresetLocal">Local</span></label>
+                <label class="checkbox-row"><input type="radio" name="relay-preset" id="relay-preset-oracle" value="oracle"> <span data-i18n="settings.relayPresetOracle">Oracle Cloud</span></label>
+                <label class="checkbox-row"><input type="radio" name="relay-preset" id="relay-preset-custom" value="custom"> <span data-i18n="settings.relayPresetCustom">Custom</span></label>
+              </div>
+              <form id="relay-form" class="form-row">
+                <input id="relay-url" type="text" value="http://localhost:8765" aria-label="Relay address" data-i18n-aria-label="settings.relayAddressAriaLabel">
+                <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
+              </form>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -282,7 +293,11 @@
   </div>
 
   <div class="tab-panel" data-panel="nitrado">
-    <p class="hint" data-i18n="addModal.nitradoHint">Your token is sent once to the cloud API to list servers whose current game supports RCON, then discarded — nothing is stored, here or there.</p>
+    <p class="hint" data-i18n="addModal.nitradoHint">Your token is encrypted and saved so you don't have to re-enter it for every sync — it's never shown again, only used to talk to Nitrado's API on your behalf.</p>
+    <p class="hint" id="nitrado-token-status" hidden>
+      <span data-i18n="addModal.nitradoTokenSaved">A token is already saved — leave the field blank to reuse it, or enter a new one to replace it.</span>
+      <button type="button" id="forget-nitrado-token-btn" class="link-button" data-i18n="addModal.forgetToken">Forget it</button>
+    </p>
     <form id="nitrado-form" class="stacked-form">
       <input id="nitrado-token" type="password" placeholder="Nitrado API token" autocomplete="off" aria-label="Nitrado API token" data-i18n-placeholder="addModal.nitradoTokenPlaceholder" data-i18n-aria-label="addModal.nitradoTokenPlaceholder">
       <button type="submit" class="btn-primary" data-i18n="addModal.syncServers">Sync servers</button>

@@ -37,17 +37,29 @@ function nicon_nitrado_get(string $token, string $path): array
     return $env['data'] ?? [];
 }
 
-// nicon_handle_nitrado_sync mirrors internal/relay/handlers_servers.go's
-// handleNitradoSync: takes a Nitrado API token, upserts every RCON-capable
-// service into the caller's own server list, and returns the full updated
-// list. The token is used for this one request only, never stored.
+// nicon_handle_nitrado_sync upserts every RCON-capable service from
+// Nitrado into the caller's own server list, and returns the full updated
+// list. A token in the request body is saved (encrypted, AES-256-GCM —
+// see lib/crypto.php) for next time; omitting it reuses whatever was
+// saved from an earlier sync, so entering it once is enough.
 function nicon_handle_nitrado_sync(int $userId): void
 {
     $req = nicon_json_body();
     $token = (string) ($req['token'] ?? '');
-    if ($token === '') {
-        nicon_send_error('token is required', 400);
-        return;
+    $pdo = nicon_db();
+
+    if ($token !== '') {
+        $pdo->prepare('UPDATE users SET nitrado_token_enc = ? WHERE id = ?')
+            ->execute([nicon_encrypt_password($token), $userId]);
+    } else {
+        $stmt = $pdo->prepare('SELECT nitrado_token_enc FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $enc = $stmt->fetchColumn();
+        $token = $enc ? nicon_decrypt_password($enc) : '';
+        if ($token === '') {
+            nicon_send_error('no saved Nitrado token — enter one to sync', 400);
+            return;
+        }
     }
 
     try {
@@ -57,7 +69,6 @@ function nicon_handle_nitrado_sync(int $userId): void
         return;
     }
 
-    $pdo = nicon_db();
     foreach ($services as $svc) {
         $serviceId = (int) ($svc['id'] ?? 0);
         try {

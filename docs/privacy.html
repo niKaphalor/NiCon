@@ -47,6 +47,7 @@
     <li><strong>Password</strong> — never stored in plaintext, only as a bcrypt hash.</li>
     <li><strong>Recovery code</strong> — a 20-character one-time code generated when your account is created (or last reset), shown to you exactly once. Like the password, only its bcrypt hash is stored — it's the only way to reset your password since no email address is on file.</li>
     <li><strong>Server data you add yourself</strong> — a game server's name, host, port, and game, plus its RCON password. The RCON password is stored encrypted (AES-256-GCM), with a key managed separately from the database.</li>
+    <li><strong>Nitrado API token</strong> (only if you use "Sync from Nitrado") — stored encrypted the same way as an RCON password, so you don't have to re-enter it for every sync. See section 3.</li>
     <li><strong>Session token</strong> — a random token that identifies you after login, for up to 7 days. It's stored server-side in the database and, in your browser, in <code>sessionStorage</code> (not <code>localStorage</code>) — removed automatically when the browser tab closes.</li>
   </ul>
   <p>
@@ -57,10 +58,13 @@
   <h2>3. Nitrado API token</h2>
   <p>
     When you import servers through the "Sync from Nitrado" dialog, your
-    Nitrado API token is sent to the Cloud API once. It uses the token
-    only in that moment, to look up your servers at Nitrado, and doesn't
-    store it afterward — not in the database, not anywhere else. You'll
-    need to enter it again for each future sync.
+    Nitrado API token is stored encrypted (AES-256-GCM, the same scheme
+    used for your servers' RCON passwords), with a key managed separately
+    from the database, so you don't have to re-enter it for every future
+    sync. It's never shown again after you enter it, and it's used only to
+    look up your servers at Nitrado — for anything else, it never leaves
+    the Cloud API. You can remove it at any time from the "Sync from
+    Nitrado" dialog.
   </p>
 
   <h2>4. Purpose and legal basis</h2>

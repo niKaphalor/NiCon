@@ -50,9 +50,11 @@ $routes = [
     ['POST', '#^/logout$#', 'none', 'nicon_handle_logout'],
     ['POST', '#^/register$#', 'none', 'nicon_handle_register'],
     ['POST', '#^/reset-password$#', 'none', 'nicon_handle_reset_password'],
+    ['GET', '#^/account$#', 'user', 'nicon_handle_get_account'],
     ['DELETE', '#^/account$#', 'user', 'nicon_handle_delete_account'],
     ['PUT', '#^/account/password$#', 'user', 'nicon_handle_change_password'],
     ['PUT', '#^/account/username$#', 'user', 'nicon_handle_change_username'],
+    ['DELETE', '#^/account/nitrado-token$#', 'user', 'nicon_handle_delete_nitrado_token'],
 
     ['GET', '#^/notifications$#', 'user', 'nicon_handle_list_notifications'],
 
