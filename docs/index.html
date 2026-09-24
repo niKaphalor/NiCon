@@ -237,10 +237,12 @@
                 <span data-i18n="settings.hintBefore">NiCon needs a relay — a small bridge process — to actually speak RCON to a server: browsers can't open raw TCP or WebRCON sockets on their own.</span>
                 <a href="https://github.com/niKaphalor/NiCon" target="_blank" rel="noopener" data-i18n="settings.getItHereLink">Get it here.</a>
               </p>
-              <div class="row" id="relay-preset-group">
-                <label class="checkbox-row"><input type="radio" name="relay-preset" id="relay-preset-local" value="local"> <span data-i18n="settings.relayPresetLocal">Local</span></label>
-                <label class="checkbox-row"><input type="radio" name="relay-preset" id="relay-preset-oracle" value="oracle"> <span data-i18n="settings.relayPresetOracle">Oracle Cloud</span></label>
-                <label class="checkbox-row"><input type="radio" name="relay-preset" id="relay-preset-custom" value="custom"> <span data-i18n="settings.relayPresetCustom">Custom</span></label>
+              <div class="row">
+                <div class="segmented" id="relay-preset-group" role="radiogroup" aria-label="Relay preset">
+                  <label class="segment"><input type="radio" name="relay-preset" id="relay-preset-local" value="local"> <span data-i18n="settings.relayPresetLocal">Local</span></label>
+                  <label class="segment"><input type="radio" name="relay-preset" id="relay-preset-oracle" value="oracle"> <span data-i18n="settings.relayPresetOracle">Oracle Cloud</span></label>
+                  <label class="segment"><input type="radio" name="relay-preset" id="relay-preset-custom" value="custom"> <span data-i18n="settings.relayPresetCustom">Custom</span></label>
+                </div>
               </div>
               <form id="relay-form" class="form-row">
                 <input id="relay-url" type="text" value="http://localhost:8765" aria-label="Relay address" data-i18n-aria-label="settings.relayAddressAriaLabel">

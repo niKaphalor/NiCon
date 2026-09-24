@@ -107,9 +107,11 @@ h1 {
 .dot.ok { color: var(--color-success); background: var(--color-success); }
 .dot.error { color: var(--color-error); background: var(--color-error); }
 
-/* Server status: red (no RCON password saved yet), yellow (ready but not
-   connected right now), green (a live console). */
-.dot.status-missing { color: var(--color-error); background: var(--color-error); }
+/* Server status: red/hollow (no RCON password saved yet), yellow/filled
+   (ready but not connected right now), green/filled (a live console). The
+   hollow-vs-filled difference (not just hue) keeps "missing" distinguishable
+   for colorblind users — red and green alone aren't a reliable enough cue. */
+.dot.status-missing { color: var(--color-error); background: transparent; }
 .dot.status-ready { color: var(--color-warn); background: var(--color-warn); }
 .dot.status-connected { color: var(--color-success); background: var(--color-success); }
 
@@ -242,6 +244,29 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .tab + .tab { border-left: 1px solid var(--color-divider); }
 .tab.active { color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
 
+/* segmented control (also used for radio-based choices, e.g. the relay
+   preset picker) — same visual language as .tabs, built on real <input
+   type="radio"> for native keyboard support instead of a button + JS
+   active-class toggle. */
+.segmented { display: inline-flex; border: 1px solid var(--color-divider); border-radius: var(--radius-md); overflow: hidden; }
+.segment {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 14px;
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+  cursor: pointer;
+}
+.segment + .segment { border-left: 1px solid var(--color-divider); }
+.segment input { position: absolute; opacity: 0; pointer-events: none; }
+.segment:hover { color: var(--color-text); }
+.segment:has(input:checked) { color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.segment:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
 /* --- cards & tags --- */
 
 .card {
@@ -253,7 +278,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
 }
-.card-kicker { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-accent); }
+.card-kicker { font-family: var(--font-heading); font-weight: 600; font-size: 0.95rem; color: var(--color-text); }
 .card-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 1.05rem; }
 .card-body { font-size: 0.9rem; opacity: 0.8; max-width: 65ch; }
 
@@ -646,7 +671,6 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
   flex-wrap: wrap;
   margin-top: var(--space-2);
 }
-.settings-inner .card .row .checkbox-row { gap: 5px; }
 .settings-inner .card .row + .form-row { margin-top: var(--space-2); }
 
 .danger-card .card-kicker { color: var(--color-error); }
@@ -834,4 +858,11 @@ dialog::backdrop { background: color-mix(in srgb, var(--color-surface-sunken) 65
   .auth-hero { padding: 0; background: none; }
   .console-log { height: 40vh; min-height: 260px; font-size: 0.8rem; }
   .topbar-right #username-label { display: none; }
+
+  /* Comfortable tap targets on touch screens (Apple HIG / Material both
+     recommend ~44px) — desktop keeps the denser default sizing. */
+  .btn-primary, .btn-secondary, .icon-btn, .segment,
+  input[type="text"], input[type="password"], input[type="number"], input[type="email"], select {
+    min-height: 44px;
+  }
 }

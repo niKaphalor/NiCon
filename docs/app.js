@@ -798,6 +798,8 @@
       var dot = document.createElement("span");
       dot.className = "dot " + serverStatusClass(server);
       dot.title = serverStatusTooltip(server);
+      dot.setAttribute("role", "img");
+      dot.setAttribute("aria-label", serverStatusTooltip(server));
       nameLine.appendChild(dot);
       nameLine.appendChild(document.createTextNode(server.name));
       row.appendChild(nameLine);
@@ -1011,6 +1013,11 @@
         badge.className = "admin-badge";
         badge.textContent = I18N.t("admin.roleAdmin");
         roleTd.appendChild(badge);
+      } else {
+        var noRole = document.createElement("span");
+        noRole.className = "hint";
+        noRole.textContent = "–";
+        roleTd.appendChild(noRole);
       }
       tr.appendChild(roleTd);
 
@@ -1355,6 +1362,8 @@
     var dot = document.createElement("span");
     dot.className = "dot " + serverStatusClass(server);
     dot.title = serverStatusTooltip(server);
+    dot.setAttribute("role", "img");
+    dot.setAttribute("aria-label", serverStatusTooltip(server));
     h1.appendChild(dot);
     h1.appendChild(document.createTextNode(server.name));
     head.appendChild(h1);
