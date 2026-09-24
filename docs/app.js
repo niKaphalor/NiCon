@@ -71,6 +71,7 @@
   var langOptions = document.getElementById("lang-options");
 
   var navServersBtn = document.getElementById("nav-servers-btn");
+  var navHealthBtn = document.getElementById("nav-health-btn");
   var navSettingsBtn = document.getElementById("nav-settings-btn");
   var adminNavBtn = document.getElementById("admin-nav-btn");
   var addServerBtn = document.getElementById("add-server-btn");
@@ -142,6 +143,9 @@
   var notificationMessage = document.getElementById("notification-message");
   var adminNotificationsList = document.getElementById("admin-notifications-list");
 
+  var viewHealth = document.getElementById("view-health");
+  var healthBody = document.getElementById("health-body");
+
   var addModal = document.getElementById("add-modal");
   var addClose = document.getElementById("add-close");
   var addTabs = document.querySelectorAll(".tab");
@@ -156,6 +160,15 @@
   var filterRegexToggle = document.getElementById("filter-regex-toggle");
   var consoleCopyBtn = document.getElementById("console-copy-btn");
   var consoleClearBtn = document.getElementById("console-clear-btn");
+  var cmdHistoryBtn = document.getElementById("cmd-history-btn");
+  var cmdHistoryPanel = document.getElementById("cmd-history-panel");
+  var cmdTemplatesBtn = document.getElementById("cmd-templates-btn");
+  var cmdTemplatesPanel = document.getElementById("cmd-templates-panel");
+  var cmdTemplatesList = document.getElementById("cmd-templates-list");
+  var cmdTemplateAddForm = document.getElementById("cmd-template-add-form");
+  var cmdTemplateNameInput = document.getElementById("cmd-template-name-input");
+  var cmdTemplateCommandInput = document.getElementById("cmd-template-command-input");
+  var cmdTemplateError = document.getElementById("cmd-template-error");
   var log = document.getElementById("log");
   var cmdForm = document.getElementById("cmd-form");
   var cmdInput = document.getElementById("cmd-input");
@@ -343,6 +356,98 @@
     } catch (e) { /* not JSON — fall through to the raw text */ }
     return text;
   }
+
+  // --- toasts + confirm dialog ---
+  // Central replacements for window.alert()/window.confirm(): a non-
+  // blocking notice stack and a Promise-based modal, used everywhere
+  // instead of the native calls. Both live in the DOM from page load
+  // (see index.html) rather than being built on demand.
+  //
+  // toastContainer is a `popover`, not a plain fixed div, specifically so
+  // a toast still renders above an already-open <dialog> (e.g. an error
+  // from the Nitrado sync form inside the Add Server modal) — the
+  // Popover API promotes it into the same top layer dialogs use, which a
+  // z-index on a normal element can never reach into. showPopover()/
+  // hidePopover() are missing on very old browsers, so both calls are
+  // no-ops there (feature-detected below) — the container still shows
+  // via its own fixed positioning, just possibly behind an open dialog.
+
+  var toastContainer = document.getElementById("toast-container");
+
+  function showToast(message, type) {
+    if (typeof toastContainer.showPopover === "function" && !toastContainer.matches(":popover-open")) {
+      try { toastContainer.showPopover(); } catch (e) { /* already showing, or unsupported */ }
+    }
+
+    var toast = document.createElement("div");
+    toast.className = "toast toast-" + (type || "error");
+
+    var messageEl = document.createElement("span");
+    messageEl.className = "toast-message";
+    messageEl.textContent = message;
+    toast.appendChild(messageEl);
+
+    var closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "toast-close";
+    closeBtn.setAttribute("aria-label", I18N.t("common.close"));
+    closeBtn.textContent = "×";
+    var dismissed = false;
+    function dismiss() {
+      if (dismissed) return;
+      dismissed = true;
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+      if (!toastContainer.children.length && typeof toastContainer.hidePopover === "function") {
+        try { toastContainer.hidePopover(); } catch (e) { /* already hidden */ }
+      }
+    }
+    closeBtn.addEventListener("click", dismiss);
+    toast.appendChild(closeBtn);
+
+    toastContainer.appendChild(toast);
+    setTimeout(dismiss, 6000);
+    return toast;
+  }
+
+  // Promise-based stand-in for window.confirm(): resolves true/false
+  // instead of blocking. A <dialog>, like every other modal here, so it
+  // stacks correctly (on top) even when opened from inside another
+  // already-open dialog, e.g. confirming "forget token" from inside Add
+  // Server — window.confirm() used to just float above everything as a
+  // native browser dialog; a plain custom overlay wouldn't.
+  var confirmDialog = document.getElementById("confirm-dialog");
+  var confirmDialogMessage = document.getElementById("confirm-dialog-message");
+  var confirmDialogCancel = document.getElementById("confirm-dialog-cancel");
+  var confirmDialogOk = document.getElementById("confirm-dialog-ok");
+  var pendingConfirmResolve = null;
+
+  function showConfirm(message) {
+    confirmDialogMessage.textContent = message;
+    confirmDialog.showModal();
+    return new Promise(function (resolve) {
+      pendingConfirmResolve = resolve;
+    });
+  }
+
+  confirmDialogCancel.addEventListener("click", function () { confirmDialog.close(); });
+  confirmDialogOk.addEventListener("click", function () {
+    // Resolve before close() — the 'close' handler below would otherwise
+    // also see a pending resolver and settle it a second time as false.
+    var resolve = pendingConfirmResolve;
+    pendingConfirmResolve = null;
+    confirmDialog.close();
+    if (resolve) resolve(true);
+  });
+  confirmDialog.addEventListener("click", function (e) {
+    if (e.target === confirmDialog) confirmDialog.close(); // backdrop click = cancel
+  });
+  // Covers every other way the dialog can close — Cancel, backdrop click,
+  // Escape — as a single "still pending means it wasn't confirmed" fallback.
+  confirmDialog.addEventListener("close", function () {
+    var resolve = pendingConfirmResolve;
+    pendingConfirmResolve = null;
+    if (resolve) resolve(false);
+  });
 
   function sessionExpired() {
     clearAuthState();
@@ -591,17 +696,18 @@
   // --- account deletion (self-service, Art. 17 GDPR) ---
 
   deleteAccountBtn.addEventListener("click", function () {
-    if (!confirm(I18N.t("settings.deleteAccountConfirm"))) return;
-
-    apiFetch("/api/account", { method: "DELETE" })
-      .then(function (r) {
-        if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.failedToDeleteAccount"));
-        clearAuthState();
-        disconnectAllConsoles();
-        servers = [];
-        showLoginView();
-      })
-      .catch(function (err) { alert(err.message); });
+    showConfirm(I18N.t("settings.deleteAccountConfirm")).then(function (ok) {
+      if (!ok) return;
+      apiFetch("/api/account", { method: "DELETE" })
+        .then(function (r) {
+          if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.failedToDeleteAccount"));
+          clearAuthState();
+          disconnectAllConsoles();
+          servers = [];
+          showLoginView();
+        })
+        .catch(function (err) { showToast(err.message); });
+    });
   });
 
   // --- account info (currently just: is a Nitrado token already saved?) ---
@@ -624,14 +730,16 @@
   }
 
   forgetNitradoTokenBtn.addEventListener("click", function () {
-    if (!confirm(I18N.t("addModal.forgetTokenConfirm"))) return;
-    apiFetch("/api/account/nitrado-token", { method: "DELETE" })
-      .then(function (r) {
-        if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.forgetTokenFailed"));
-        hasNitradoToken = false;
-        renderNitradoTokenStatus();
-      })
-      .catch(function (err) { alert(err.message); });
+    showConfirm(I18N.t("addModal.forgetTokenConfirm")).then(function (ok) {
+      if (!ok) return;
+      apiFetch("/api/account/nitrado-token", { method: "DELETE" })
+        .then(function (r) {
+          if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.forgetTokenFailed"));
+          hasNitradoToken = false;
+          renderNitradoTokenStatus();
+        })
+        .catch(function (err) { showToast(err.message); });
+    });
   });
 
   // --- add-server modal + tabs ---
@@ -695,10 +803,14 @@
           selectedServerId = null;
           stopPlayersAutoRefresh();
         }
+        if (serverHealth[id]) {
+          delete serverHealth[id]; // no point keeping health history for a server that no longer exists
+          saveServerHealth();
+        }
         renderServers();
         renderContent();
       })
-      .catch(function (err) { alert(err.message); });
+      .catch(function (err) { showToast(err.message); });
   }
 
   // The full protocol name shown as a tag in the console head — mirrors
@@ -807,7 +919,7 @@
         if (token) loadAccountInfo(); // a new token was just saved
       })
       .catch(function (err) {
-        alert(I18N.t("errors.nitradoSyncFailed", { message: err.message }));
+        showToast(I18N.t("errors.nitradoSyncFailed", { message: err.message }));
       })
       .finally(function () {
         // The token was only ever needed for this one request.
@@ -841,7 +953,7 @@
         manualForm.reset();
         addModal.close();
       })
-      .catch(function (err) { alert(I18N.t("errors.couldNotAddServer", { message: err.message })); });
+      .catch(function (err) { showToast(I18N.t("errors.couldNotAddServer", { message: err.message })); });
   });
 
   // --- view switching ---
@@ -851,7 +963,7 @@
   // doesn't touch them either.
 
   function setActiveNav(btn) {
-    [navServersBtn, navSettingsBtn, adminNavBtn].forEach(function (b) {
+    [navServersBtn, navHealthBtn, navSettingsBtn, adminNavBtn].forEach(function (b) {
       if (b === btn) b.setAttribute("aria-current", "page");
       else b.removeAttribute("aria-current");
     });
@@ -863,11 +975,13 @@
     viewSettings.hidden = true;
     viewRegister.hidden = true;
     viewAdmin.hidden = true;
+    viewHealth.hidden = true;
     authShell.hidden = false;
     viewLogin.hidden = false;
     usernameLabel.hidden = true;
     logoutBtn.hidden = true;
     navServersBtn.hidden = true;
+    navHealthBtn.hidden = true;
     navSettingsBtn.hidden = true;
     adminNavBtn.hidden = true;
     addServerBtn.hidden = true;
@@ -895,11 +1009,13 @@
     viewRegister.hidden = true;
     viewSettings.hidden = true;
     viewAdmin.hidden = true;
+    viewHealth.hidden = true;
     viewApp.hidden = false;
     usernameLabel.hidden = false;
     usernameLabel.textContent = currentUsername;
     logoutBtn.hidden = false;
     navServersBtn.hidden = false;
+    navHealthBtn.hidden = false;
     navSettingsBtn.hidden = false;
     adminNavBtn.hidden = !currentIsAdmin;
     addServerBtn.hidden = false;
@@ -910,6 +1026,7 @@
     notificationsBellBtn.hidden = false;
     loadNotifications();
     loadAccountInfo();
+    loadCommandTemplates();
     setActiveNav(navServersBtn);
     renderServers();
     renderContent();
@@ -925,6 +1042,7 @@
     viewRegister.hidden = true;
     viewApp.hidden = true;
     viewAdmin.hidden = true;
+    viewHealth.hidden = true;
     viewSettings.hidden = false;
     addServerBtn.hidden = true;
     if (authToken) setActiveNav(navSettingsBtn);
@@ -939,6 +1057,7 @@
     viewRegister.hidden = true;
     viewApp.hidden = true;
     viewSettings.hidden = true;
+    viewHealth.hidden = true;
     viewAdmin.hidden = false;
     addServerBtn.hidden = true;
     setActiveNav(adminNavBtn);
@@ -950,6 +1069,24 @@
     showAdminView();
   });
 
+  // --- server health dashboard ---
+
+  function showHealthView() {
+    stopPlayersAutoRefresh();
+    authShell.hidden = true;
+    viewLogin.hidden = true;
+    viewRegister.hidden = true;
+    viewApp.hidden = true;
+    viewSettings.hidden = true;
+    viewAdmin.hidden = true;
+    viewHealth.hidden = false;
+    addServerBtn.hidden = true;
+    setActiveNav(navHealthBtn);
+    renderHealth();
+  }
+
+  navHealthBtn.addEventListener("click", showHealthView);
+
   function loadAdminUsers() {
     return apiFetch("/api/admin/users", { method: "GET" })
       .then(function (r) {
@@ -959,7 +1096,7 @@
       .then(function (users) {
         renderAdminUsers(users || []);
       })
-      .catch(function (err) { alert(err.message); });
+      .catch(function (err) { showToast(err.message); });
   }
 
   function renderAdminUsers(users) {
@@ -1009,7 +1146,7 @@
           .then(function (data) {
             showRecoveryCodeModal(data.recovery_code, function () { /* stays on the admin view */ });
           })
-          .catch(function (err) { alert(err.message); });
+          .catch(function (err) { showToast(err.message); });
       });
       actionsTd.appendChild(regenBtn);
 
@@ -1018,13 +1155,15 @@
       deleteBtn.className = "btn-secondary btn-danger";
       deleteBtn.textContent = I18N.t("admin.delete");
       deleteBtn.addEventListener("click", function () {
-        if (!confirm(I18N.t("admin.confirmDelete", { username: u.username }))) return;
-        apiFetch("/api/admin/users/" + u.id, { method: "DELETE" })
-          .then(function (r) {
-            if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.adminDeleteFailed"));
-            loadAdminUsers();
-          })
-          .catch(function (err) { alert(err.message); });
+        showConfirm(I18N.t("admin.confirmDelete", { username: u.username })).then(function (ok) {
+          if (!ok) return;
+          apiFetch("/api/admin/users/" + u.id, { method: "DELETE" })
+            .then(function (r) {
+              if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.adminDeleteFailed"));
+              loadAdminUsers();
+            })
+            .catch(function (err) { showToast(err.message); });
+        });
       });
       actionsTd.appendChild(deleteBtn);
 
@@ -1042,7 +1181,7 @@
         return r.json();
       })
       .then(function (list) { renderAdminNotifications(list || []); })
-      .catch(function (err) { alert(err.message); });
+      .catch(function (err) { showToast(err.message); });
   }
 
   function renderAdminNotifications(list) {
@@ -1082,7 +1221,7 @@
             if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.notificationDeleteFailed"));
             loadAdminNotifications();
           })
-          .catch(function (err) { alert(err.message); });
+          .catch(function (err) { showToast(err.message); });
       });
       row.appendChild(deleteBtn);
 
@@ -1108,7 +1247,7 @@
         notificationForm.reset();
         loadAdminNotifications();
       })
-      .catch(function (err) { alert(err.message); });
+      .catch(function (err) { showToast(err.message); });
   });
 
   // --- notifications (admin-authored, shown to every signed-in user) ---
@@ -1248,6 +1387,138 @@
     return isConnected(server.id) ? I18N.t("servers.connectedTooltip") : I18N.t("servers.statusReady");
   }
 
+  // --- server health dashboard: data ---
+  // Per-server connection telemetry for the Health view: the last time
+  // its game connection came up, the last error seen (from the relay or
+  // the WebSocket itself), and the round-trip latency of its most recent
+  // player-list poll — the console's existing 10s auto-refresh
+  // (startPlayersAutoRefresh above), re-used rather than adding a new
+  // relay message type just to measure this. That poll only runs for
+  // whichever server's console is currently open, so latency is only
+  // ever known for that one at a time, same limitation the player count
+  // itself already has.
+  //
+  // Kept in localStorage, not the account's own server-side database
+  // (unlike Command Templates): it's throwaway telemetry about this one
+  // browser's connections, not something that should follow the user to
+  // another device, so it doesn't warrant a new API table. It does
+  // survive a page reload, though, which a plain in-memory variable
+  // wouldn't.
+  var HEALTH_STORAGE_KEY = "nicon_health";
+  var serverHealth = {}; // { [serverId]: { lastConnectedAt, lastError, lastErrorAt, latencyMs } }
+
+  (function loadServerHealth() {
+    try {
+      var raw = localStorage.getItem(HEALTH_STORAGE_KEY);
+      serverHealth = raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      serverHealth = {};
+    }
+  })();
+
+  function saveServerHealth() {
+    try {
+      localStorage.setItem(HEALTH_STORAGE_KEY, JSON.stringify(serverHealth));
+    } catch (e) {
+      // Storage full or unavailable (private browsing) — health just
+      // won't survive a reload; nothing else in the app depends on it.
+    }
+  }
+
+  function healthFor(serverId) {
+    if (!serverHealth[serverId]) serverHealth[serverId] = {};
+    return serverHealth[serverId];
+  }
+
+  function recordConnected(serverId) {
+    var h = healthFor(serverId);
+    h.lastConnectedAt = Date.now();
+    h.lastError = null;
+    h.lastErrorAt = null;
+    saveServerHealth();
+    if (!viewHealth.hidden) renderHealth();
+  }
+
+  function recordHealthError(serverId, message) {
+    var h = healthFor(serverId);
+    h.lastError = message;
+    h.lastErrorAt = Date.now();
+    saveServerHealth();
+    if (!viewHealth.hidden) renderHealth();
+  }
+
+  function recordLatency(serverId, ms) {
+    var h = healthFor(serverId);
+    h.latencyMs = ms;
+    saveServerHealth();
+    if (!viewHealth.hidden) renderHealth();
+  }
+
+  function formatHealthTimestamp(ms) {
+    if (!ms) return null;
+    return new Date(ms).toLocaleString();
+  }
+
+  function renderHealth() {
+    healthBody.innerHTML = "";
+    servers.forEach(function (server) {
+      var h = serverHealth[server.id] || {};
+      var tr = document.createElement("tr");
+
+      var nameTd = document.createElement("td");
+      nameTd.className = "health-server-name";
+      nameTd.textContent = server.name;
+      tr.appendChild(nameTd);
+
+      var statusTd = document.createElement("td");
+      var statusWrap = document.createElement("span");
+      statusWrap.className = "health-status";
+      var dot = document.createElement("span");
+      dot.className = "dot " + serverStatusClass(server);
+      dot.setAttribute("role", "img");
+      dot.setAttribute("aria-label", serverStatusTooltip(server));
+      statusWrap.appendChild(dot);
+      statusWrap.appendChild(document.createTextNode(serverStatusTooltip(server)));
+      statusTd.appendChild(statusWrap);
+      tr.appendChild(statusTd);
+
+      var connectedTd = document.createElement("td");
+      var connectedText = formatHealthTimestamp(h.lastConnectedAt);
+      connectedTd.className = connectedText ? "" : "health-muted";
+      connectedTd.textContent = connectedText || I18N.t("health.never");
+      tr.appendChild(connectedTd);
+
+      var latencyTd = document.createElement("td");
+      if (h.latencyMs != null) {
+        latencyTd.textContent = h.latencyMs + " ms";
+        var latencyHint = document.createElement("span");
+        latencyHint.className = "health-timestamp";
+        latencyHint.textContent = I18N.t("health.latencyHint");
+        latencyTd.appendChild(latencyHint);
+      } else {
+        latencyTd.className = "health-muted";
+        latencyTd.textContent = "—";
+      }
+      tr.appendChild(latencyTd);
+
+      var errorTd = document.createElement("td");
+      if (h.lastError) {
+        errorTd.className = "health-error";
+        errorTd.textContent = h.lastError;
+        var errorWhen = document.createElement("span");
+        errorWhen.className = "health-timestamp";
+        errorWhen.textContent = formatHealthTimestamp(h.lastErrorAt);
+        errorTd.appendChild(errorWhen);
+      } else {
+        errorTd.className = "health-muted";
+        errorTd.textContent = I18N.t("health.noError");
+      }
+      tr.appendChild(errorTd);
+
+      healthBody.appendChild(tr);
+    });
+  }
+
   // Called whenever the relay's game-server connection is known to be
   // gone (a command error, or the WebSocket itself closing) — updates
   // state once, in one place, instead of duplicating the same cleanup at
@@ -1295,7 +1566,7 @@
         renderServers();
         renderContent();
       })
-      .catch(function (err) { alert(err.message); });
+      .catch(function (err) { showToast(err.message); });
   });
 
   // --- content pane rendering ---
@@ -1324,6 +1595,8 @@
     renderHead(server);
     renderLog(consoles[server.id]);
     renderQuickCommands(consoles[server.id]);
+    cmdHistoryPanel.hidden = true; // a switch to a different server's console starts closed, not showing the old one's history
+    cmdTemplatesPanel.hidden = true;
     renderPlayersPanel(consoles[server.id]);
     updateCmdBarState();
   }
@@ -1445,12 +1718,14 @@
       } else if (msg.type === "connected") {
         c.gameConnected = true;
         appendConsoleLine(c, "system", I18N.t("console.connected"));
+        recordConnected(server.id);
         renderServers();
         if (selectedServerId === server.id) startPlayersAutoRefresh(c);
       } else if (msg.type === "response") {
         appendConsoleLine(c, "response", msg.output && msg.output.length ? msg.output : I18N.t("console.noOutput"));
         if (c.pendingPlayersRequest) {
           c.pendingPlayersRequest = false;
+          if (c.playersRequestSentAt) recordLatency(server.id, Date.now() - c.playersRequestSentAt);
           var game = window.NICON_GAMES[c.gameKey];
           var parsed = game.parse(msg.output || "");
           c.lastParsed = parsed
@@ -1464,6 +1739,7 @@
       } else if (msg.type === "error") {
         appendConsoleLine(c, "error", msg.message);
         c.pendingPlayersRequest = false;
+        recordHealthError(server.id, msg.message);
         // The relay tears down the game connection on any command error
         // (not just connect-time failures), so this always means "no
         // longer connected" — see the isConnected()/markDisconnected()
@@ -1480,6 +1756,7 @@
 
     socket.addEventListener("error", function () {
       appendConsoleLine(c, "error", I18N.t("console.relayConnectionFailed", { url: relayHttpUrl() }));
+      recordHealthError(server.id, I18N.t("console.relayConnectionFailed", { url: relayHttpUrl() }));
       refreshIfActive(c);
     });
   }
@@ -1654,6 +1931,7 @@
     if (!c.gameConnected || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
     var game = window.NICON_GAMES[c.gameKey];
     c.pendingPlayersRequest = true;
+    c.playersRequestSentAt = Date.now();
     sendConsoleCommand(c, game.command);
   }
 
@@ -1777,19 +2055,228 @@
   }
 
   function sendPlayerAction(c, command, confirmMessage) {
-    if (!confirm(confirmMessage)) return;
-    if (!sendConsoleCommand(c, command)) return;
-    setTimeout(function () { requestPlayers(c); }, 1200);
+    showConfirm(confirmMessage).then(function (ok) {
+      if (!ok) return;
+      if (!sendConsoleCommand(c, command)) return;
+      setTimeout(function () { requestPlayers(c); }, 1200);
+    });
   }
 
-  // --- command bar ---
+  // --- command bar + history ---
+  // History is per-console, in-memory only — same lifetime as the log
+  // itself (nothing here is persisted; a reload starts fresh, matching
+  // how the rest of a console's state already works). Only commands
+  // actually typed into the command bar are recorded — a Quick Command or
+  // a template already has its own one-click path, so echoing those into
+  // "what did I type" history too would just be noise.
+
+  var MAX_COMMAND_HISTORY = 100;
+
+  function pushCommandHistory(c, command) {
+    if (!c.history) c.history = [];
+    // Mashing the same command twice shouldn't fill history with
+    // duplicates — same convention as a shell's history file.
+    if (c.history[c.history.length - 1] !== command) {
+      c.history.push(command);
+      if (c.history.length > MAX_COMMAND_HISTORY) c.history.shift();
+    }
+    c.historyIndex = null;
+    c.historyDraft = "";
+  }
+
+  function renderCommandHistory(c) {
+    cmdHistoryPanel.innerHTML = "";
+    var entries = c && c.history ? c.history : [];
+    if (!entries.length) {
+      var hint = document.createElement("p");
+      hint.className = "hint";
+      hint.textContent = I18N.t("console.historyEmpty");
+      cmdHistoryPanel.appendChild(hint);
+      return;
+    }
+    // Most recently sent first.
+    for (var i = entries.length - 1; i >= 0; i--) {
+      var command = entries[i];
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = command;
+      btn.addEventListener("click", function () {
+        // Fills the input rather than sending immediately — history can
+        // recall something risky (a past kick/ban/stop), so it should
+        // always go through a deliberate second Send, same as manual
+        // typing would.
+        cmdInput.value = command;
+        cmdHistoryPanel.hidden = true;
+        cmdInput.focus();
+      });
+      cmdHistoryPanel.appendChild(btn);
+    }
+  }
+
+  cmdHistoryBtn.addEventListener("click", function () {
+    var wasHidden = cmdHistoryPanel.hidden;
+    cmdTemplatesPanel.hidden = true; // only one of History/Templates open at a time
+    cmdHistoryPanel.hidden = !wasHidden;
+    if (wasHidden) renderCommandHistory(consoles[selectedServerId]);
+  });
+
+  // Shell-style Up/Down recall: Up steps backward through this console's
+  // history (saving whatever was being typed so Down can return to it),
+  // Down steps forward and clears back to that saved draft at the end.
+  cmdInput.addEventListener("keydown", function (e) {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    var c = consoles[selectedServerId];
+    if (!c || !c.history || !c.history.length) return;
+    e.preventDefault();
+
+    if (e.key === "ArrowUp") {
+      if (c.historyIndex == null) {
+        c.historyDraft = cmdInput.value;
+        c.historyIndex = c.history.length;
+      }
+      if (c.historyIndex > 0) c.historyIndex--;
+    } else {
+      if (c.historyIndex == null) return;
+      c.historyIndex++;
+    }
+
+    if (c.historyIndex >= c.history.length) {
+      c.historyIndex = null;
+      cmdInput.value = c.historyDraft || "";
+    } else {
+      cmdInput.value = c.history[c.historyIndex];
+    }
+  });
 
   cmdForm.addEventListener("submit", function (e) {
     e.preventDefault();
     var c = consoles[selectedServerId];
     var command = cmdInput.value.trim();
     if (!command || !sendConsoleCommand(c, command)) return;
+    pushCommandHistory(c, command);
+    cmdHistoryPanel.hidden = true;
     cmdInput.value = "";
+  });
+
+  // --- command templates ---
+  // Per-account saved commands (server-side — see
+  // webspace/handlers/command_templates.php — not localStorage, so they
+  // follow the user's account rather than one browser), listed in the
+  // Templates panel next to History and sent through the exact same path
+  // (sendConsoleCommand above) as one typed by hand. Loaded once per
+  // sign-in (showAppView) and re-synced from the server's own response on
+  // every add/delete, rather than trusted purely locally.
+
+  var commandTemplates = [];
+
+  function loadCommandTemplates() {
+    return apiFetch("/api/command-templates", { method: "GET" })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (list) {
+        commandTemplates = list || [];
+        renderCommandTemplates();
+      })
+      .catch(function () { /* templates are a nice-to-have, fail silently */ });
+  }
+
+  function renderCommandTemplates() {
+    cmdTemplatesList.innerHTML = "";
+    if (!commandTemplates.length) {
+      var hint = document.createElement("p");
+      hint.className = "hint";
+      hint.textContent = I18N.t("templates.empty");
+      cmdTemplatesList.appendChild(hint);
+      return;
+    }
+
+    commandTemplates.forEach(function (tpl) {
+      var row = document.createElement("div");
+      row.className = "cmd-template-row";
+
+      var info = document.createElement("div");
+      info.className = "template-info";
+      var name = document.createElement("span");
+      name.className = "template-name";
+      name.textContent = tpl.name;
+      var command = document.createElement("span");
+      command.className = "template-command";
+      command.textContent = tpl.command;
+      info.appendChild(name);
+      info.appendChild(command);
+      row.appendChild(info);
+
+      var actions = document.createElement("div");
+      actions.className = "template-actions-row";
+
+      var sendBtn = document.createElement("button");
+      sendBtn.type = "button";
+      sendBtn.className = "btn-xs";
+      sendBtn.textContent = I18N.t("templates.send");
+      sendBtn.addEventListener("click", function () {
+        var c = consoles[selectedServerId];
+        if (c) sendConsoleCommand(c, tpl.command);
+      });
+      actions.appendChild(sendBtn);
+
+      var deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn-xs btn-xs-danger";
+      deleteBtn.textContent = I18N.t("templates.delete");
+      deleteBtn.addEventListener("click", function () {
+        showConfirm(I18N.t("templates.deleteConfirm", { name: tpl.name })).then(function (ok) {
+          if (!ok) return;
+          apiFetch("/api/command-templates/" + tpl.id, { method: "DELETE" })
+            .then(function (r) {
+              if (!r.ok && r.status !== 204) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || I18N.t("templates.deleteFailed")); });
+              commandTemplates = commandTemplates.filter(function (x) { return x.id !== tpl.id; });
+              renderCommandTemplates();
+            })
+            .catch(function (err) { showToast(err.message); });
+        });
+      });
+      actions.appendChild(deleteBtn);
+
+      row.appendChild(actions);
+      cmdTemplatesList.appendChild(row);
+    });
+  }
+
+  cmdTemplatesBtn.addEventListener("click", function () {
+    var wasHidden = cmdTemplatesPanel.hidden;
+    cmdHistoryPanel.hidden = true; // only one of History/Templates open at a time
+    cmdTemplatesPanel.hidden = !wasHidden;
+  });
+
+  cmdTemplateAddForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    cmdTemplateError.hidden = true;
+    var name = cmdTemplateNameInput.value.trim();
+    var command = cmdTemplateCommandInput.value.trim();
+    if (!name || !command) {
+      cmdTemplateError.textContent = I18N.t("templates.nameAndCommandRequired");
+      cmdTemplateError.hidden = false;
+      return;
+    }
+
+    apiFetch("/api/command-templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name, command: command }),
+    })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || I18N.t("templates.saveFailed")); });
+        return r.json();
+      })
+      .then(function (tpl) {
+        commandTemplates.push(tpl);
+        commandTemplates.sort(function (a, b) { return a.name.localeCompare(b.name); });
+        renderCommandTemplates();
+        cmdTemplateAddForm.reset();
+      })
+      .catch(function (err) {
+        cmdTemplateError.textContent = err.message;
+        cmdTemplateError.hidden = false;
+      });
   });
 
   // --- quick commands ---

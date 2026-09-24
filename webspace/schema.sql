@@ -80,3 +80,18 @@ CREATE TABLE IF NOT EXISTS notifications (
 	message TEXT NOT NULL,
 	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Per-account saved commands for one-click reuse from the console (the
+-- "Templates" panel next to Quick Commands/History). PHP-only, same as
+-- rate_limits/notifications above: the Go relay never reads or writes
+-- this table, it only ever sees whatever command string the frontend
+-- sends over the WebSocket — a template is indistinguishable from one
+-- typed by hand once it's sent.
+CREATE TABLE IF NOT EXISTS command_templates (
+	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	user_id INT UNSIGNED NOT NULL,
+	name VARCHAR(64) NOT NULL,
+	command VARCHAR(500) NOT NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -257,6 +257,20 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .quick-cmd-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .quick-cmd-btn.quick-cmd-btn-danger { border-color: rgba(239, 107, 115, 0.65); color: var(--color-error); }
 .quick-cmd-btn.quick-cmd-btn-danger:hover:not(:disabled) { background: rgba(239, 107, 115, 0.15); border-color: var(--color-error); }
+.cmd-history-panel { display: flex; flex-direction: column; gap: 1px; max-height: 160px; margin-bottom: 8px; padding: 6px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); overflow-y: auto; }
+.cmd-history-panel button { display: block; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-soft); font-family: var(--font-mono); font-size: 0.78rem; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.cmd-history-panel button:hover { background: var(--color-surface-2); color: var(--color-text); }
+.cmd-history-panel .hint { margin: 4px 8px; }
+.cmd-templates-panel { display: flex; flex-direction: column; gap: 6px; max-height: 260px; margin-bottom: 8px; padding: 8px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); overflow-y: auto; }
+.cmd-templates-list { display: flex; flex-direction: column; gap: 2px; }
+.cmd-template-row { display: flex; align-items: center; gap: 8px; padding: 5px 2px; border-bottom: 1px solid var(--color-border); }
+.cmd-template-row:last-child { border-bottom: 0; }
+.cmd-template-row .template-info { flex: 1; min-width: 0; }
+.cmd-template-row .template-name { display: block; font-size: 0.78rem; overflow-wrap: anywhere; }
+.cmd-template-row .template-command { display: block; overflow-wrap: anywhere; color: var(--color-muted); font-family: var(--font-mono); font-size: 0.7rem; }
+.cmd-template-row .template-actions-row { display: flex; flex-shrink: 0; gap: 5px; }
+.cmd-template-add-form { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; border-top: 1px solid var(--color-border); }
+.cmd-template-add-form input { flex: 1; min-width: 90px; min-height: 32px; font-size: 0.78rem; }
 .cmd-bar { display: flex; gap: 8px; }
 .cmd-bar input { flex: 1; min-height: 42px; background: var(--color-surface); font-family: var(--font-mono); font-size: 0.82rem; }
 .cmd-bar button { min-width: 76px; min-height: 42px; padding: 0 16px; border: 1px solid var(--color-accent); border-radius: var(--radius-md); background: var(--color-accent); color: #08201d; font-weight: 700; cursor: pointer; }
@@ -272,9 +286,13 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .player-row-main { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .player-name { min-width: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 0.8rem; }
 #players-panel .player-actions-row { display: flex; flex-shrink: 0; gap: 5px; }
-#players-panel .btn-xs { padding: 4px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: transparent; color: var(--color-text-soft); font-size: 0.7rem; cursor: pointer; }
-#players-panel .btn-xs:hover { background: var(--color-surface-2); border-color: var(--color-border-strong); }
-#players-panel .btn-xs.btn-xs-danger { border-color: rgba(239, 107, 115, 0.6); color: var(--color-error); }
+/* .btn-xs started out scoped to #players-panel; it's a generic small
+   button now also used by the templates panel below, so the rule applies
+   everywhere rather than being duplicated per container. */
+.btn-xs { padding: 4px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: transparent; color: var(--color-text-soft); font-size: 0.7rem; cursor: pointer; }
+.btn-xs:hover { background: var(--color-surface-2); border-color: var(--color-border-strong); }
+.btn-xs.btn-xs-danger { border-color: rgba(239, 107, 115, 0.6); color: var(--color-error); }
+.btn-xs.btn-xs-danger:hover { background: rgba(239, 107, 115, 0.14); }
 /* Everything besides name + kick/ban (SteamID, ping, address, …) — real
    data, just not needed at a glance, so it's a spoiler instead of
    widening every row. The default marker triangle is replaced with a
@@ -287,12 +305,11 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .player-details dl { display: grid; grid-template-columns: max-content 1fr; margin: 6px 0 0; gap: 3px 10px; font-family: var(--font-mono); font-size: 0.74rem; }
 .player-details dt { color: var(--color-muted); }
 .player-details dd { margin: 0; overflow-wrap: anywhere; }
-#players-panel .btn-xs.btn-xs-danger:hover { background: rgba(239, 107, 115, 0.14); }
 
 /* Settings and administration */
 .settings-page { flex: 1; overflow-y: auto; }
 .settings-inner { display: flex; width: min(1080px, calc(100% - 24px)); flex-direction: column; gap: 22px; margin: 0 auto; padding: 34px 0 80px; }
-.settings-inner h1, .admin-page h1 { font-size: 1.6rem; }
+.settings-inner h1, .admin-page h1, .health-page h1 { font-size: 1.6rem; }
 .settings-columns { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 18px; }
 .settings-col { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
 .settings-inner .card .form-row { margin-top: 6px; }
@@ -302,16 +319,22 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .settings-inner .card .row + .form-row { margin-top: 8px; }
 .card-kicker-danger { color: var(--color-error); }
 .card-section-danger { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding-top: 16px; border-top: 1px solid var(--color-border); }
-.admin-page { width: min(1060px, calc(100% - 24px)); margin: 0 auto; padding: 34px 0 80px; }
-.admin-page .view-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.admin-page, .health-page { width: min(1060px, calc(100% - 24px)); margin: 0 auto; padding: 34px 0 80px; }
+.admin-page .view-header, .health-page .view-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .view-subhead { max-width: 75ch; margin: 0 0 18px; }
 .admin-section-header { margin-top: 40px; }
-.admin-users-table { width: 100%; border-collapse: collapse; border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; background: var(--color-surface); font-size: 0.84rem; }
-.admin-users-table th, .admin-users-table td { padding: 12px 14px; border-bottom: 1px solid var(--color-border); text-align: left; }
-.admin-users-table th { color: var(--color-muted); font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; }
+.admin-users-table, .health-table { width: 100%; border-collapse: collapse; border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; background: var(--color-surface); font-size: 0.84rem; }
+.admin-users-table th, .admin-users-table td, .health-table th, .health-table td { padding: 12px 14px; border-bottom: 1px solid var(--color-border); text-align: left; }
+.admin-users-table th, .health-table th { color: var(--color-muted); font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; }
 .admin-users-table td { font-family: var(--font-mono); }
 .admin-users-table .admin-actions { display: flex; justify-content: flex-end; gap: 8px; font-family: var(--font-body); }
 .admin-badge { padding: 3px 8px; border-radius: 99px; background: var(--color-accent-soft); color: var(--color-accent-strong); font-family: var(--font-body); font-size: 0.68rem; }
+.health-table td { vertical-align: top; }
+.health-table .health-server-name { font-family: var(--font-body); font-weight: 600; }
+.health-table .health-status { display: flex; align-items: center; gap: 7px; font-family: var(--font-body); }
+.health-table .health-error { max-width: 32ch; overflow-wrap: anywhere; font-family: var(--font-body); color: var(--color-error); }
+.health-table .health-timestamp { display: block; color: var(--color-muted); font-size: 0.72rem; font-family: var(--font-body); }
+.health-table .health-muted { color: var(--color-muted); font-family: var(--font-body); }
 .admin-notifications-list { display: flex; flex-direction: column; gap: 8px; }
 .admin-notification-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--color-border); border-left: 3px solid var(--color-accent); border-radius: var(--radius-md); background: var(--color-surface); }
 .admin-notification-row.type-success { border-left-color: var(--color-success); }
@@ -341,6 +364,29 @@ dialog::backdrop { background: rgba(7, 10, 12, 0.76); backdrop-filter: blur(3px)
 .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 .modal-header h2 { font-size: 1.2rem; }
 #notifications-modal { width: min(580px, calc(100% - 32px)); }
+
+/* Central confirm dialog — replaces window.confirm() (see showConfirm() in
+   app.js). A <dialog> like every other modal here, so it's promoted to
+   the same top layer and stacks correctly above another dialog that's
+   already open (e.g. confirming "forget token" from inside Add Server). */
+.confirm-dialog { max-width: 420px; }
+.confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+/* Central toast notifications — replaces window.alert() (see showToast()
+   in app.js). A `popover`, not a plain fixed div: the Popover API also
+   promotes its element to the top layer, so a toast still renders above
+   an already-open modal dialog instead of being hidden behind its
+   backdrop — a plain z-index can't reach into the top layer. The rules
+   below override the UA default popover styling (position/inset/margin),
+   which otherwise centers it full-screen. */
+#toast-container { position: fixed; inset: auto; top: auto; right: 16px; bottom: 16px; left: auto; margin: 0; width: min(360px, calc(100% - 32px)); max-height: none; padding: 0; border: 0; background: transparent; overflow: visible; display: flex; flex-direction: column-reverse; gap: 8px; }
+.toast { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--color-border-strong); border-left-width: 3px; border-radius: var(--radius-md); background: var(--color-surface-raised); box-shadow: var(--shadow-md); }
+.toast-message { flex: 1; font-size: 0.85rem; line-height: 1.4; overflow-wrap: anywhere; }
+.toast-close { flex-shrink: 0; padding: 0; border: 0; background: none; color: var(--color-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; }
+.toast-close:hover { color: var(--color-text); }
+.toast-error { border-left-color: var(--color-error); }
+.toast-success { border-left-color: var(--color-success); }
+.toast-info { border-left-color: var(--color-accent); }
 
 /* Footer and legal pages */
 .site-footer { position: fixed; right: 0; bottom: 0; left: 0; z-index: 30; display: flex; justify-content: center; gap: 9px; padding: 9px 20px; border-top: 1px solid var(--color-border); background: rgba(16, 20, 24, 0.96); color: var(--color-muted-2); font-size: 0.72rem; }
@@ -398,11 +444,11 @@ dialog::backdrop { background: rgba(7, 10, 12, 0.76); backdrop-filter: blur(3px)
   .head-actions { width: 100%; margin-left: 0; }
   .head-actions .btn-secondary { flex: 1; }
   .console-log { height: 44vh; min-height: 260px; font-size: 0.72rem; }
-  .settings-inner, .admin-page { width: calc(100% - 28px); padding-top: 24px; }
+  .settings-inner, .admin-page, .health-page { width: calc(100% - 28px); padding-top: 24px; }
   .settings-columns { grid-template-columns: 1fr; }
   .form-row { flex-wrap: wrap; }
   .form-row > * { min-width: 100%; }
   .site-footer { padding-inline: 12px; }
-  .btn-primary, .btn-secondary, .icon-btn, .segment, .quick-cmd-btn, input[type="text"], input[type="password"], input[type="number"], input[type="email"], select { min-height: 44px; }
-  .admin-users-table { display: block; overflow-x: auto; }
+  .btn-primary, .btn-secondary, .icon-btn, .segment, .quick-cmd-btn, .toast-close, input[type="text"], input[type="password"], input[type="number"], input[type="email"], select { min-height: 44px; }
+  .admin-users-table, .health-table { display: block; overflow-x: auto; }
 }

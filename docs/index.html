@@ -26,6 +26,7 @@
   <span class="wordmark">NiCon</span>
   <nav class="topbar-nav" aria-label="Main">
     <button type="button" id="nav-servers-btn" class="navlink" data-i18n="servers.title" hidden>Servers</button>
+    <button type="button" id="nav-health-btn" class="navlink" data-i18n="health.navLabel" hidden>Health</button>
     <button type="button" id="nav-settings-btn" class="navlink" data-i18n="settings.navLabel">Settings</button>
     <button type="button" id="admin-nav-btn" class="navlink" data-i18n="admin.navLabel" hidden>Admin</button>
   </nav>
@@ -175,12 +176,24 @@
                   </label>
                 </div>
                 <div class="console-toolbar-actions">
+                  <button type="button" id="cmd-templates-btn" class="icon-btn small" data-i18n="templates.button" data-i18n-title="templates.button" title="Templates">Templates</button>
+                  <button type="button" id="cmd-history-btn" class="icon-btn small" data-i18n="console.history" data-i18n-title="console.history" title="History">History</button>
                   <button type="button" id="console-copy-btn" class="icon-btn small" data-i18n="console.copy" data-i18n-title="console.copy" title="Copy">Copy</button>
                   <button type="button" id="console-clear-btn" class="icon-btn small" data-i18n="console.clear" data-i18n-title="console.clear" title="Clear">Clear</button>
                 </div>
               </div>
               <div id="log" class="console-log" role="log" aria-live="polite"></div>
               <div id="quick-cmd-bar" class="quick-cmd-bar" role="group" aria-label="Quick commands" data-i18n-aria-label="quickCommands.groupAriaLabel" hidden></div>
+              <div id="cmd-templates-panel" class="cmd-templates-panel" aria-label="Command templates" data-i18n-aria-label="templates.panelAriaLabel" hidden>
+                <div id="cmd-templates-list" class="cmd-templates-list"></div>
+                <form id="cmd-template-add-form" class="cmd-template-add-form">
+                  <input id="cmd-template-name-input" type="text" autocomplete="off" maxlength="64" aria-label="Template name" data-i18n-placeholder="templates.namePlaceholder" data-i18n-aria-label="templates.namePlaceholder">
+                  <input id="cmd-template-command-input" type="text" autocomplete="off" maxlength="500" aria-label="Template command" data-i18n-placeholder="templates.commandPlaceholder" data-i18n-aria-label="templates.commandPlaceholder">
+                  <button type="submit" class="btn-xs" data-i18n="templates.save">Save</button>
+                </form>
+                <p id="cmd-template-error" class="hint login-error" hidden></p>
+              </div>
+              <div id="cmd-history-panel" class="cmd-history-panel" role="listbox" aria-label="Command history" data-i18n-aria-label="console.historyAriaLabel" hidden></div>
               <form id="cmd-form" class="cmd-bar">
                 <input id="cmd-input" type="text" autocomplete="off" placeholder="Type a command…" aria-label="RCON command" data-i18n-placeholder="console.commandPlaceholder">
                 <button type="submit" data-i18n="console.send">Send</button>
@@ -273,6 +286,27 @@
         <button type="submit" class="btn-primary" data-i18n="admin.notificationSend">Send</button>
       </form>
       <div id="admin-notifications-list" class="admin-notifications-list"></div>
+    </div>
+  </section>
+
+  <section id="view-health" class="view" hidden>
+    <div class="health-page">
+      <div class="view-header">
+        <h1 data-i18n="health.title">Server health</h1>
+      </div>
+      <p class="hint view-subhead" data-i18n="health.subhead">Connection status per server: when it last came online, the latency of its most recent player-list check, and its last error, if any. Kept in this browser only — it isn't saved to your account, so it starts empty again in a different browser.</p>
+      <table class="health-table">
+        <thead>
+          <tr>
+            <th data-i18n="health.colServer">Server</th>
+            <th data-i18n="health.colStatus">Status</th>
+            <th data-i18n="health.colLastConnected">Last connected</th>
+            <th data-i18n="health.colLatency">Latency</th>
+            <th data-i18n="health.colLastError">Last error</th>
+          </tr>
+        </thead>
+        <tbody id="health-body"></tbody>
+      </table>
     </div>
   </section>
 </main>
@@ -369,6 +403,16 @@
     <button type="submit" id="quick-command-modal-confirm" class="btn-primary"></button>
   </form>
 </dialog>
+
+<dialog id="confirm-dialog" class="confirm-dialog">
+  <p id="confirm-dialog-message"></p>
+  <div class="confirm-dialog-actions">
+    <button type="button" id="confirm-dialog-cancel" class="btn-secondary" data-i18n="common.cancel">Cancel</button>
+    <button type="button" id="confirm-dialog-ok" class="btn-primary" data-i18n="common.confirm">Confirm</button>
+  </div>
+</dialog>
+
+<div id="toast-container" popover="manual" aria-live="assertive" aria-atomic="false"></div>
 
 <footer class="site-footer">
   <a href="imprint.html" target="_blank" rel="noopener" data-i18n="nav.imprint" data-i18n-doc="imprint">Imprint</a>
