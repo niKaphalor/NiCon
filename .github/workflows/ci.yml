@@ -71,3 +71,27 @@ jobs:
         env:
           NICON_TEST_DB_DSN: root:ci_test_root_password@tcp(127.0.0.1:3306)/nicon_test?parseTime=true
         run: go test ./...
+
+      # Best-effort, not a hard gate: a new advisory can land in a
+      # dependency at any time, independent of any code change here, so a
+      # red X on an unrelated PR would be confusing noise rather than a
+      # signal to act on immediately. It still shows up in the log for
+      # whoever's looking.
+      - name: Check for known vulnerabilities (govulncheck)
+        continue-on-error: true
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Lint webspace/ PHP (syntax only)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+
+      - name: php -l on every webspace/ file
+        run: |
+          status=0
+          while IFS= read -r -d '' f; do
+            php -l "$f" || status=1
+          done < <(find webspace -name '*.php' -print0)
+          exit $status

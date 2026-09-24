@@ -2,6 +2,21 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config.php';
 
+// nicon_security_headers sets a small set of defense-in-depth headers that
+// don't depend on any per-request state, on every response (including
+// errors and CORS preflights). This is a JSON API with no HTML templates
+// of its own, so a full CSP isn't meaningful here — these three cover the
+// headers that still apply: don't let a browser guess a JSON response into
+// executable content, don't let this origin be framed, and don't leak the
+// full request path (recovery codes, tokens never appear in URLs, but
+// session/account paths do) to third-party Referer targets.
+function nicon_security_headers(): void
+{
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+}
+
 // nicon_cors mirrors internal/relay/relay.go's cors(): sets
 // Access-Control-Allow-* only for allow-listed origins, and answers an
 // OPTIONS preflight itself. Returns false if the caller should stop

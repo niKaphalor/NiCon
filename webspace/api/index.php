@@ -28,6 +28,7 @@ function nicon_handle_healthz(): void
 
 // Every request — including OPTIONS preflight, which nicon_cors() answers
 // itself and returns false for.
+nicon_security_headers();
 if (!nicon_cors()) {
     exit;
 }

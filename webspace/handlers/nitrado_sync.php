@@ -3,6 +3,15 @@ declare(strict_types=1);
 
 const NICON_NITRADO_BASE_URL = 'https://api.nitrado.net';
 
+// NICON_NITRADO_MAX_RESPONSE_BYTES bounds how much of a Nitrado API
+// response this reads into memory — Nitrado's own responses are small
+// JSON, but nothing stops a misbehaving proxy or a redirected/compromised
+// endpoint from streaming an unbounded body at CURLOPT_RETURNTRANSFER.
+// Enforced via CURLOPT_WRITEFUNCTION rather than CURLOPT_MAXFILESIZE,
+// which curl can only apply upfront when the server sends a Content-Length
+// — not guaranteed here.
+const NICON_NITRADO_MAX_RESPONSE_BYTES = 5 * 1024 * 1024; // 5 MiB
+
 // nicon_nitrado_get mirrors internal/nitrado/client.go's get(): calls the
 // Nitrado API with the caller-supplied token and unwraps its
 // {"status":..., "data":...} envelope. Shared hosting can make ordinary
@@ -11,16 +20,28 @@ const NICON_NITRADO_BASE_URL = 'https://api.nitrado.net';
 function nicon_nitrado_get(string $token, string $path): array
 {
     $ch = curl_init(NICON_NITRADO_BASE_URL . $path);
+    $body = '';
+    $tooLarge = false;
     curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token],
         CURLOPT_TIMEOUT => 15,
+        CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$body, &$tooLarge): int {
+            if (strlen($body) + strlen($chunk) > NICON_NITRADO_MAX_RESPONSE_BYTES) {
+                $tooLarge = true;
+                return -1; // abort the transfer
+            }
+            $body .= $chunk;
+            return strlen($chunk);
+        },
     ]);
-    $body = curl_exec($ch);
+    $ok = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($body === false) {
+    if ($tooLarge) {
+        throw new RuntimeException("response from $path exceeded the size limit");
+    }
+    if ($ok === false) {
         throw new RuntimeException("request $path failed");
     }
     if ($status === 401 || $status === 403) {

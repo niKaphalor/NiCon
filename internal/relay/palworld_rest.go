@@ -24,6 +24,10 @@ import (
 // gameConn interface, and the browser console/games.js stay unchanged in
 // shape) but parses it as "<verb> [args]" and maps that to one specific
 // REST call; anything else is a clear error rather than a silent no-op.
+// maxPalworldResponseBytes bounds how much of a single REST response this
+// reads into memory (see the comment at its one use in request(), below).
+const maxPalworldResponseBytes = 4 * 1024 * 1024 // 4 MiB
+
 type palworldRestConn struct {
 	baseURL  string
 	password string
@@ -138,7 +142,13 @@ func (c *palworldRestConn) request(method, path string, body interface{}) (strin
 		return "", fmt.Errorf("palworld REST API: %w", err)
 	}
 	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
+	// Bounded, not io.ReadAll(resp.Body) directly: this is trusted server
+	// infrastructure (the address/port the account owner configured), but
+	// there's no reason a REST response describing players or server info
+	// should ever run large, so capping it costs nothing in the normal
+	// case and avoids holding an unbounded body in memory in the abnormal
+	// one (a misbehaving or compromised endpoint).
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxPalworldResponseBytes))
 	if err != nil {
 		return "", err
 	}

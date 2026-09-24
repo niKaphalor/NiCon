@@ -26,8 +26,10 @@ works and why.
 RCON passwords (encrypted at rest) are tied to the account that added
 them — a user can only ever see, edit, or connect through their own
 servers, enforced server-side on every request, not just hidden in the
-UI. Nitrado API tokens are still never stored: each sync sends the token
-once and it's forgotten immediately after.
+UI. A Nitrado API token is stored encrypted at rest (AES-256-GCM, same
+scheme as RCON passwords) the first time it's entered, so re-syncing later
+doesn't require typing it in again — deletable independently of the
+account itself from Settings, at any time.
 
 ## Status
 
@@ -141,12 +143,18 @@ those files execute anything at the top level anyway, so there's nothing
 to disclose even without it).
 
 `config.local.php` is gitignored — it holds your database password and
-the encryption key, never commit it. `schema.sql` is the same table
-definitions `internal/store` creates automatically; running it by hand
-here is only needed if you're setting the database up fresh through this
-API before the Go relay has ever connected to it (the relay's own
-auto-migration is equally fine as a one-time setup step, if you'd rather
-do it that way).
+the encryption key, never commit it. `schema.sql` covers the same tables
+`internal/store` creates automatically, plus a few PHP-only additions
+(`rate_limits`, `notifications`, and a `nitrado_token_enc` column on
+`users`) that the Go relay's own auto-migration doesn't know about and
+never creates. Run it once regardless of which side connects to this
+database first — every statement in it is safe to run again later,
+including against a `users`/`sessions`/`servers` set the Go relay already
+created (it won't touch existing data, only add what's missing). Skipping
+it because "the relay already migrated the schema" leaves the PHP-only
+pieces missing, and register/reset-password/contact (needs
+`rate_limits`), notifications, and Nitrado sync/account (needs
+`nitrado_token_enc`) then fail with a database error until it's run.
 
 **Already had accounts in a local database from before this split?**
 Either path works:
@@ -223,8 +231,11 @@ Once deployed, it serves the same JSON API the relay used to (except
   than duplicates, and never touches an already-set password). Rust
   services are included even though Nitrado's `has_rcon` flag apparently
   doesn't cover WebRCON — any service whose game is Rust is treated as
-  eligible on host/port alone. The token itself is used for that one
-  request and then forgotten.
+  eligible on host/port alone. A token sent in the request body is saved
+  encrypted (overwriting whatever was saved before) and reused on any
+  later sync that omits one — see [User accounts](#user-accounts) and
+  `DELETE /account/nitrado-token` for removing a saved token without
+  deleting the account.
 - **Admin** (`GET /admin/users`, `DELETE /admin/users/{id}`,
   `POST /admin/users/{id}/recovery-code`): each checks the authenticated
   caller's own `is_admin` flag before doing anything, on top of the usual

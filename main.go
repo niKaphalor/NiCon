@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/term"
 
@@ -87,6 +88,15 @@ func runServer() {
 	server := &http.Server{
 		Addr:    *addr,
 		Handler: rel.Routes(),
+		// These only bound the plain-HTTP request/idle phase — once
+		// /ws/rcon upgrades a connection, gorilla/websocket hijacks it and
+		// net/http stops managing its deadlines, so an open console isn't
+		// affected. ReadHeaderTimeout guards against a client that opens a
+		// connection and trickles headers in slowly (a slowloris-style
+		// resource hold); IdleTimeout reclaims a keep-alive connection that
+		// never sends another request (e.g. only ever hit /healthz once).
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	go func() {

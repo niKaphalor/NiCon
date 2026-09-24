@@ -44,6 +44,20 @@ type gameConn interface {
 	Close() error
 }
 
+// maxWSMessageBytes bounds a single incoming WebSocket message (the JSON
+// auth/connect/command envelope — never the game server's own response,
+// which the relay itself reads and re-wraps). Every message this protocol
+// actually sends is short text, so this only exists to stop a compromised
+// or malicious client from holding an oversized frame in memory;
+// gorilla/websocket closes the connection outright if it's exceeded.
+const maxWSMessageBytes = 64 * 1024
+
+// maxCommandLength is enforced separately, with a normal {"type":"error"}
+// reply rather than dropping the connection, so a client that fat-fingers
+// a long paste into the console gets a clear message instead of just
+// being disconnected by the read-limit check above.
+const maxCommandLength = 8000
+
 func connectGame(srv store.Server) (gameConn, error) {
 	switch srv.Protocol {
 	case "webrcon":
@@ -65,6 +79,7 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	conn.SetReadLimit(maxWSMessageBytes)
 
 	// The main loop below and the broadcast-forwarding goroutine (started
 	// on "connect" for WebRCON) can both write to conn; gorilla/websocket
@@ -174,6 +189,10 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 		case "command":
 			if gc == nil {
 				_ = writeJSON(wsMessage{Type: "error", Message: "not connected"})
+				continue
+			}
+			if len(msg.Command) > maxCommandLength {
+				_ = writeJSON(wsMessage{Type: "error", Message: fmt.Sprintf("command too long (max %d characters)", maxCommandLength)})
 				continue
 			}
 			output, execErr := gc.Execute(msg.Command)

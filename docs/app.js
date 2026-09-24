@@ -315,6 +315,25 @@
     });
   }
 
+  // Every handler on the PHP/Go side that fails a request sends
+  // {"error": "..."} as the JSON body (see webspace/lib/http.php's
+  // nicon_send_error / internal/relay's equivalent) — but the call sites
+  // below read the body with r.text() (they need the raw string for the
+  // non-JSON-error case, e.g. a proxy's own HTML error page) and used to
+  // pass it straight into `new Error(...)`, so a failure surfaced the
+  // literal `{"error":"invalid username or password"}` to the user
+  // instead of the message inside it. This unwraps that shape when
+  // present and otherwise falls back to the raw text unchanged, so a
+  // non-JSON error body still displays exactly as before.
+  function apiErrorMessage(text) {
+    if (!text) return text;
+    try {
+      var parsed = JSON.parse(text);
+      if (parsed && typeof parsed.error === "string" && parsed.error) return parsed.error;
+    } catch (e) { /* not JSON — fall through to the raw text */ }
+    return text;
+  }
+
   function sessionExpired() {
     clearAuthState();
     disconnectAllConsoles();
@@ -346,7 +365,7 @@
       body: JSON.stringify({ username: username, password: password }),
     })
       .then(function (r) {
-        if (!r.ok) return r.text().then(function (t) { throw new Error(t || "sign in failed"); });
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || "sign in failed"); });
         return r.json();
       })
       .then(function (data) {
@@ -401,7 +420,7 @@
       body: JSON.stringify({ username: username, password: password, consent_accepted: consent }),
     })
       .then(function (r) {
-        if (!r.ok) return r.text().then(function (t) { throw new Error(t || "registration failed"); });
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || "registration failed"); });
         return r.json();
       })
       .then(function (data) {
@@ -451,7 +470,7 @@
       body: JSON.stringify({ username: username, recovery_code: code, new_password: newPassword }),
     })
       .then(function (r) {
-        if (!r.ok) return r.text().then(function (t) { throw new Error(t || "reset failed"); });
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || "reset failed"); });
         return r.json();
       })
       .then(function (data) {
@@ -515,7 +534,7 @@
       }),
     })
       .then(function (r) {
-        if (!r.ok) return r.text().then(function (t) { throw new Error(t || I18N.t("errors.usernameChangeFailed")); });
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || I18N.t("errors.usernameChangeFailed")); });
         return r.json();
       })
       .then(function (data) {
@@ -550,7 +569,7 @@
       }),
     })
       .then(function (r) {
-        if (!r.ok && r.status !== 204) return r.text().then(function (t) { throw new Error(t || I18N.t("errors.passwordChangeFailed")); });
+        if (!r.ok && r.status !== 204) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || I18N.t("errors.passwordChangeFailed")); });
         changePasswordForm.reset();
       })
       .catch(function (err) {
@@ -767,7 +786,7 @@
       body: JSON.stringify(token ? { token: token } : {}),
     })
       .then(function (r) {
-        if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t)); });
         return r.json();
       })
       .then(function (list) {
@@ -802,7 +821,7 @@
       body: JSON.stringify({ name: name, host: host, port: port, password: password, protocol: protocol }),
     })
       .then(function (r) {
-        if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t)); });
         return r.json();
       })
       .then(function (srv) {
@@ -1069,7 +1088,7 @@
       body: JSON.stringify({ type: notificationType.value, message: message }),
     })
       .then(function (r) {
-        if (!r.ok) return r.text().then(function (t) { throw new Error(t || I18N.t("errors.notificationCreateFailed")); });
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || I18N.t("errors.notificationCreateFailed")); });
         return r.json();
       })
       .then(function () {
@@ -1450,13 +1469,42 @@
     });
   }
 
+  // Caps how many lines a single console keeps in memory (and therefore
+  // how many renderLog() ever has to rebuild) — a long-running console on
+  // a chatty server (WebRCON/BattlEye broadcast lines arrive continuously,
+  // not just on command) would otherwise grow both without bound. Oldest
+  // lines are dropped first, same as scrolling a real terminal's
+  // scrollback off the top.
+  var MAX_CONSOLE_LOG_LINES = 2000;
+
   function appendConsoleLine(c, kind, text) {
     c.lines.push({ kind: kind, text: text });
+    if (c.lines.length > MAX_CONSOLE_LOG_LINES) {
+      c.lines.splice(0, c.lines.length - MAX_CONSOLE_LOG_LINES);
+    }
+  }
+
+  // renderLog does a full rebuild (log.innerHTML = "" + re-append every
+  // line) rather than an incremental append, so it can re-run the filter
+  // regex over the whole log; that's fine for a single command's
+  // response, but a burst of broadcast lines arriving back-to-back
+  // (WebRCON/BattlEye chat, kill feed) used to trigger one full rebuild
+  // per line. Coalescing same-frame calls into one keeps the same
+  // rendering path and the same final output, just not redone once per
+  // line when several arrive within a frame.
+  var logRenderScheduled = false;
+  function scheduleLogRender() {
+    if (logRenderScheduled) return;
+    logRenderScheduled = true;
+    window.requestAnimationFrame(function () {
+      logRenderScheduled = false;
+      renderLog(consoles[selectedServerId]);
+    });
   }
 
   function refreshIfActive(c) {
     if (selectedServerId === c.server.id) {
-      renderLog(c);
+      scheduleLogRender();
       updateCmdBarState();
     }
   }
