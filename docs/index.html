@@ -38,7 +38,6 @@
       <svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.8,175.94C216.25,166.38,208,139.33,208,104a80,80,0,1,0-160,0c0,35.34-8.26,62.38-13.81,71.94A16,16,0,0,0,48,200H88.81a40,40,0,0,0,78.38,0H208a16,16,0,0,0,13.8-24.06ZM128,216a24,24,0,0,1-22.62-16h45.24A24,24,0,0,1,128,216ZM48,184c7.7-13.24,16-43.92,16-80a64,64,0,1,1,128,0c0,36.05,8.28,66.73,16,80Z"/></svg>
       <span id="notifications-badge" class="notif-badge" hidden></span>
     </button>
-    <button type="button" id="add-server-btn" class="btn-primary" data-i18n="servers.addServer" hidden>+ Add server</button>
   </div>
 </header>
 
@@ -120,6 +119,10 @@
   <section id="view-app" class="view" hidden>
     <div class="app-shell">
       <aside class="sidebar">
+        <div class="sidebar-head">
+          <h2 data-i18n="servers.title">Servers</h2>
+          <button type="button" id="add-server-btn" class="btn-primary" data-i18n="servers.addServer" hidden>+ Add server</button>
+        </div>
         <div class="search">
           <input id="server-search" type="text" placeholder="Search servers…" autocomplete="off" aria-label="Search servers" data-i18n-placeholder="servers.searchPlaceholder" data-i18n-aria-label="servers.searchPlaceholder">
         </div>
@@ -152,7 +155,17 @@
           <div class="work">
             <div class="console">
               <div class="console-toolbar">
-                <input id="filter-input" type="text" placeholder="Filter (regex)…" aria-label="Filter console output" data-i18n-placeholder="console.filterPlaceholder">
+                <div class="console-filter">
+                  <input id="filter-input" type="text" placeholder="Filter (regex)…" aria-label="Filter console output" data-i18n-placeholder="console.filterPlaceholder">
+                  <label class="filter-mode" title="Use regular expression">
+                    <input id="filter-regex-toggle" type="checkbox" checked>
+                    <span data-i18n="console.regex">Regex</span>
+                  </label>
+                </div>
+                <div class="console-toolbar-actions">
+                  <button type="button" id="console-copy-btn" class="icon-btn small" data-i18n="console.copy" data-i18n-title="console.copy" title="Copy">Copy</button>
+                  <button type="button" id="console-clear-btn" class="icon-btn small" data-i18n="console.clear" data-i18n-title="console.clear" title="Clear">Clear</button>
+                </div>
               </div>
               <div id="log" class="console-log" role="log" aria-live="polite"></div>
               <form id="cmd-form" class="cmd-bar">
