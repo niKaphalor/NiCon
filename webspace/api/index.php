@@ -18,6 +18,7 @@ require_once __DIR__ . '/../handlers/servers.php';
 require_once __DIR__ . '/../handlers/nitrado_sync.php';
 require_once __DIR__ . '/../handlers/admin.php';
 require_once __DIR__ . '/../handlers/notifications.php';
+require_once __DIR__ . '/../handlers/contact.php';
 
 function nicon_handle_healthz(): void
 {
@@ -50,6 +51,7 @@ $routes = [
     ['POST', '#^/logout$#', 'none', 'nicon_handle_logout'],
     ['POST', '#^/register$#', 'none', 'nicon_handle_register'],
     ['POST', '#^/reset-password$#', 'none', 'nicon_handle_reset_password'],
+    ['POST', '#^/contact$#', 'none', 'nicon_handle_contact'],
     ['GET', '#^/account$#', 'user', 'nicon_handle_get_account'],
     ['DELETE', '#^/account$#', 'user', 'nicon_handle_delete_account'],
     ['PUT', '#^/account/password$#', 'user', 'nicon_handle_change_password'],

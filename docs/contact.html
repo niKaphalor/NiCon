@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact — NiCon</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <span class="wordmark">NiCon</span>
+</header>
+
+<main class="legal-page">
+  <a href="index.html" class="back-link link-button">← Back to NiCon</a>
+  <nav class="lang-switch" aria-label="Language">
+    <a href="contact.html" lang="en" hreflang="en" aria-current="page">EN</a>
+    <span aria-hidden="true">·</span>
+    <a href="contact.de.html" lang="de" hreflang="de">DE</a>
+  </nav>
+  <h1>Contact</h1>
+  <p class="hint">
+    Questions, bug reports, or anything else about this NiCon instance —
+    send it here and it goes straight to the operator's inbox.
+  </p>
+
+  <form id="contact-form" class="stacked-form">
+    <input type="text" name="website" class="honeypot-field" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <input id="contact-name" type="text" placeholder="Your name" required autocomplete="name" aria-label="Your name">
+    <input id="contact-email" type="email" placeholder="Your email" required autocomplete="email" aria-label="Your email">
+    <textarea id="contact-message" placeholder="Message" required aria-label="Message"></textarea>
+    <button type="submit" class="btn-primary">Send message</button>
+  </form>
+  <p id="contact-status" class="hint form-status" hidden></p>
+</main>
+
+<footer class="site-footer">
+  <a href="imprint.html">Imprint</a>
+  <span aria-hidden="true">·</span>
+  <a href="privacy.html">Privacy</a>
+  <span aria-hidden="true">·</span>
+  <a href="contact.html">Contact</a>
+</footer>
+
+<script src="contact.js"></script>
+</body>
+</html>

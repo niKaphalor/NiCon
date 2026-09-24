@@ -232,6 +232,15 @@ Once deployed, it serves the same JSON API the relay used to (except
   to hide the button. Listing returns only username/created-at/role/
   server-count per account, never password or recovery-code hashes, or
   any of that account's server details.
+- **Contact form** (`POST /contact`): no login required — this is the
+  page people reach before they have an account, or don't want one. Takes
+  `{name, email, message}` and sends it as an email to the operator's own
+  address (hardcoded in `handlers/contact.php`, not per-instance
+  configurable yet) via PHP's `mail()`, with `Reply-To` set to the
+  submitter's address so replying just works. A hidden `website` field is
+  a honeypot — a bot that fills it in gets a fake `{"ok": true}` back
+  with no email actually sent, so it has no signal to learn from; rate
+  limited the same way as `/register` (3 per 15-minute window).
 
 Only origins in `config.local.php`'s `allowed_origins` get
 `Access-Control-Allow-Origin` back — without that check, any other page

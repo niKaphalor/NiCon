@@ -112,6 +112,7 @@
 
   var contentEmpty = document.getElementById("content-empty");
   var contentEmptyText = document.getElementById("content-empty-text");
+  var supportedGamesList = document.getElementById("supported-games-list");
   var emptyAddBtn = document.getElementById("empty-add-btn");
   var contentPassword = document.getElementById("content-password");
   var passwordServerName = document.getElementById("password-server-name");
@@ -334,6 +335,7 @@
     renderLangCurrent();
     renderServers();
     renderContent();
+    renderSupportedGamesList();
     if (authToken) accountUsernameLine.textContent = I18N.t("settings.accountUsernameLine", { username: currentUsername });
   });
 
@@ -1720,9 +1722,32 @@
     cmdInput.value = "";
   });
 
+  // --- welcome screen: supported games list ---
+  // Driven by NICON_GAMES itself (docs/games.js) rather than a hand-kept
+  // duplicate list here, so it can't drift when a game is added/removed.
+
+  var TESTED_GAMES = ["rust", "palworld"];
+
+  function renderSupportedGamesList() {
+    supportedGamesList.innerHTML = "";
+    Object.keys(window.NICON_GAMES).forEach(function (key) {
+      var tested = TESTED_GAMES.indexOf(key) !== -1;
+      var li = document.createElement("li");
+
+      var tag = document.createElement("span");
+      tag.className = "tag " + (tested ? "tag-tested" : "tag-untested");
+      tag.textContent = I18N.t(tested ? "welcome.tested" : "welcome.untested");
+      li.appendChild(tag);
+
+      li.appendChild(document.createTextNode(window.NICON_GAMES[key].label));
+      supportedGamesList.appendChild(li);
+    });
+  }
+
   // --- boot ---
 
   I18N.applyStatic(document);
+  renderSupportedGamesList();
   checkApi();
   checkRelay();
   if (authToken) {

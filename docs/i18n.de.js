@@ -12,6 +12,7 @@ window.NICON_I18N_STRINGS.de = {
     settingsLink: "Einstellungen",
     imprint: "Impressum",
     privacy: "Datenschutz",
+    contact: "Kontakt",
     language: "Sprache",
   },
   banner: {
@@ -184,6 +185,13 @@ window.NICON_I18N_STRINGS.de = {
     passwordHint: "Gib das RCON-Passwort dieses Servers ein, um dich zu verbinden.",
     notConnectedHint: "Nicht verbunden.",
     disconnect: "Trennen",
+  },
+  welcome: {
+    title: "Willkommen bei NiCon",
+    gamesTitle: "Unterstützte Spiele",
+    gamesHint: "Live getestete Spiele sind entsprechend markiert; die übrigen sind nur nach dokumentierten Befehlsformaten implementiert, noch nicht gegen einen echten Server geprüft.",
+    tested: "Getestet",
+    untested: "Ungetestet",
   },
   players: {
     kick: "Kick",

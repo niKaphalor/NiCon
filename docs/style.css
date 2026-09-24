@@ -176,7 +176,7 @@ h1 {
 
 /* --- forms & inputs --- */
 
-input[type="text"], input[type="password"], input[type="number"], select {
+input[type="text"], input[type="password"], input[type="number"], input[type="email"], select, textarea {
   width: 100%;
   min-height: 36px;
   padding: 6px 10px;
@@ -188,8 +188,21 @@ input[type="text"], input[type="password"], input[type="number"], select {
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-md);
 }
-input:hover, select:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
-input:focus-visible, select:focus-visible, button:focus-visible { border-color: var(--color-accent); outline-offset: 0; }
+textarea { resize: vertical; min-height: 120px; }
+input:hover, select:hover, textarea:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { border-color: var(--color-accent); outline-offset: 0; }
+
+/* A field real users never see or fill in — bots that blindly fill every
+   input often do, which is the tell contact.php uses to drop spam
+   without a CAPTCHA. Off-screen rather than display:none/hidden, since
+   some bots skip fields a screen reader also wouldn't reach. */
+.honeypot-field {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
 
 .stacked-form { display: flex; flex-direction: column; gap: 0.6rem; }
 .form-row { display: flex; gap: 0.5rem; }
@@ -257,6 +270,8 @@ input:focus-visible, select:focus-visible, button:focus-visible { border-color: 
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
 .tag-nitrado { background: #ffd744; color: #000; }
 .tag-rank { background: var(--color-accent-800); color: var(--color-accent-300); }
+.tag-tested { background: color-mix(in srgb, var(--color-success) 25%, transparent); color: var(--color-success); }
+.tag-untested { background: color-mix(in srgb, var(--color-warn) 25%, transparent); color: var(--color-warn); }
 
 /* --- topbar / nav --- */
 
@@ -401,6 +416,10 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
 .login-error { color: var(--color-error); margin-top: 0.75rem; margin-bottom: 0; }
 .auth-switch { margin-top: 1.1rem; margin-bottom: 0; }
 
+.form-status { margin-top: 0.75rem; margin-bottom: 0; }
+.form-status.is-error { color: var(--color-error); }
+.form-status.is-success { color: var(--color-success); }
+
 .recovery-code {
   background: var(--color-surface-sunken);
   border: 1px solid var(--color-accent);
@@ -443,7 +462,7 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
 .search { padding: var(--space-3) var(--space-4); }
 .search input { font-size: 0.88rem; }
 
-.server-list { overflow-y: auto; flex: 1; padding: 0 var(--space-2) var(--space-3); display: flex; flex-direction: column; gap: 2px; }
+.server-list { overflow-y: auto; flex: 1; padding: 0 var(--space-2) calc(var(--space-3) + 2.2rem); display: flex; flex-direction: column; gap: 2px; }
 
 .server-row {
   display: flex;
@@ -471,7 +490,7 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
 .content {
   flex: 1;
   min-width: 0;
-  padding: var(--space-5) var(--space-5) var(--space-8);
+  padding: var(--space-5) var(--space-5) calc(var(--space-8) + 2.2rem);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -479,6 +498,10 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
 }
 
 .content-empty { max-width: 60ch; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.content-empty h1 { font-size: 1.4rem; }
+.supported-games { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.supported-games-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.supported-games-list li { display: flex; align-items: center; gap: var(--space-2); font-size: 0.9rem; }
 
 #content-console { display: flex; flex-direction: column; gap: var(--space-4); }
 
@@ -574,7 +597,7 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
   max-width: 1000px;
   width: 100%;
   margin: 0 auto;
-  padding: var(--space-6) var(--space-5) var(--space-8);
+  padding: var(--space-6) var(--space-5) calc(var(--space-8) + 2.2rem);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -680,7 +703,7 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
 
 /* --- admin page --- */
 
-.admin-page { max-width: 900px; width: 100%; margin: 0 auto; padding: var(--space-5) var(--space-5) var(--space-8); }
+.admin-page { max-width: 900px; width: 100%; margin: 0 auto; padding: var(--space-5) var(--space-5) calc(var(--space-8) + 2.2rem); }
 .admin-page .view-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
 .admin-page h1 { font-size: 1.3rem; }
 .view-subhead { margin: 0 0 var(--space-4); max-width: 70ch; }
@@ -711,11 +734,20 @@ dialog::backdrop { background: color-mix(in srgb, var(--color-surface-sunken) 65
 
 /* --- footer / legal pages --- */
 
+/* Fixed rather than at the end of the document flow — on a tall page
+   (console log, long server list, long legal text) it used to only
+   become visible after scrolling all the way down. */
 .site-footer {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 1rem 1.5rem 2rem;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-divider);
+  padding: 0.6rem 1.5rem;
   display: flex;
+  justify-content: center;
   gap: 0.6rem;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
   font-size: 0.8rem;
@@ -723,7 +755,10 @@ dialog::backdrop { background: color-mix(in srgb, var(--color-surface-sunken) 65
 .site-footer a { color: inherit; }
 .site-footer a:hover { color: var(--color-text); }
 
-.legal-page { max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem 4rem; line-height: 1.6; }
+/* 2.2rem taller than each page's own natural bottom padding — clearance
+   for the now-fixed footer so it never covers the last bit of
+   scrolled-to-bottom content. */
+.legal-page { max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem 6.2rem; line-height: 1.6; }
 .legal-page h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
 .legal-page h2 { font-size: 1.1rem; margin: 2rem 0 0.5rem; }
 .legal-page p, .legal-page ul { margin: 0 0 0.9rem; }

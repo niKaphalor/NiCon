@@ -107,7 +107,13 @@
 
       <main class="content" id="content">
         <div id="content-empty" class="content-empty" hidden>
+          <h1 data-i18n="welcome.title">Welcome to NiCon</h1>
           <p class="hint" id="content-empty-text"></p>
+          <div class="supported-games">
+            <div class="card-kicker" data-i18n="welcome.gamesTitle">Supported games</div>
+            <p class="hint" data-i18n="welcome.gamesHint">Live-tested games are marked accordingly; the rest are implemented from documented command formats only, not yet checked against a real server.</p>
+            <ul id="supported-games-list" class="supported-games-list"></ul>
+          </div>
           <button type="button" id="empty-add-btn" class="btn-primary" data-i18n="servers.emptyAdd" hidden>+ Add a server</button>
         </div>
 
@@ -338,6 +344,8 @@
   <a href="imprint.html" target="_blank" rel="noopener" data-i18n="nav.imprint" data-i18n-doc="imprint">Imprint</a>
   <span aria-hidden="true">·</span>
   <a href="privacy.html" target="_blank" rel="noopener" data-i18n="nav.privacy" data-i18n-doc="privacy">Privacy</a>
+  <span aria-hidden="true">·</span>
+  <a href="contact.html" target="_blank" rel="noopener" data-i18n="nav.contact" data-i18n-doc="contact">Contact</a>
 </footer>
 
 <script src="i18n.en.js"></script>

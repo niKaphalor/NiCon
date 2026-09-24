@@ -11,6 +11,7 @@ window.NICON_I18N_STRINGS.en = {
     settingsLink: "settings",
     imprint: "Imprint",
     privacy: "Privacy",
+    contact: "Contact",
     language: "Language",
   },
   banner: {
@@ -183,6 +184,13 @@ window.NICON_I18N_STRINGS.en = {
     passwordHint: "Enter this server's RCON password to connect.",
     notConnectedHint: "Not connected.",
     disconnect: "Disconnect",
+  },
+  welcome: {
+    title: "Welcome to NiCon",
+    gamesTitle: "Supported games",
+    gamesHint: "Live-tested games are marked accordingly; the rest are implemented from documented command formats only, not yet checked against a real server.",
+    tested: "Tested",
+    untested: "Untested",
   },
   players: {
     kick: "Kick",
