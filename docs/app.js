@@ -153,6 +153,9 @@
   var manualForm = document.getElementById("manual-form");
 
   var filterInput = document.getElementById("filter-input");
+  var filterRegexToggle = document.getElementById("filter-regex-toggle");
+  var consoleCopyBtn = document.getElementById("console-copy-btn");
+  var consoleClearBtn = document.getElementById("console-clear-btn");
   var log = document.getElementById("log");
   var cmdForm = document.getElementById("cmd-form");
   var cmdInput = document.getElementById("cmd-input");
@@ -1463,6 +1466,10 @@
   function activeFilterRegex() {
     var text = filterInput.value.trim();
     if (!text) return null;
+    if (!filterRegexToggle.checked) {
+      text = text.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+      return new RegExp(text, "i");
+    }
     try {
       return new RegExp(text, "i");
     } catch (e) {
@@ -1513,6 +1520,29 @@
 
   filterInput.addEventListener("input", function () {
     renderLog(consoles[selectedServerId]);
+  });
+
+  filterRegexToggle.addEventListener("change", function () {
+    renderLog(consoles[selectedServerId]);
+  });
+
+  consoleCopyBtn.addEventListener("click", function () {
+    var c = consoles[selectedServerId];
+    if (!c || !c.lines.length || !navigator.clipboard) return;
+    navigator.clipboard.writeText(c.lines.map(function (line) {
+      return line.text;
+    }).join("\n")).catch(function () {
+      // Clipboard access can be unavailable on HTTP or locked-down browsers.
+    });
+  });
+
+  consoleClearBtn.addEventListener("click", function () {
+    var c = consoles[selectedServerId];
+    if (!c) return;
+    c.lines = [];
+    c.lastParsed = null;
+    renderLog(c);
+    renderPlayersPanel(c);
   });
 
   // --- players card (inline, next to the console) ---
