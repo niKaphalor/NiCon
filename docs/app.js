@@ -161,6 +161,16 @@
   var cmdInput = document.getElementById("cmd-input");
   var cmdSendBtn = cmdForm.querySelector("button[type=submit]");
 
+  var quickCmdBar = document.getElementById("quick-cmd-bar");
+  var quickCmdModal = document.getElementById("quick-command-modal");
+  var quickCmdModalTitle = document.getElementById("quick-command-modal-title");
+  var quickCmdModalClose = document.getElementById("quick-command-modal-close");
+  var quickCmdModalWarning = document.getElementById("quick-command-modal-warning");
+  var quickCmdModalForm = document.getElementById("quick-command-modal-form");
+  var quickCmdModalMessage = document.getElementById("quick-command-modal-message");
+  var quickCmdModalError = document.getElementById("quick-command-modal-error");
+  var quickCmdModalConfirm = document.getElementById("quick-command-modal-confirm");
+
   var playersPanel = document.getElementById("players-panel");
 
   // --- cloud API + relay addresses ---
@@ -1313,6 +1323,7 @@
     contentConsole.hidden = false;
     renderHead(server);
     renderLog(consoles[server.id]);
+    renderQuickCommands(consoles[server.id]);
     renderPlayersPanel(consoles[server.id]);
     updateCmdBarState();
   }
@@ -1385,6 +1396,7 @@
     var c = consoles[selectedServerId];
     var ready = !!(c && c.gameConnected && c.socket && c.socket.readyState === WebSocket.OPEN);
     cmdSendBtn.disabled = !ready;
+    updateQuickCommandsEnabled(c);
   }
 
   // --- console (background sockets keyed by server id) ---
@@ -1618,6 +1630,22 @@
     activePlayersTimer = setInterval(function () { requestPlayers(c); }, PLAYERS_REFRESH_MS);
   }
 
+  // sendConsoleCommand is the one path every command actually goes out
+  // through: manual command-bar input, the players-card's per-player
+  // kick/ban buttons, the auto-refresh player-list poll, and the Quick
+  // Commands bar all call this instead of touching c.socket directly, so
+  // there's exactly one place that logs the outgoing line, refreshes the
+  // console if it's the one on screen, and does the actual send. Returns
+  // false (and sends nothing) if there's no live game connection right
+  // now, so every caller shares the same "not connected" guard.
+  function sendConsoleCommand(c, command) {
+    if (!c || !command || !c.gameConnected || !c.socket || c.socket.readyState !== WebSocket.OPEN) return false;
+    appendConsoleLine(c, "sent", "> " + command);
+    refreshIfActive(c);
+    c.socket.send(JSON.stringify({ type: "command", command: command }));
+    return true;
+  }
+
   function requestPlayers(c) {
     if (!c.gameKey) {
       if (selectedServerId === c.server.id) renderPlayersPanel(c);
@@ -1626,9 +1654,7 @@
     if (!c.gameConnected || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
     var game = window.NICON_GAMES[c.gameKey];
     c.pendingPlayersRequest = true;
-    appendConsoleLine(c, "sent", "> " + game.command);
-    refreshIfActive(c);
-    c.socket.send(JSON.stringify({ type: "command", command: game.command }));
+    sendConsoleCommand(c, game.command);
   }
 
   // Column identifiers from games.js are canonical lowercase keys (e.g.
@@ -1735,10 +1761,7 @@
 
   function sendPlayerAction(c, command, confirmMessage) {
     if (!confirm(confirmMessage)) return;
-    if (!c.gameConnected || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
-    appendConsoleLine(c, "sent", "> " + command);
-    refreshIfActive(c);
-    c.socket.send(JSON.stringify({ type: "command", command: command }));
+    if (!sendConsoleCommand(c, command)) return;
     setTimeout(function () { requestPlayers(c); }, 1200);
   }
 
@@ -1748,11 +1771,104 @@
     e.preventDefault();
     var c = consoles[selectedServerId];
     var command = cmdInput.value.trim();
-    if (!command || !c || !c.gameConnected || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
-    appendConsoleLine(c, "sent", "> " + command);
-    refreshIfActive(c);
-    c.socket.send(JSON.stringify({ type: "command", command: command }));
+    if (!command || !sendConsoleCommand(c, command)) return;
     cmdInput.value = "";
+  });
+
+  // --- quick commands ---
+  // One button per game.quickCommands entry (see docs/games.js) — same
+  // send path as manual input (sendConsoleCommand above), never a second
+  // one. Buttons only appear for a recognized game, since the actual
+  // command syntax is per-game/protocol; an unrecognized server's game
+  // shows no quick-commands bar at all, same as it already shows no
+  // player-list parsing.
+
+  var pendingQuickCommand = null; // { c: ..., def: ... } while the dialog is open
+
+  function renderQuickCommands(c) {
+    quickCmdBar.innerHTML = "";
+    var game = c && c.gameKey ? window.NICON_GAMES[c.gameKey] : null;
+    var defs = game && game.quickCommands ? game.quickCommands : null;
+    quickCmdBar.hidden = !defs || !defs.length;
+    if (!defs) return;
+
+    defs.forEach(function (def) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "quick-cmd-btn" + (def.risk === "high" ? " quick-cmd-btn-danger" : "");
+      var label = I18N.t("quickCommands." + def.id);
+      btn.textContent = label;
+      btn.title = label;
+      btn.addEventListener("click", function () { runQuickCommand(c, def); });
+      quickCmdBar.appendChild(btn);
+    });
+    updateQuickCommandsEnabled(c);
+  }
+
+  function updateQuickCommandsEnabled(c) {
+    var ready = !!(c && c.gameConnected && c.socket && c.socket.readyState === WebSocket.OPEN);
+    var buttons = quickCmdBar.querySelectorAll("button");
+    for (var i = 0; i < buttons.length; i++) buttons[i].disabled = !ready;
+  }
+
+  function runQuickCommand(c, def) {
+    if (!c.gameConnected || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
+    if (def.risk === "low") {
+      sendConsoleCommand(c, def.build());
+      return;
+    }
+    openQuickCommandModal(c, def);
+  }
+
+  function openQuickCommandModal(c, def) {
+    pendingQuickCommand = { c: c, def: def };
+    var label = I18N.t("quickCommands." + def.id);
+    quickCmdModalTitle.textContent = label;
+
+    var needsMessage = def.param === "message";
+    quickCmdModalMessage.hidden = !needsMessage;
+    quickCmdModalMessage.value = "";
+    quickCmdModalWarning.hidden = def.risk !== "high";
+    quickCmdModalWarning.textContent = def.risk === "high" ? I18N.t("quickCommands." + def.id + "Confirm") : "";
+    quickCmdModalError.hidden = true;
+    quickCmdModalConfirm.textContent = I18N.t(def.risk === "high" ? "quickCommands.confirm" : "quickCommands.send");
+    quickCmdModalConfirm.className = def.risk === "high" ? "btn-secondary btn-danger" : "btn-primary";
+
+    quickCmdModal.showModal();
+    // showModal() focuses the dialog's first focusable element on its
+    // own, but that's the "Close" link when the message field was hidden
+    // a moment ago — focus it explicitly so typing works right away.
+    if (needsMessage) quickCmdModalMessage.focus();
+  }
+
+  function closeQuickCommandModal() {
+    quickCmdModal.close();
+  }
+
+  quickCmdModalClose.addEventListener("click", closeQuickCommandModal);
+  quickCmdModal.addEventListener("click", function (e) {
+    if (e.target === quickCmdModal) closeQuickCommandModal();
+  });
+  quickCmdModal.addEventListener("close", function () { pendingQuickCommand = null; });
+
+  quickCmdModalForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!pendingQuickCommand) return;
+    var c = pendingQuickCommand.c;
+    var def = pendingQuickCommand.def;
+    var needsMessage = def.param === "message";
+    var message = quickCmdModalMessage.value.trim();
+
+    if (needsMessage && !message) {
+      quickCmdModalError.textContent = I18N.t("quickCommands.messageRequired");
+      quickCmdModalError.hidden = false;
+      quickCmdModalMessage.focus();
+      return;
+    }
+
+    var command = needsMessage ? def.build(message) : def.build();
+    quickCmdModal.close();
+    if (command) sendConsoleCommand(c, command);
   });
 
   // --- welcome screen: supported games list ---

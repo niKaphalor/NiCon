@@ -26,6 +26,39 @@
 // kick(player)/ban(player) return an RCON command string, or null if this
 // game/identifier doesn't support that action (e.g. no stable ID was
 // available to target).
+//
+// quickCommands (optional) backs the console's Quick Commands bar —
+// one-click buttons for actions that aren't tied to a specific player (a
+// per-player kick/ban already has its own button in the players table
+// above, via kick()/ban()). Each entry:
+//   {
+//     id: "...",              // canonical id; app.js looks up its label
+//                              // and (for "high") its confirmation text
+//                              // as i18n keys "quickCommands.<id>" /
+//                              // "quickCommands.<id>Confirm"
+//     risk: "low"|"medium"|"high",
+//       // low: sent immediately, no dialog.
+//       // medium: needs one text parameter (currently always a
+//       //   broadcast message) — app.js opens a small dialog to collect
+//       //   it, no separate confirmation on top.
+//       // high: no parameter, but disruptive enough (stops/restarts the
+//       //   server, disconnecting every player) to require an explicit
+//       //   confirm dialog first.
+//     param: "message" | undefined,  // set iff risk === "medium"
+//     build: function(message) { ... }  // returns the RCON/API command
+//       // string to send (message is passed for risk:"medium" entries,
+//       // omitted otherwise).
+//   }
+//
+// Deliberately not every game has every action: only commands verified
+// against that game/protocol's own documented command set are included.
+// A shutdown/restart command in particular varies a lot by game (some
+// have none at all as a plain RCON command) — where there's no
+// well-documented one, it's left out rather than guessed, since sending
+// the wrong command to a live game server console isn't something to
+// speculate about. Likewise BattlEye (Arma 3, DayZ) only gets a
+// broadcast — its RCon protocol has no standard save/shutdown command
+// the way the Source-derived games below do.
 
 // Arma 3 and DayZ are both BattlEye-protected (relay protocol "battleye",
 // see internal/relay/battleye.go) rather than Source RCON, but share the
@@ -83,6 +116,16 @@ window.NICON_GAMES = {
     // suppress on — kick/ban are always offered for Minecraft.
     kick: function (player) { return "kick " + player.id; },
     ban: function (player) { return "ban " + player.id; },
+    quickCommands: [
+      { id: "save", risk: "low", build: function () { return "save-all"; } },
+      { id: "broadcast", risk: "medium", param: "message", build: function (message) { return "say " + message; } },
+      // Vanilla Minecraft has no "restart" console command, only "stop" —
+      // whether the server comes back up afterwards depends entirely on
+      // the hosting setup (Nitrado and most wrapper scripts do restart
+      // it; a bare `java -jar server.jar` does not), hence "stop" (not
+      // "restart") plus a confirmation that says so.
+      { id: "stop", risk: "high", build: function () { return "stop"; } },
+    ],
   },
 
   rust: {
@@ -115,6 +158,14 @@ window.NICON_GAMES = {
     },
     kick: function (player) { return player.id ? "kick " + player.id : null; },
     ban: function (player) { return player.id ? "ban " + player.id + " \"Banned by admin\"" : null; },
+    quickCommands: [
+      { id: "save", risk: "low", build: function () { return "server.save"; } },
+      { id: "broadcast", risk: "medium", param: "message", build: function (message) { return "say " + message; } },
+      // Rust's actual console command: restarts after a countdown (in
+      // seconds) that's broadcast to connected players first, rather than
+      // dropping them with no warning.
+      { id: "restart", risk: "high", build: function () { return "restart 60"; } },
+    ],
   },
 
   ark: {
@@ -139,6 +190,15 @@ window.NICON_GAMES = {
     },
     kick: function (player) { return "KickPlayer " + player.id; },
     ban: function (player) { return "BanPlayer " + player.id; },
+    quickCommands: [
+      { id: "save", risk: "low", build: function () { return "SaveWorld"; } },
+      { id: "broadcast", risk: "medium", param: "message", build: function (message) { return "Broadcast " + message; } },
+      // ARK's own admin command for an immediate server exit — whether
+      // that comes back up as a restart depends on the hosting setup
+      // (Nitrado and most process supervisors do relaunch it), same
+      // caveat as Minecraft's "stop" above.
+      { id: "shutdown", risk: "high", build: function () { return "DoExit"; } },
+    ],
   },
 
   // Palworld's RCON support is deprecated by Pocketpair in favor of a
@@ -169,6 +229,15 @@ window.NICON_GAMES = {
     },
     kick: function (player) { return player.id ? "kick " + player.id : null; },
     ban: function (player) { return player.id ? "ban " + player.id + " Banned by admin" : null; },
+    // Matches internal/relay/palworld_rest.go's Execute() verbs exactly —
+    // "announce" and "shutdown" are real REST endpoints there, not raw
+    // RCON text. shutdown with no argument uses the relay's own default
+    // (30-second wait, no message) rather than this guessing one.
+    quickCommands: [
+      { id: "save", risk: "low", build: function () { return "save"; } },
+      { id: "broadcast", risk: "medium", param: "message", build: function (message) { return "announce " + message; } },
+      { id: "shutdown", risk: "high", build: function () { return "shutdown"; } },
+    ],
   },
 
   arma3: {
@@ -177,6 +246,13 @@ window.NICON_GAMES = {
     parse: parseBattleyePlayers,
     kick: battleyeKick,
     ban: battleyeBan,
+    // "say -1 <message>" is BattlEye's own broadcast-to-everyone syntax
+    // (-1 targets "no single player id", i.e. all of them). No standard
+    // save/shutdown command exists at the BE RCon protocol level (that's
+    // mission/server-config territory, not something this can assume).
+    quickCommands: [
+      { id: "broadcast", risk: "medium", param: "message", build: function (message) { return "say -1 " + message; } },
+    ],
   },
 
   dayz: {
@@ -185,6 +261,9 @@ window.NICON_GAMES = {
     parse: parseBattleyePlayers,
     kick: battleyeKick,
     ban: battleyeBan,
+    quickCommands: [
+      { id: "broadcast", risk: "medium", param: "message", build: function (message) { return "say -1 " + message; } },
+    ],
   },
 
   // Garry's Mod is plain Source RCON (protocol "source") — the generic
@@ -215,6 +294,15 @@ window.NICON_GAMES = {
     // "banid <minutes> <userid> [kick]" — 0 minutes is permanent; kick
     // removes them immediately instead of waiting for their next connect.
     ban: function (player) { return "banid 0 " + player.id + " kick"; },
+    // No universal "save" concept in the base Source engine (unlike the
+    // survival-game titles above) — only broadcast and a plain "quit" are
+    // included, both real, documented Source console commands. Whether
+    // "quit" comes back up as a restart depends on the hosting setup,
+    // same caveat as ARK's DoExit and Minecraft's stop above.
+    quickCommands: [
+      { id: "broadcast", risk: "medium", param: "message", build: function (message) { return "say " + message; } },
+      { id: "shutdown", risk: "high", build: function () { return "quit"; } },
+    ],
   },
 };
 

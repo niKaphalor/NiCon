@@ -251,6 +251,12 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .log-line.kind-system { color: var(--color-muted); font-style: italic; }
 .log-line.kind-broadcast { color: var(--color-accent-strong); }
 .log-line mark { padding: 0 2px; border-radius: 3px; background: rgba(79, 195, 177, 0.22); color: var(--color-accent-strong); }
+.quick-cmd-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.quick-cmd-btn { min-height: 32px; padding: 6px 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface-2); color: var(--color-text); font-family: var(--font-heading); font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: background 140ms ease, border-color 140ms ease; }
+.quick-cmd-btn:hover:not(:disabled) { background: #293640; border-color: #52636e; }
+.quick-cmd-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.quick-cmd-btn.quick-cmd-btn-danger { border-color: rgba(239, 107, 115, 0.65); color: var(--color-error); }
+.quick-cmd-btn.quick-cmd-btn-danger:hover:not(:disabled) { background: rgba(239, 107, 115, 0.15); border-color: var(--color-error); }
 .cmd-bar { display: flex; gap: 8px; }
 .cmd-bar input { flex: 1; min-height: 42px; background: var(--color-surface); font-family: var(--font-mono); font-size: 0.82rem; }
 .cmd-bar button { min-width: 76px; min-height: 42px; padding: 0 16px; border: 1px solid var(--color-accent); border-radius: var(--radius-md); background: var(--color-accent); color: #08201d; font-weight: 700; cursor: pointer; }
@@ -384,6 +390,6 @@ dialog::backdrop { background: rgba(7, 10, 12, 0.76); backdrop-filter: blur(3px)
   .form-row { flex-wrap: wrap; }
   .form-row > * { min-width: 100%; }
   .site-footer { padding-inline: 12px; }
-  .btn-primary, .btn-secondary, .icon-btn, .segment, input[type="text"], input[type="password"], input[type="number"], input[type="email"], select { min-height: 44px; }
+  .btn-primary, .btn-secondary, .icon-btn, .segment, .quick-cmd-btn, input[type="text"], input[type="password"], input[type="number"], input[type="email"], select { min-height: 44px; }
   .admin-users-table { display: block; overflow-x: auto; }
 }

@@ -180,6 +180,7 @@
                 </div>
               </div>
               <div id="log" class="console-log" role="log" aria-live="polite"></div>
+              <div id="quick-cmd-bar" class="quick-cmd-bar" role="group" aria-label="Quick commands" data-i18n-aria-label="quickCommands.groupAriaLabel" hidden></div>
               <form id="cmd-form" class="cmd-bar">
                 <input id="cmd-input" type="text" autocomplete="off" placeholder="Type a command…" aria-label="RCON command" data-i18n-placeholder="console.commandPlaceholder">
                 <button type="submit" data-i18n="console.send">Send</button>
@@ -354,6 +355,19 @@
       <button type="submit" class="btn-primary" data-i18n="addModal.addServerSubmit">Add server</button>
     </form>
   </div>
+</dialog>
+
+<dialog id="quick-command-modal">
+  <div class="modal-header">
+    <h2 id="quick-command-modal-title"></h2>
+    <button type="button" id="quick-command-modal-close" class="link-button" data-i18n="common.close">Close</button>
+  </div>
+  <p id="quick-command-modal-warning" class="hint login-error" hidden></p>
+  <form id="quick-command-modal-form" class="stacked-form">
+    <input id="quick-command-modal-message" type="text" autocomplete="off" aria-label="Message" hidden data-i18n-placeholder="quickCommands.messagePlaceholder" data-i18n-aria-label="quickCommands.messagePlaceholder">
+    <p id="quick-command-modal-error" class="hint login-error" hidden></p>
+    <button type="submit" id="quick-command-modal-confirm" class="btn-primary"></button>
+  </form>
 </dialog>
 
 <footer class="site-footer">
