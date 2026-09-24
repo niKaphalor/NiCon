@@ -104,10 +104,14 @@ h1 {
   flex-shrink: 0;
   display: inline-block;
 }
-.dot.on { color: var(--color-accent-300); background: var(--color-accent-300); }
-.dot.off { color: var(--color-neutral-500); background: transparent; }
 .dot.ok { color: var(--color-success); background: var(--color-success); }
 .dot.error { color: var(--color-error); background: var(--color-error); }
+
+/* Server status: red (no RCON password saved yet), yellow (ready but not
+   connected right now), green (a live console). */
+.dot.status-missing { color: var(--color-error); background: var(--color-error); }
+.dot.status-ready { color: var(--color-warn); background: var(--color-warn); }
+.dot.status-connected { color: var(--color-success); background: var(--color-success); }
 
 /* --- buttons --- */
 
@@ -603,23 +607,58 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
   gap: var(--space-2);
 }
 
-/* --- notifications (admin-authored, shown to every signed-in user) --- */
+/* --- notifications (admin-authored, shown to every signed-in user) ---
+   A modal rather than an inline banner, so they're unmistakably distinct
+   from the page itself — a bold, saturated background per severity
+   rather than a thin accent line, plus a bell in the topbar (with an
+   unread-count badge) to bring the same modal back up on demand. */
 
-#notifications-area { display: flex; flex-direction: column; }
-.notification-banner {
+.notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--color-error);
+  color: var(--color-neutral-100);
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+#notifications-bell-btn { position: relative; }
+
+#notifications-modal { width: min(560px, 92vw); }
+.notifications-list { display: flex; flex-direction: column; gap: var(--space-3); max-height: 60vh; overflow-y: auto; }
+.notifications-empty { color: color-mix(in srgb, var(--color-text) 55%, transparent); font-size: 0.88rem; }
+
+.notification-row {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--color-divider);
-  border-left: 3px solid var(--color-accent);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider);
+  background: var(--color-surface);
 }
-.notification-banner p { flex: 1; font-size: 0.88rem; max-width: 1000px; margin: 0 auto; }
-.notification-banner .icon-btn { flex-shrink: 0; }
-.notification-banner.type-info { border-left-color: var(--color-accent); }
-.notification-banner.type-success { border-left-color: var(--color-success); }
-.notification-banner.type-warning { border-left-color: var(--color-warn); }
-.notification-banner.type-error { border-left-color: var(--color-error); }
+.notification-row .notif-icon { flex-shrink: 0; margin-top: 2px; }
+.notification-row .notif-body { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.notification-row p { font-size: 0.92rem; }
+.notification-row .hint { font-size: 0.78rem; }
+.notification-row .icon-btn { flex-shrink: 0; }
+
+.notification-row.type-info { background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface)); border-color: color-mix(in srgb, var(--color-accent) 45%, transparent); color: var(--color-accent-100); }
+.notification-row.type-info .notif-icon { color: var(--color-accent-300); }
+.notification-row.type-success { background: color-mix(in srgb, var(--color-success) 16%, var(--color-surface)); border-color: color-mix(in srgb, var(--color-success) 45%, transparent); }
+.notification-row.type-success .notif-icon { color: var(--color-success); }
+.notification-row.type-warning { background: color-mix(in srgb, var(--color-warn) 16%, var(--color-surface)); border-color: color-mix(in srgb, var(--color-warn) 45%, transparent); }
+.notification-row.type-warning .notif-icon { color: var(--color-warn); }
+.notification-row.type-error { background: color-mix(in srgb, var(--color-error) 16%, var(--color-surface)); border-color: color-mix(in srgb, var(--color-error) 45%, transparent); }
+.notification-row.type-error .notif-icon { color: var(--color-error); }
+.notification-row.dismissed { opacity: 0.6; }
 
 .admin-section-header { margin-top: var(--space-6); }
 .admin-notifications-list { display: flex; flex-direction: column; gap: var(--space-2); }

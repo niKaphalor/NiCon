@@ -34,6 +34,10 @@
     <button type="button" id="relay-pill" class="relay-pill status-unknown">
       <span class="dot"></span> <span data-i18n="nav.relay">relay</span>
     </button>
+    <button type="button" id="notifications-bell-btn" class="icon-btn" aria-label="Notifications" data-i18n-aria-label="notifications.bellAriaLabel" hidden>
+      <svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.8,175.94C216.25,166.38,208,139.33,208,104a80,80,0,1,0-160,0c0,35.34-8.26,62.38-13.81,71.94A16,16,0,0,0,48,200H88.81a40,40,0,0,0,78.38,0H208a16,16,0,0,0,13.8-24.06ZM128,216a24,24,0,0,1-22.62-16h45.24A24,24,0,0,1,128,216ZM48,184c7.7-13.24,16-43.92,16-80a64,64,0,1,1,128,0c0,36.05,8.28,66.73,16,80Z"/></svg>
+      <span id="notifications-badge" class="notif-badge" hidden></span>
+    </button>
     <button type="button" id="add-server-btn" class="btn-primary" data-i18n="servers.addServer" hidden>+ Add server</button>
   </div>
 </header>
@@ -56,7 +60,6 @@
   </p>
 </div>
 
-<div id="notifications-area"></div>
 
 <main>
   <section id="view-login" class="view">
@@ -250,6 +253,14 @@
     </div>
   </section>
 </main>
+
+<dialog id="notifications-modal">
+  <div class="modal-header">
+    <h2 data-i18n="notifications.modalTitle">Notifications</h2>
+    <button type="button" id="notifications-close" class="link-button" data-i18n="common.close">Close</button>
+  </div>
+  <div id="notifications-list" class="notifications-list"></div>
+</dialog>
 
 <dialog id="reset-modal">
   <div class="modal-header">

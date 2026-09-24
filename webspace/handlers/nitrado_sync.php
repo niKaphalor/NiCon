@@ -80,16 +80,23 @@ function nicon_handle_nitrado_sync(int $userId): void
 
         $gameHuman = (string) ($gs['game_human'] ?? '');
         $isRust = stripos($gameHuman, 'rust') !== false;
+        // Palworld's RCON is deprecated (Pocketpair-wide, not a Nitrado
+        // choice) — Nitrado may already report has_rcon=false for it, so
+        // this game is eligible on its own merits, independent of that
+        // flag. Best-effort: reuses whatever port Nitrado reports for
+        // RCON, since there's no confirmed separate field for the REST
+        // API's port — verify/correct it manually if a sync gets it wrong.
+        $isPalworld = stripos($gameHuman, 'palworld') !== false;
         $hasRcon = (bool) ($gs['game_specific']['features']['has_rcon'] ?? false);
         $rconPort = (int) ($gs['rcon_port'] ?? 0);
         $ip = (string) ($gs['ip'] ?? '');
         $hasConnectionInfo = $rconPort !== 0 && $ip !== '';
-        $eligible = ($hasRcon || $isRust) && $hasConnectionInfo;
+        $eligible = ($hasRcon || $isRust || $isPalworld) && $hasConnectionInfo;
         if (!$eligible) {
             continue;
         }
 
-        $protocol = $isRust ? 'webrcon' : 'source';
+        $protocol = $isRust ? 'webrcon' : ($isPalworld ? 'palworld_rest' : 'source');
         $name = (string) ($gs['query']['server_name'] ?? '');
         if ($name === '') {
             $name = $gameHuman;

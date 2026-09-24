@@ -107,6 +107,8 @@ window.NICON_I18N_STRINGS.en = {
     rconPasswordAriaLabel: "RCON password for {{name}}",
     removeAriaLabel: "Remove {{name}}",
     connectedTooltip: "Connected",
+    statusMissing: "No RCON password saved yet",
+    statusReady: "Not connected",
     searchPlaceholder: "Search servers…",
     noSearchResults: "No servers match your search.",
   },
@@ -198,6 +200,9 @@ window.NICON_I18N_STRINGS.en = {
   },
   notifications: {
     dismiss: "Dismiss",
+    bellAriaLabel: "Notifications",
+    modalTitle: "Notifications",
+    empty: "No notifications.",
   },
   errors: {
     sessionExpired: "Your session expired — sign in again.",
