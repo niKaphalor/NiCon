@@ -35,9 +35,10 @@ type wsMessage struct {
 	Message  string `json:"message,omitempty"`
 }
 
-// gameConn abstracts over the two RCON transports NiCon speaks: classic
-// Source RCON (*rcon.Conn, which already satisfies this) and WebRCON
-// (*webRconConn).
+// gameConn abstracts over the RCON transports NiCon speaks: classic
+// Source RCON (*rcon.Conn, which already satisfies this), WebRCON
+// (*webRconConn), Palworld's REST API (*palworldRestConn), and BattlEye
+// RCon (*battleyeConn, Arma 3 and DayZ).
 type gameConn interface {
 	Execute(command string) (string, error)
 	Close() error
@@ -49,6 +50,8 @@ func connectGame(srv store.Server) (gameConn, error) {
 		return dialWebRcon(srv.Host, srv.Port, srv.Password)
 	case "palworld_rest":
 		return dialPalworldRest(srv.Host, srv.Port, srv.Password)
+	case "battleye":
+		return dialBattleye(srv.Host, srv.Port, srv.Password)
 	default:
 		address := fmt.Sprintf("%s:%d", srv.Host, srv.Port)
 		return rcon.Dial(address, srv.Password)
@@ -140,15 +143,23 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 			gc = newConn
 			_ = writeJSON(wsMessage{Type: "connected"})
 
-			// WebRCON servers (Rust) push chat/log lines unsolicited over
-			// the same connection; forward those to the browser live.
+			// WebRCON (Rust) and BattlEye (Arma 3, DayZ) both push
+			// messages unsolicited over the same connection — chat/log
+			// lines, or player join/leave notices — forward those to the
+			// browser live rather than only ever responding to commands.
+			var broadcast <-chan string
 			if wrc, ok := newConn.(*webRconConn); ok {
+				broadcast = wrc.Broadcast
+			} else if bc, ok := newConn.(*battleyeConn); ok {
+				broadcast = bc.Broadcast
+			}
+			if broadcast != nil {
 				done := make(chan struct{})
 				stopBroadcast = func() { close(done) }
 				go func() {
 					for {
 						select {
-						case line, ok := <-wrc.Broadcast:
+						case line, ok := <-broadcast:
 							if !ok {
 								return
 							}

@@ -56,6 +56,7 @@ window.NICON_I18N_STRINGS.en = {
     nitrado: "Nitrado",
     webrcon: "WebRCON",
     restApi: "REST API",
+    battleye: "BattlEye",
   },
   reset: {
     title: "Reset your password",
@@ -142,6 +143,7 @@ window.NICON_I18N_STRINGS.en = {
     protocolSource: "Source RCON (most games)",
     protocolWebrcon: "Rust WebRCON",
     protocolPalworldRest: "Palworld REST API",
+    protocolBattleye: "BattlEye RCon (Arma 3, DayZ)",
   },
   settings: {
     navLabel: "Settings",
@@ -196,6 +198,7 @@ window.NICON_I18N_STRINGS.en = {
       playeruid: "PlayerUID",
       userid: "User ID",
       level: "Level",
+      guid: "GUID",
     },
   },
   notifications: {

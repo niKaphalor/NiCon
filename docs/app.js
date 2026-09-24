@@ -734,6 +734,7 @@
   function protocolLabel(protocol) {
     if (protocol === "webrcon") return I18N.t("addModal.protocolWebrcon");
     if (protocol === "palworld_rest") return I18N.t("addModal.protocolPalworldRest");
+    if (protocol === "battleye") return I18N.t("addModal.protocolBattleye");
     return I18N.t("common.protocolSource");
   }
 
@@ -743,6 +744,7 @@
   function protocolBadge(protocol) {
     if (protocol === "webrcon") return I18N.t("common.webrcon");
     if (protocol === "palworld_rest") return I18N.t("common.restApi");
+    if (protocol === "battleye") return I18N.t("common.battleye");
     return null;
   }
 

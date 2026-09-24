@@ -87,16 +87,21 @@ function nicon_handle_nitrado_sync(int $userId): void
         // port; confirmed directly against a real Nitrado Palworld
         // service that it's the reported rcon_port + 1.
         $isPalworld = stripos($gameHuman, 'palworld') !== false;
+        // Arma (3 and 2) and DayZ are BattlEye-protected — a different
+        // wire protocol from Source RCON entirely (see
+        // internal/relay/battleye.go), even though Nitrado reports the
+        // same has_rcon/rcon_port fields for them.
+        $isBattleye = stripos($gameHuman, 'arma') !== false || stripos($gameHuman, 'dayz') !== false;
         $hasRcon = (bool) ($gs['game_specific']['features']['has_rcon'] ?? false);
         $rconPort = (int) ($gs['rcon_port'] ?? 0);
         $ip = (string) ($gs['ip'] ?? '');
         $hasConnectionInfo = $rconPort !== 0 && $ip !== '';
-        $eligible = ($hasRcon || $isRust || $isPalworld) && $hasConnectionInfo;
+        $eligible = ($hasRcon || $isRust || $isPalworld || $isBattleye) && $hasConnectionInfo;
         if (!$eligible) {
             continue;
         }
 
-        $protocol = $isRust ? 'webrcon' : ($isPalworld ? 'palworld_rest' : 'source');
+        $protocol = $isRust ? 'webrcon' : ($isPalworld ? 'palworld_rest' : ($isBattleye ? 'battleye' : 'source'));
         $port = $isPalworld ? $rconPort + 1 : $rconPort;
         $name = (string) ($gs['query']['server_name'] ?? '');
         if ($name === '') {

@@ -266,15 +266,17 @@ authenticated user) rather than trusting the client, so a compromised
 browser tab can't be pointed at an arbitrary host or reach another user's
 stored credentials by supplying a different ID. Responses come back as
 JSON (`{"type":"response", output}` / `{"type":"error", message}` /
-`{"type":"broadcast", output}` for a WebRCON server's own unsolicited push
-messages). Servers can be `"source"` (classic Source RCON via
-[gorcon/rcon](https://github.com/gorcon/rcon)), `"webrcon"` (Rust's own
-WebSocket-based RCON, hand-rolled in `internal/relay/webrcon.go` since
-there's no existing Go client for it), or `"palworld_rest"` (Palworld's
-first-party REST API — see below). The WebRCON connection also sends
-itself a WebSocket ping every 25s — Rust closes WebRCON connections it
-considers idle, and this keeps it alive without sending a bogus command
-to the game.
+`{"type":"broadcast", output}` for a WebRCON/BattlEye server's own
+unsolicited push messages). Servers can be `"source"` (classic Source
+RCON via [gorcon/rcon](https://github.com/gorcon/rcon) — this is what
+Garry's Mod and ARK: Survival Evolved/Ascended use too, no special
+handling needed), `"webrcon"` (Rust's own WebSocket-based RCON,
+hand-rolled in `internal/relay/webrcon.go` since there's no existing Go
+client for it), `"palworld_rest"` (Palworld's first-party REST API — see
+below), or `"battleye"` (Arma 3 and DayZ's BattlEye RCon — see below).
+The WebRCON connection also sends itself a WebSocket ping every 25s —
+Rust closes WebRCON connections it considers idle, and this keeps it
+alive without sending a bogus command to the game.
 
 **`"palworld_rest"`** exists because Pocketpair deprecated Palworld's RCON
 support in favor of a REST API (plain HTTP + JSON, HTTP Basic auth with
@@ -295,6 +297,22 @@ RCON is being phased out). Nitrado's API has no dedicated field for the
 REST API's port, so this uses the reported `rcon_port + 1` — confirmed
 against a real Nitrado Palworld service, not officially documented by
 Nitrado, so worth double-checking if a sync ever gets it wrong.
+
+**`"battleye"`** speaks [BattlEye's RCon
+protocol](https://www.battleye.com/downloads/BERConProtocol.txt), used by
+Arma 3 and DayZ (both BattlEye-protected, unlike the Source-RCON-based
+games) — a UDP protocol, not TCP, with CRC32-checked packets and no
+delivery guarantee, unlike everything else the relay speaks. Long
+responses arrive split across several packets that
+`internal/relay/battleye.go` reassembles by sequence number; the server
+also pushes unsolicited "server message" packets (player connects,
+chat) that must be ACKed immediately or BattlEye drops the client —
+those surface as `{"type":"broadcast"}` the same way WebRCON's are. Unit
+tests (`internal/relay/battleye_test.go`) exercise the framing,
+reassembly, and ACK behavior against a fake UDP server, including under
+`-race`, but the implementation hasn't been checked against a real Arma
+3 or DayZ server yet. Nitrado sync detects both games by name (matching
+`arma`/`dayz` in `game_human`) and assigns this protocol automatically.
 
 Only origins in `-allow-origin` (default: the GitHub Pages URL plus
 `localhost:8765`) can open that WebSocket at all — without that check, any
@@ -523,21 +541,24 @@ CI runs the Go suite against a MariaDB service container
   behavior the old all-in-one relay's Go tests already covered, but
   nothing exercises the PHP itself yet beyond manual testing (see
   [Testing](#testing))
-- Automated tests for the WebSocket/RCON bridge itself — classic RCON,
-  WebRCON, and broadcast-forwarding have only been exercised manually,
-  including `-race` runs, against hand-written mock servers (the new
-  Palworld REST client does have unit tests, see
-  `internal/relay/palworld_rest_test.go`)
+- Automated tests for the WebSocket/RCON bridge itself — classic RCON and
+  broadcast-forwarding have only been exercised manually, including
+  `-race` runs, against hand-written mock servers. The Palworld REST and
+  BattlEye clients do have unit tests (`internal/relay/palworld_rest_test.go`,
+  `internal/relay/battleye_test.go`), but only against fake HTTP/UDP
+  servers, not the real thing
 - The WebRCON implementation is based on Facepunch's own
   [webrcon](https://github.com/Facepunch/webrcon) tool and third-party
   documentation; the `playerlist` command and `kick` have been verified
-  against a real Rust server, the rest of it hasn't
+  against a real Rust server, the rest of it hasn't. The BattlEye
+  implementation (Arma 3, DayZ) is based on BattlEye's own published
+  protocol spec and hasn't been checked against a real server at all yet
 - Structured player-list parsing (`docs/games.js`) covers Minecraft, Rust,
-  ARK: Survival Evolved, and Palworld (via its REST API, see
-  [Relay](#relay)), based on documented command/API output formats rather
-  than verified live responses — Rust's is the exception, confirmed
-  against a real server; the other three haven't been — see the file for
-  details
+  ARK: Survival Evolved/Ascended, Palworld (via its REST API, see
+  [Relay](#relay)), Arma 3, DayZ, and Garry's Mod, based on documented
+  command/API output formats rather than verified live responses — Rust's
+  is the exception, confirmed against a real server; none of the others
+  have been — see the file for details
 - The [admin panel](#admin-panel) covers account management (list, delete,
   regenerate a recovery code) but nothing about server data — an admin
   can't see, edit, or connect through another account's servers, same as

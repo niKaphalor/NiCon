@@ -26,6 +26,38 @@
 // kick(player)/ban(player) return an RCON command string, or null if this
 // game/identifier doesn't support that action (e.g. no stable ID was
 // available to target).
+
+// Arma 3 and DayZ are both BattlEye-protected (relay protocol "battleye",
+// see internal/relay/battleye.go) rather than Source RCON, but share the
+// same `players` command and response shape documented at
+// https://www.battleye.com/downloads/BERConProtocol.txt's tooling docs:
+//   Players on server:
+//   [#] [IP Address]:[Port] [Ping] [GUID] [Name]
+//   --------------------------------------------------
+//   0   127.0.0.1:2304        43    bec7c...(OK) PlayerName
+//   (1 players in total)
+// kick/ban both address the player by that leading "#" (their current
+// session slot, not a stable id — it's what BE itself requires).
+function parseBattleyePlayers(text) {
+  var lines = text.split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+  var players = [];
+  lines.forEach(function (line) {
+    var m = line.match(/^(\d+)\s+([\d.]+):(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/);
+    if (!m) return;
+    var guid = m[5].replace(/\(.*\)$/, "");
+    players.push({ cells: [m[6], guid, m[4], m[2] + ":" + m[3]], id: m[1], isAdmin: false });
+  });
+  if (!players.length) return null;
+  return {
+    columns: ["name", "guid", "ping", "address"],
+    summary: players.length + " player" + (players.length === 1 ? "" : "s") + " online",
+    players: players,
+  };
+}
+function battleyeKick(player) { return "kick " + player.id; }
+// "ban <#> [minutes] [reason]" — 0 (or omitted) minutes is permanent.
+function battleyeBan(player) { return "ban " + player.id + " 0 Banned by admin"; }
+
 window.NICON_GAMES = {
   minecraft: {
     label: "Minecraft",
@@ -86,7 +118,9 @@ window.NICON_GAMES = {
   },
 
   ark: {
-    label: "ARK: Survival Evolved",
+    // Survival Ascended reuses the same Source RCON commands as Evolved
+    // (same studio, same server tooling) — no separate entry needed.
+    label: "ARK: Survival Evolved / Ascended",
     command: "ListPlayers",
     parse: function (text) {
       // Documented shape: "<index>. <PlayerName>, <SteamID>" per line.
@@ -136,17 +170,73 @@ window.NICON_GAMES = {
     kick: function (player) { return player.id ? "kick " + player.id : null; },
     ban: function (player) { return player.id ? "ban " + player.id + " Banned by admin" : null; },
   },
+
+  arma3: {
+    label: "Arma 3",
+    command: "players",
+    parse: parseBattleyePlayers,
+    kick: battleyeKick,
+    ban: battleyeBan,
+  },
+
+  dayz: {
+    label: "DayZ",
+    command: "players",
+    parse: parseBattleyePlayers,
+    kick: battleyeKick,
+    ban: battleyeBan,
+  },
+
+  // Garry's Mod is plain Source RCON (protocol "source") — the generic
+  // `status` command every Source-engine game answers, not a GMod-specific
+  // one. Typical shape:
+  //   # userid name uniqueid connected ping loss state
+  //   #    2 "PlayerName" STEAM_0:1:12345678 05:23 45 0 active
+  gmod: {
+    label: "Garry's Mod",
+    command: "status",
+    parse: function (text) {
+      var lines = text.split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+      var players = [];
+      lines.forEach(function (line) {
+        var m = line.match(/^#\s*(\d+)\s+"(.*)"\s+(\S+)\s+([\d:]+)\s+(\d+)\s+\d+\s+\S+/);
+        if (m) players.push({ cells: [m[2], m[3], m[5], m[1]], id: m[1], isAdmin: false });
+      });
+      if (!players.length) return null;
+      return {
+        columns: ["name", "steamid", "ping", "userid"],
+        summary: players.length + " player" + (players.length === 1 ? "" : "s") + " online",
+        players: players,
+      };
+    },
+    // kickid/banid (by userid, from `status`) rather than kick/ban by
+    // name — a name can be ambiguous (duplicates, quoting), userid can't.
+    kick: function (player) { return "kickid " + player.id; },
+    // "banid <minutes> <userid> [kick]" — 0 minutes is permanent; kick
+    // removes them immediately instead of waiting for their next connect.
+    ban: function (player) { return "banid 0 " + player.id + " kick"; },
+  },
 };
 
 // Best-effort mapping from a Nitrado "game" string (e.g. "Minecraft
-// Vanilla") to one of the keys above, for auto-selecting the parser.
+// Vanilla") to one of the keys above, for auto-selecting the parser. Most
+// keys already are the substring to look for; a few games' key names
+// don't literally appear in Nitrado's label (a space, an abbreviation, an
+// apostrophe), so those get an explicit alias list instead.
+window.NICON_GUESS_GAME_ALIASES = {
+  arma3: ["arma 3", "arma3"],
+  dayz: ["dayz", "day z"],
+  gmod: ["garry's mod", "garrys mod", "gmod"],
+};
 window.NICON_GUESS_GAME = function (gameLabel) {
   if (!gameLabel) return "";
   var lower = gameLabel.toLowerCase();
   var keys = Object.keys(window.NICON_GAMES);
   for (var i = 0; i < keys.length; i++) {
-    if (lower.indexOf(keys[i]) !== -1) return keys[i];
+    var aliases = window.NICON_GUESS_GAME_ALIASES[keys[i]] || [keys[i]];
+    for (var j = 0; j < aliases.length; j++) {
+      if (lower.indexOf(aliases[j]) !== -1) return keys[i];
+    }
   }
-  if (lower.indexOf("ark") !== -1) return "ark";
   return "";
 };
