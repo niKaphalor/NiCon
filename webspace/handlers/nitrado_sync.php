@@ -83,9 +83,9 @@ function nicon_handle_nitrado_sync(int $userId): void
         // Palworld's RCON is deprecated (Pocketpair-wide, not a Nitrado
         // choice) — Nitrado may already report has_rcon=false for it, so
         // this game is eligible on its own merits, independent of that
-        // flag. Best-effort: reuses whatever port Nitrado reports for
-        // RCON, since there's no confirmed separate field for the REST
-        // API's port — verify/correct it manually if a sync gets it wrong.
+        // flag. Nitrado's API has no dedicated field for the REST API's
+        // port; confirmed directly against a real Nitrado Palworld
+        // service that it's the reported rcon_port + 1.
         $isPalworld = stripos($gameHuman, 'palworld') !== false;
         $hasRcon = (bool) ($gs['game_specific']['features']['has_rcon'] ?? false);
         $rconPort = (int) ($gs['rcon_port'] ?? 0);
@@ -97,6 +97,7 @@ function nicon_handle_nitrado_sync(int $userId): void
         }
 
         $protocol = $isRust ? 'webrcon' : ($isPalworld ? 'palworld_rest' : 'source');
+        $port = $isPalworld ? $rconPort + 1 : $rconPort;
         $name = (string) ($gs['query']['server_name'] ?? '');
         if ($name === '') {
             $name = $gameHuman;
@@ -110,7 +111,7 @@ function nicon_handle_nitrado_sync(int $userId): void
             VALUES (?, ?, ?, ?, ?, ?, \'nitrado\', ?)
             ON DUPLICATE KEY UPDATE name = VALUES(name), host = VALUES(host), port = VALUES(port),
               protocol = VALUES(protocol), game = VALUES(game)
-        ')->execute([$userId, $name, $ip, $rconPort, $protocol, $gameHuman, $serviceId]);
+        ')->execute([$userId, $name, $ip, $port, $protocol, $gameHuman, $serviceId]);
     }
 
     nicon_handle_list_servers($userId);

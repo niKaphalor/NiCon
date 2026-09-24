@@ -288,13 +288,13 @@ free-text console like the other two protocols, so
 [message]`, `stop`. Anything else comes back as an error rather than
 silently doing nothing. `docs/games.js`'s `palworld` entry sends `players`
 and parses the JSON response the same way it parses Rust's WebRCON
-`playerlist` JSON. Note: as of this writing, the Cloud API's Nitrado sync
-(`webspace/handlers/nitrado_sync.php`) doesn't auto-detect this protocol
-for Palworld services — it still assigns the
-protocol Nitrado's API reports, which may no longer be a working
-credential now that RCON is being phased out. Add a Palworld server
-manually (host + the REST API port + the admin password, protocol
-"Palworld REST API") until that's sorted out.
+`playerlist` JSON. Nitrado sync (`webspace/handlers/nitrado_sync.php`)
+assigns this protocol automatically for Palworld services, independent
+of Nitrado's `has_rcon` flag (which may already be `false` now that
+RCON is being phased out). Nitrado's API has no dedicated field for the
+REST API's port, so this uses the reported `rcon_port + 1` — confirmed
+against a real Nitrado Palworld service, not officially documented by
+Nitrado, so worth double-checking if a sync ever gets it wrong.
 
 Only origins in `-allow-origin` (default: the GitHub Pages URL plus
 `localhost:8765`) can open that WebSocket at all — without that check, any
