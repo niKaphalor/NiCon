@@ -32,6 +32,20 @@ window.NICON_I18N_STRINGS.en = {
   login: {
     subhead: "Your servers are tied to your NiCon account — sign in to see them.",
   },
+  hero: {
+    title: "One console for every game server you run.",
+    subhead: "NiCon speaks RCON to Rust, Palworld, ARK, Arma 3, DayZ, Garry's Mod, and more — sign in to manage your servers from any browser.",
+    feature1Title: "Every game, one console",
+    feature1Body: "A single browser tab for RCON across Rust, Palworld, ARK, Arma 3, DayZ, Garry's Mod, and more — no extra software to install.",
+    feature2Title: "Kick and ban in a click",
+    feature2Body: "Live player lists parsed straight out of RCON output, with one-click kick and ban instead of typing raw commands.",
+    feature3Title: "Import from Nitrado",
+    feature3Body: "Paste your API token once and NiCon fills in host, port, and protocol for every eligible server automatically.",
+    feature4Title: "Encrypted at rest",
+    feature4Body: "RCON passwords and Nitrado tokens are stored with AES-256-GCM and never sent back to your browser once saved.",
+    feature5Title: "Your relay, your infrastructure",
+    feature5Body: "The piece that actually talks RCON is self-hosted — run it locally or on your own server, never ours.",
+  },
   register: {
     title: "Create an account",
     subheadBefore: "Only your username and a password hash are stored — see what that means in the",

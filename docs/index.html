@@ -62,39 +62,70 @@
 
 
 <main>
-  <section id="view-login" class="view">
-    <div class="login-box">
-      <h1 data-i18n="auth.signIn">Sign in</h1>
-      <p class="hint" data-i18n="login.subhead">Your servers are tied to your NiCon account — sign in to see them.</p>
-      <form id="login-form" class="stacked-form">
-        <input id="login-username" type="text" placeholder="Username" required autocomplete="username" aria-label="Username" data-i18n-placeholder="common.username" data-i18n-aria-label="common.username">
-        <input id="login-password" type="password" placeholder="Password" required autocomplete="current-password" aria-label="Password" data-i18n-placeholder="common.password" data-i18n-aria-label="common.password">
-        <button type="submit" class="btn-primary" data-i18n="auth.signIn">Sign in</button>
-      </form>
-      <p id="login-error" class="hint login-error" hidden></p>
-      <p class="hint auth-switch"><span data-i18n="auth.noAccountYet">No account yet?</span> <button type="button" id="show-register-btn" class="link-button" data-i18n="auth.createOne">Create one</button></p>
-      <p class="hint auth-switch"><button type="button" id="show-reset-btn" class="link-button" data-i18n="auth.forgotPassword">Forgot your password?</button></p>
+  <div id="auth-shell" class="auth-shell">
+    <div class="auth-hero">
+      <h1 class="auth-hero-title" data-i18n="hero.title">One console for every game server you run.</h1>
+      <p class="hint auth-hero-subhead" data-i18n="hero.subhead">NiCon speaks RCON to Rust, Palworld, ARK, Arma 3, DayZ, Garry's Mod, and more — sign in to manage your servers from any browser.</p>
+      <ul class="auth-feature-list">
+        <li>
+          <span class="auth-feature-mark" aria-hidden="true"></span>
+          <div><strong data-i18n="hero.feature1Title">Every game, one console</strong><span data-i18n="hero.feature1Body">A single browser tab for RCON across Rust, Palworld, ARK, Arma 3, DayZ, Garry's Mod, and more — no extra software to install.</span></div>
+        </li>
+        <li>
+          <span class="auth-feature-mark" aria-hidden="true"></span>
+          <div><strong data-i18n="hero.feature2Title">Kick and ban in a click</strong><span data-i18n="hero.feature2Body">Live player lists parsed straight out of RCON output, with one-click kick and ban instead of typing raw commands.</span></div>
+        </li>
+        <li>
+          <span class="auth-feature-mark" aria-hidden="true"></span>
+          <div><strong data-i18n="hero.feature3Title">Import from Nitrado</strong><span data-i18n="hero.feature3Body">Paste your API token once and NiCon fills in host, port, and protocol for every eligible server automatically.</span></div>
+        </li>
+        <li>
+          <span class="auth-feature-mark" aria-hidden="true"></span>
+          <div><strong data-i18n="hero.feature4Title">Encrypted at rest</strong><span data-i18n="hero.feature4Body">RCON passwords and Nitrado tokens are stored with AES-256-GCM and never sent back to your browser once saved.</span></div>
+        </li>
+        <li>
+          <span class="auth-feature-mark" aria-hidden="true"></span>
+          <div><strong data-i18n="hero.feature5Title">Your relay, your infrastructure</strong><span data-i18n="hero.feature5Body">The piece that actually talks RCON is self-hosted — run it locally or on your own server, never ours.</span></div>
+        </li>
+      </ul>
     </div>
-  </section>
 
-  <section id="view-register" class="view" hidden>
-    <div class="login-box">
-      <h1 data-i18n="register.title">Create an account</h1>
-      <p class="hint"><span data-i18n="register.subheadBefore">Only your username and a password hash are stored — see what that means in the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a>.</p>
-      <form id="register-form" class="stacked-form">
-        <input id="register-username" type="text" placeholder="Username (3–32 characters)" required autocomplete="username" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.\-]+" aria-label="Username" data-i18n-placeholder="register.usernamePlaceholder" data-i18n-aria-label="common.username">
-        <input id="register-password" type="password" placeholder="Password (min. 8 characters)" required autocomplete="new-password" minlength="8" aria-label="Password" data-i18n-placeholder="register.passwordPlaceholder" data-i18n-aria-label="common.password">
-        <input id="register-password-confirm" type="password" placeholder="Confirm password" required autocomplete="new-password" minlength="8" aria-label="Confirm password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
-        <label class="checkbox-row">
-          <input type="checkbox" id="register-consent" required>
-          <span><span data-i18n="register.consentBefore">I've read the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a> <span data-i18n="register.consentAfter">and agree to it.</span></span>
-        </label>
-        <button type="submit" class="btn-primary" data-i18n="register.submit">Create account</button>
-      </form>
-      <p id="register-error" class="hint login-error" hidden></p>
-      <p class="hint auth-switch"><span data-i18n="auth.alreadyHaveAccount">Already have an account?</span> <button type="button" id="show-login-btn" class="link-button" data-i18n="auth.signIn">Sign in</button></p>
+    <div class="auth-panel">
+      <section id="view-login" class="view">
+        <div class="login-box">
+          <h1 data-i18n="auth.signIn">Sign in</h1>
+          <p class="hint" data-i18n="login.subhead">Your servers are tied to your NiCon account — sign in to see them.</p>
+          <form id="login-form" class="stacked-form">
+            <input id="login-username" type="text" placeholder="Username" required autocomplete="username" aria-label="Username" data-i18n-placeholder="common.username" data-i18n-aria-label="common.username">
+            <input id="login-password" type="password" placeholder="Password" required autocomplete="current-password" aria-label="Password" data-i18n-placeholder="common.password" data-i18n-aria-label="common.password">
+            <button type="submit" class="btn-primary" data-i18n="auth.signIn">Sign in</button>
+          </form>
+          <p id="login-error" class="hint login-error" hidden></p>
+          <p class="hint auth-switch"><span data-i18n="auth.noAccountYet">No account yet?</span> <button type="button" id="show-register-btn" class="link-button" data-i18n="auth.createOne">Create one</button></p>
+          <p class="hint auth-switch"><button type="button" id="show-reset-btn" class="link-button" data-i18n="auth.forgotPassword">Forgot your password?</button></p>
+        </div>
+      </section>
+
+      <section id="view-register" class="view" hidden>
+        <div class="login-box">
+          <h1 data-i18n="register.title">Create an account</h1>
+          <p class="hint"><span data-i18n="register.subheadBefore">Only your username and a password hash are stored — see what that means in the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a>.</p>
+          <form id="register-form" class="stacked-form">
+            <input id="register-username" type="text" placeholder="Username (3–32 characters)" required autocomplete="username" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.\-]+" aria-label="Username" data-i18n-placeholder="register.usernamePlaceholder" data-i18n-aria-label="common.username">
+            <input id="register-password" type="password" placeholder="Password (min. 8 characters)" required autocomplete="new-password" minlength="8" aria-label="Password" data-i18n-placeholder="register.passwordPlaceholder" data-i18n-aria-label="common.password">
+            <input id="register-password-confirm" type="password" placeholder="Confirm password" required autocomplete="new-password" minlength="8" aria-label="Confirm password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
+            <label class="checkbox-row">
+              <input type="checkbox" id="register-consent" required>
+              <span><span data-i18n="register.consentBefore">I've read the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a> <span data-i18n="register.consentAfter">and agree to it.</span></span>
+            </label>
+            <button type="submit" class="btn-primary" data-i18n="register.submit">Create account</button>
+          </form>
+          <p id="register-error" class="hint login-error" hidden></p>
+          <p class="hint auth-switch"><span data-i18n="auth.alreadyHaveAccount">Already have an account?</span> <button type="button" id="show-login-btn" class="link-button" data-i18n="auth.signIn">Sign in</button></p>
+        </div>
+      </section>
     </div>
-  </section>
+  </div>
 
   <section id="view-app" class="view" hidden>
     <div class="app-shell">

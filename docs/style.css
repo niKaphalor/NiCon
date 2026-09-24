@@ -402,9 +402,39 @@ main { min-height: calc(100% - 60px); display: flex; flex-direction: column; }
 
 .view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
+.auth-shell {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  align-items: center;
+  gap: var(--space-8);
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6) calc(var(--space-8) + 2.2rem);
+}
+
+.auth-hero {
+  max-width: 46ch;
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: radial-gradient(560px circle at -8% -25%, color-mix(in srgb, var(--color-accent) 16%, transparent), transparent 60%);
+}
+.auth-hero-title { font-size: clamp(1.7rem, 1.15rem + 2vw, 2.5rem); margin-bottom: var(--space-4); }
+.auth-hero-subhead { max-width: 52ch; margin-bottom: var(--space-8); }
+
+.auth-feature-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-5); }
+.auth-feature-list li { display: flex; align-items: flex-start; gap: var(--space-4); }
+.auth-feature-mark { width: 8px; height: 8px; margin-top: 7px; border-radius: 2px; background: var(--color-accent); flex-shrink: 0; }
+.auth-feature-list li > div { display: flex; flex-direction: column; gap: 2px; }
+.auth-feature-list strong { font-family: var(--font-heading); font-weight: 600; font-size: 0.95rem; }
+.auth-feature-list li span { color: color-mix(in srgb, var(--color-text) 65%, transparent); font-size: 0.85rem; max-width: 48ch; }
+
+.auth-panel { display: flex; align-items: center; justify-content: center; min-width: 0; }
+
 .login-box {
   max-width: 380px;
-  margin: 3rem auto 0;
+  margin: 0;
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
@@ -786,6 +816,9 @@ dialog::backdrop { background: color-mix(in srgb, var(--color-surface-sunken) 65
   .sidebar { width: 100%; border-right: 0; border-bottom: 1px solid var(--color-divider); max-height: 260px; flex-shrink: 0; }
   .content { overflow: visible; }
   .settings-columns { grid-template-columns: 1fr; }
+  .auth-shell { grid-template-columns: 1fr; gap: var(--space-6); padding-top: var(--space-6); }
+  .auth-hero { max-width: none; }
+  .auth-hero-subhead { margin-bottom: var(--space-6); }
 }
 
 @media (max-width: 600px) {
@@ -797,7 +830,8 @@ dialog::backdrop { background: color-mix(in srgb, var(--color-surface-sunken) 65
   .settings-inner { padding-inline: 16px; }
   .admin-page { padding-inline: 16px; }
   main { padding: 0; }
-  .login-box { margin-top: 1.5rem; }
+  .auth-shell { padding: var(--space-5) 16px calc(var(--space-8) + 2.2rem); }
+  .auth-hero { padding: 0; background: none; }
   .console-log { height: 40vh; min-height: 260px; font-size: 0.8rem; }
   .topbar-right #username-label { display: none; }
 }

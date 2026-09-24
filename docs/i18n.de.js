@@ -33,6 +33,20 @@ window.NICON_I18N_STRINGS.de = {
   login: {
     subhead: "Deine Server sind an dein NiCon-Konto gebunden — melde dich an, um sie zu sehen.",
   },
+  hero: {
+    title: "Eine Konsole für jeden Spieleserver, den du betreibst.",
+    subhead: "NiCon spricht RCON mit Rust, Palworld, ARK, Arma 3, DayZ, Garry's Mod und mehr — melde dich an, um deine Server aus jedem Browser zu verwalten.",
+    feature1Title: "Jedes Spiel, eine Konsole",
+    feature1Body: "Ein einziger Browser-Tab für RCON über Rust, Palworld, ARK, Arma 3, DayZ, Garry's Mod und mehr — ohne zusätzliche Software.",
+    feature2Title: "Kicken und bannen per Klick",
+    feature2Body: "Live-Spielerlisten direkt aus der RCON-Ausgabe geparst, mit Kick und Bann per Klick statt roher Befehle.",
+    feature3Title: "Import von Nitrado",
+    feature3Body: "Token einmal einfügen, und NiCon trägt Host, Port und Protokoll für jeden passenden Server automatisch ein.",
+    feature4Title: "Verschlüsselt gespeichert",
+    feature4Body: "RCON-Passwörter und Nitrado-Token werden mit AES-256-GCM gespeichert und nach dem Speichern nie wieder an deinen Browser gesendet.",
+    feature5Title: "Dein Relay, deine Infrastruktur",
+    feature5Body: "Der Teil, der tatsächlich RCON spricht, ist selbst gehostet — lokal oder auf deinem eigenen Server, nie unserem.",
+  },
   register: {
     title: "Konto erstellen",
     subheadBefore: "Es werden nur dein Benutzername und ein Passwort-Hash gespeichert — was das bedeutet, steht in der",

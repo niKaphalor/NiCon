@@ -84,6 +84,7 @@
   var adminNavBtn = document.getElementById("admin-nav-btn");
   var addServerBtn = document.getElementById("add-server-btn");
 
+  var authShell = document.getElementById("auth-shell");
   var viewLogin = document.getElementById("view-login");
   var loginForm = document.getElementById("login-form");
   var loginError = document.getElementById("login-error");
@@ -891,6 +892,7 @@
     viewSettings.hidden = true;
     viewRegister.hidden = true;
     viewAdmin.hidden = true;
+    authShell.hidden = false;
     viewLogin.hidden = false;
     usernameLabel.hidden = true;
     logoutBtn.hidden = true;
@@ -910,10 +912,12 @@
     viewSettings.hidden = true;
     viewLogin.hidden = true;
     registerError.hidden = true;
+    authShell.hidden = false;
     viewRegister.hidden = false;
   }
 
   function showAppView() {
+    authShell.hidden = true;
     viewLogin.hidden = true;
     viewRegister.hidden = true;
     viewSettings.hidden = true;
@@ -942,6 +946,7 @@
 
   function showSettingsView() {
     stopPlayersAutoRefresh();
+    authShell.hidden = true;
     viewLogin.hidden = true;
     viewRegister.hidden = true;
     viewApp.hidden = true;
@@ -955,6 +960,7 @@
 
   function showAdminView() {
     stopPlayersAutoRefresh();
+    authShell.hidden = true;
     viewLogin.hidden = true;
     viewRegister.hidden = true;
     viewApp.hidden = true;
