@@ -53,7 +53,7 @@ function nicon_handle_login(): void
 
     $token = nicon_generate_session_token();
     $pdo->prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))')
-        ->execute([$token, $user['id'], NICON_SESSION_TTL_SECONDS]);
+        ->execute([nicon_hash_token($token), $user['id'], NICON_SESSION_TTL_SECONDS]);
 
     nicon_send_json(['token' => $token, 'is_admin' => (bool) $user['is_admin']]);
 }
@@ -62,7 +62,7 @@ function nicon_handle_logout(): void
 {
     $token = nicon_bearer_token();
     if ($token !== '') {
-        nicon_db()->prepare('DELETE FROM sessions WHERE token = ?')->execute([$token]);
+        nicon_db()->prepare('DELETE FROM sessions WHERE token = ?')->execute([nicon_hash_token($token)]);
     }
     http_response_code(204);
 }

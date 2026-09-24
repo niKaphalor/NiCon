@@ -45,8 +45,10 @@ prototype.
 2. Set up the [Cloud API](#cloud-api-webspace) somewhere always-on (once,
    not per session) and the [relay](#relay) locally, both pointed at the
    same MariaDB database. The topbar shows two status pills — **API** and
-   **relay** — each green once reachable; open either (or the ⚙ next to
-   them) to change its address if you're not using the defaults.
+   **relay** — each green once reachable. Their addresses are compiled into
+   `docs/app.js` (`API_URL`/`RELAY_URL`) rather than editable at runtime —
+   see [Pointing the frontend at your own deployment](#pointing-the-frontend-at-your-own-deployment)
+   if you're not using this repo's own hosted instance.
 3. Sign in, or create an account yourself (see
    [User accounts](#user-accounts)) — registration asks you to confirm
    you've read the [privacy policy](docs/privacy.html) first. This, and
@@ -381,11 +383,27 @@ docker compose up -d --build
 docker compose logs -f caddy   # first run: watch it obtain the certificate
 ```
 
-Once it's up, `https://<RELAY_DOMAIN>/healthz` should return `ok`. Put
-`https://<RELAY_DOMAIN>` in the frontend's Settings → Relay address field,
-in place of `http://localhost:8765` — the frontend derives the `wss://`
-WebSocket URL from it automatically, the same way it derives `ws://` from
-`http://localhost:8765` today.
+Once it's up, `https://<RELAY_DOMAIN>/healthz` should return `ok`. See
+[Pointing the frontend at your own deployment](#pointing-the-frontend-at-your-own-deployment)
+for wiring that address into the frontend.
+
+## Pointing the frontend at your own deployment
+
+`docs/app.js` compiles in the Cloud API and relay addresses as constants
+(`API_URL`, `RELAY_URL` near the top of the file) rather than reading them
+from a runtime Settings field — earlier versions of this README described
+an editable "Relay address" field in Settings, but the frontend redesign
+removed it in favor of these two constants. If you're running your own
+Cloud API and/or relay instead of this repo's own hosted instance, edit
+those two constants to point at them (`RELAY_URL` should be the plain
+`https://` address — `docs/app.js` derives the `wss://` WebSocket URL from
+it automatically, same as it always did) and redeploy `docs/` — GitHub
+Pages serves whatever's committed there, so there's no way to point one
+person's browser at a different backend than another's without a rebuild.
+The `Content-Security-Policy` meta tag in `docs/index.html` names both
+addresses explicitly in `connect-src`; update it to match if you change
+either constant, or the frontend's own requests to your backend will be
+blocked by the browser.
 
 ## User accounts
 

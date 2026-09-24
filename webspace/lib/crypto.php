@@ -112,3 +112,22 @@ function nicon_generate_session_token(): string
 {
     return bin2hex(random_bytes(32));
 }
+
+// nicon_hash_token returns the value actually stored in and looked up
+// against sessions.token. The session token itself is a 256-bit random
+// value handed to the browser and sent back on every authenticated
+// request — functionally a bearer credential — so it's hashed at rest the
+// same way a password would be, rather than kept as a plaintext column
+// anyone with read access to the database (a backup, a misconfigured
+// admin tool, an injection bug elsewhere) could use directly. A fast
+// unsalted hash is fine here, unlike a password hash: the input is
+// already 256 bits of randomness, not something guessable to speed up an
+// offline attack against. Mirrors internal/store/store.go's hashToken —
+// both sides must produce the same digest for a token created by one to
+// authenticate against the other. SHA-256's 64-character hex digest fits
+// the existing `sessions.token CHAR(64)` column exactly, so no schema
+// change is needed.
+function nicon_hash_token(string $token): string
+{
+    return hash('sha256', $token);
+}

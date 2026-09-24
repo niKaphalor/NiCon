@@ -106,6 +106,24 @@ func runServer() {
 		}
 	}()
 
+	// sessionCleanupInterval paces store.CleanupExpired: not needed for
+	// correctness (every session query already checks expires_at > NOW()),
+	// just housekeeping so the table doesn't grow unbounded from tokens
+	// nobody ever explicitly logged out of. The goroutine is intentionally
+	// not joined on shutdown — it exits along with the rest of the process.
+	const sessionCleanupInterval = 1 * time.Hour
+	cleanupTicker := time.NewTicker(sessionCleanupInterval)
+	defer cleanupTicker.Stop()
+	go func() {
+		for range cleanupTicker.C {
+			if n, err := st.CleanupExpired(context.Background()); err != nil {
+				logger.Printf("cleanup expired sessions: %v", err)
+			} else if n > 0 {
+				logger.Printf("cleaned up %d expired session(s)", n)
+			}
+		}
+	}()
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop

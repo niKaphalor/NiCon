@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorcon/rcon"
+	"github.com/gorilla/websocket"
 
 	"github.com/niKaphalor/NiCon/internal/store"
 )
@@ -58,6 +60,20 @@ const maxWSMessageBytes = 64 * 1024
 // being disconnected by the read-limit check above.
 const maxCommandLength = 8000
 
+// pongWait/pingPeriod/writeWait implement the standard gorilla/websocket
+// heartbeat: without it, a connection whose network path drops silently
+// (a laptop put to sleep, a NAT/proxy that stops forwarding packets, a
+// crashed browser tab) stays "open" from the relay's point of view
+// forever — nothing here is exchanged unless the user issues a command —
+// pinning down a maxConnsPerUser slot and an upstream RCON connection
+// indefinitely. pingPeriod must be well under pongWait so a couple of
+// missed pings (not just one) trip the deadline before it expires.
+const (
+	pongWait   = 60 * time.Second
+	pingPeriod = (pongWait * 9) / 10
+	writeWait  = 10 * time.Second
+)
+
 func connectGame(srv store.Server) (gameConn, error) {
 	switch srv.Protocol {
 	case "webrcon":
@@ -81,15 +97,46 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 	conn.SetReadLimit(maxWSMessageBytes)
 
-	// The main loop below and the broadcast-forwarding goroutine (started
-	// on "connect" for WebRCON) can both write to conn; gorilla/websocket
-	// allows only one writer at a time.
+	// Heartbeat: a missing pong within pongWait means the peer is gone
+	// (even if TCP hasn't noticed yet), so ReadJSON below returns an error
+	// and the handler cleans up instead of holding the connection — and
+	// its maxConnsPerUser slot — open forever.
+	_ = conn.SetReadDeadline(time.Now().Add(pongWait))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(pongWait))
+	})
+
+	// The main loop below, the ping ticker, and the broadcast-forwarding
+	// goroutine (started on "connect" for WebRCON) can all write to conn;
+	// gorilla/websocket allows only one writer at a time.
 	var writeMu sync.Mutex
 	writeJSON := func(msg wsMessage) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
+		_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
 		return conn.WriteJSON(msg)
 	}
+
+	connDone := make(chan struct{})
+	defer close(connDone)
+	go func() {
+		ticker := time.NewTicker(pingPeriod)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				writeMu.Lock()
+				_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
+				err := conn.WriteMessage(websocket.PingMessage, nil)
+				writeMu.Unlock()
+				if err != nil {
+					return
+				}
+			case <-connDone:
+				return
+			}
+		}
+	}()
 
 	var gc gameConn
 	var stopBroadcast func()
@@ -121,6 +168,11 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 			_ = writeJSON(wsMessage{Type: "error", Message: "unauthorized"})
 			return
 		}
+		if !rel.acquireConn(uid) {
+			_ = writeJSON(wsMessage{Type: "error", Message: "too many open connections for this account"})
+			return
+		}
+		defer rel.releaseConn(uid)
 		userID = uid
 		_ = writeJSON(wsMessage{Type: "authenticated"})
 	}

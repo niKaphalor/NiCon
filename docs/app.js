@@ -858,6 +858,7 @@
     usernameLabel.hidden = true;
     logoutBtn.hidden = true;
     navServersBtn.hidden = true;
+    navSettingsBtn.hidden = true;
     adminNavBtn.hidden = true;
     addServerBtn.hidden = true;
     accountDangerZone.hidden = true;
@@ -875,6 +876,7 @@
     registerError.hidden = true;
     authShell.hidden = false;
     viewRegister.hidden = false;
+    navSettingsBtn.hidden = true;
   }
 
   function showAppView() {
@@ -888,6 +890,7 @@
     usernameLabel.textContent = currentUsername;
     logoutBtn.hidden = false;
     navServersBtn.hidden = false;
+    navSettingsBtn.hidden = false;
     adminNavBtn.hidden = !currentIsAdmin;
     addServerBtn.hidden = false;
     accountDangerZone.hidden = false;

@@ -57,7 +57,7 @@ function nicon_handle_register(): void
 
     $token = nicon_generate_session_token();
     $pdo->prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))')
-        ->execute([$token, $userId, NICON_SESSION_TTL_SECONDS]);
+        ->execute([nicon_hash_token($token), $userId, NICON_SESSION_TTL_SECONDS]);
 
     nicon_send_json([
         'token' => $token,

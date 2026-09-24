@@ -19,6 +19,7 @@ package relay
 import (
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/gorilla/websocket"
 
@@ -26,12 +27,23 @@ import (
 	"github.com/niKaphalor/NiCon/internal/store"
 )
 
+// maxConnsPerUser bounds how many WebSocket/RCON connections one account
+// can hold open at the same time. The WS handshake itself is cheap and
+// otherwise uncapped per-user, so without this a compromised or scripted
+// client could open connections until the relay ran out of file
+// descriptors or upstream RCON sessions — this keeps that blast radius to
+// one account's own share.
+const maxConnsPerUser = 20
+
 type Relay struct {
 	log            *log.Logger
 	allowedOrigins map[string]bool
 	upgrader       websocket.Upgrader
 	store          *store.Store
 	auth           *auth.Auth
+
+	connsMu     sync.Mutex
+	connsByUser map[int64]int
 }
 
 func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.Auth) *Relay {
@@ -39,9 +51,33 @@ func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.
 	for _, o := range allowedOrigins {
 		origins[o] = true
 	}
-	rel := &Relay{log: logger, allowedOrigins: origins, store: st, auth: au}
+	rel := &Relay{log: logger, allowedOrigins: origins, store: st, auth: au, connsByUser: make(map[int64]int)}
 	rel.upgrader = websocket.Upgrader{CheckOrigin: rel.checkOrigin}
 	return rel
+}
+
+// acquireConn reserves one of userID's concurrent connection slots,
+// returning false (and reserving nothing) if they already have
+// maxConnsPerUser open.
+func (rel *Relay) acquireConn(userID int64) bool {
+	rel.connsMu.Lock()
+	defer rel.connsMu.Unlock()
+	if rel.connsByUser[userID] >= maxConnsPerUser {
+		return false
+	}
+	rel.connsByUser[userID]++
+	return true
+}
+
+// releaseConn frees a slot reserved by acquireConn. Must be called exactly
+// once for every acquireConn that returned true.
+func (rel *Relay) releaseConn(userID int64) {
+	rel.connsMu.Lock()
+	defer rel.connsMu.Unlock()
+	rel.connsByUser[userID]--
+	if rel.connsByUser[userID] <= 0 {
+		delete(rel.connsByUser, userID)
+	}
 }
 
 // checkOrigin restricts who can open a WebSocket to this relay. Without it,

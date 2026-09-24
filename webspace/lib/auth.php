@@ -23,7 +23,7 @@ function nicon_authenticate_request(): ?int
     }
 
     $stmt = nicon_db()->prepare('SELECT user_id FROM sessions WHERE token = ? AND expires_at > NOW()');
-    $stmt->execute([$token]);
+    $stmt->execute([nicon_hash_token($token)]);
     $userId = $stmt->fetchColumn();
     if ($userId === false) {
         nicon_send_error('unauthorized', 401);

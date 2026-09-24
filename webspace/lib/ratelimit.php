@@ -28,5 +28,24 @@ function nicon_rate_limit_allow(string $bucket, int $limit, int $windowSeconds):
     $stmt->execute([$key, $windowStart]);
     $count = (int) $stmt->fetchColumn();
 
+    nicon_maybe_cleanup_rate_limits();
+
     return $count <= $limit;
+}
+
+// nicon_maybe_cleanup_rate_limits opportunistically deletes rate_limits
+// rows old enough that no window still open could reference them. There's
+// no persistent PHP process to run this on a timer the way the Go relay
+// does for its own tables (see store.CleanupExpired) — this table is
+// PHP-only, so it needs its own housekeeping — so instead a small random
+// fraction of requests that already touch this table trigger a sweep:
+// frequent enough in aggregate that old rows don't accumulate forever,
+// rare enough that it isn't extra database work on every single request.
+function nicon_maybe_cleanup_rate_limits(): void
+{
+    if (random_int(1, 100) !== 1) {
+        return;
+    }
+    $cutoff = time() - 86400; // a full day is well past any window this file uses
+    nicon_db()->prepare('DELETE FROM rate_limits WHERE window_start < ?')->execute([$cutoff]);
 }

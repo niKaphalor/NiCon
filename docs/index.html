@@ -8,9 +8,13 @@
      through textContent/createElement, never innerHTML with dynamic
      content), so a strict script-src/style-src costs nothing here and
      blocks arbitrary script execution if something ever did get injected.
-     connect-src stays open: the API/relay addresses are user-configurable
-     (Settings), by design, to any host the user points them at. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src *; base-uri 'self'; form-action 'self'">
+     connect-src is scoped to the exact API/relay origins app.js compiles
+     in (API_URL/RELAY_URL, both fetch and the derived wss:// URL) — these
+     are no longer user-configurable at runtime (see README's "Pointing the
+     frontend at your own deployment"), so there's no reason for this to
+     stay open to arbitrary hosts. Update this list alongside those two
+     constants if you point this frontend at a different deployment. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://nicon.mylss.de https://relay.130.61.8.150.sslip.io wss://relay.130.61.8.150.sslip.io; base-uri 'self'; form-action 'self'">
 <title>NiCon</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">

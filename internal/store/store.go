@@ -7,7 +7,9 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -300,10 +302,29 @@ func (s *Store) ListUsers(ctx context.Context) ([]AdminUserSummary, error) {
 
 // --- sessions ---
 
+// hashToken is what's actually stored in and looked up against
+// sessions.token. The session token is a 256-bit random value handed to
+// the browser and sent back on every authenticated request — functionally
+// a bearer credential — so it's hashed at rest the same way a password
+// would be, rather than kept as a plaintext column anyone with read
+// access to the database (a backup, a misconfigured admin tool, an
+// injection bug elsewhere) could use directly. A fast unsalted hash is
+// fine here, unlike a password hash: the input is already 256 bits of
+// randomness, not something guessable to speed up an offline attack
+// against. Mirrors webspace/lib/crypto.php's nicon_hash_token — both
+// sides must produce the same digest for a token created by one to
+// authenticate against the other. SHA-256's 32-byte digest hex-encodes to
+// 64 characters, fitting the existing `sessions.token CHAR(64)` column
+// exactly, so no schema change is needed.
+func hashToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
 func (s *Store) CreateSession(ctx context.Context, token string, userID int64, ttlSeconds int) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))`,
-		token, userID, ttlSeconds)
+		hashToken(token), userID, ttlSeconds)
 	return err
 }
 
@@ -311,7 +332,7 @@ func (s *Store) CreateSession(ctx context.Context, token string, userID int64, t
 func (s *Store) SessionUserID(ctx context.Context, token string) (int64, error) {
 	var userID int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT user_id FROM sessions WHERE token = ? AND expires_at > NOW()`, token,
+		`SELECT user_id FROM sessions WHERE token = ? AND expires_at > NOW()`, hashToken(token),
 	).Scan(&userID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrNotFound
@@ -320,8 +341,23 @@ func (s *Store) SessionUserID(ctx context.Context, token string) (int64, error) 
 }
 
 func (s *Store) DeleteSession(ctx context.Context, token string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE token = ?`, token)
+	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE token = ?`, hashToken(token))
 	return err
+}
+
+// CleanupExpired deletes sessions whose expiry has already passed and
+// reports how many rows were removed. Not needed for correctness — every
+// query above already checks expires_at > NOW(), so an expired row is
+// never usable — this only reclaims storage so the table doesn't grow
+// unbounded from tokens whose owner never explicitly logged out. Called
+// periodically from main.go's runServer, since the relay is the one
+// long-running process here.
+func (s *Store) CleanupExpired(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at <= NOW()`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // --- servers ---

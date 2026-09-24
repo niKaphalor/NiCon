@@ -18,6 +18,30 @@ function nicon_server_response(array $row): array
     ];
 }
 
+// nicon_is_cloud_metadata_host reports whether $host is a well-known cloud
+// provider instance-metadata endpoint (AWS, GCP, Azure, DigitalOcean, and
+// Oracle Cloud all serve it on 169.254.169.254; Alibaba Cloud uses a
+// different address). These endpoints hand out unauthenticated,
+// high-privilege data — IAM credentials, instance tokens — to whatever can
+// reach them, so a manually-added "RCON server" pointed at one would leak
+// that data back through the relay's otherwise-legitimate host/port
+// passthrough. This deliberately does NOT block localhost or private/LAN
+// addresses — running NiCon against a locally hosted game server is the
+// documented primary use case — only the handful of addresses that have no
+// legitimate use as an RCON target are denied.
+function nicon_is_cloud_metadata_host(string $host): bool
+{
+    $normalized = strtolower(trim($host, '[]'));
+    $blocked = [
+        '169.254.169.254',   // AWS, GCP, Azure, DigitalOcean, Oracle Cloud, ...
+        '169.254.170.2',     // AWS ECS task metadata
+        'fd00:ec2::254',     // AWS IMDSv2, IPv6
+        '100.100.100.200',   // Alibaba Cloud
+        'metadata.google.internal',
+    ];
+    return in_array($normalized, $blocked, true);
+}
+
 function nicon_handle_list_servers(int $userId): void
 {
     $stmt = nicon_db()->prepare('
@@ -39,6 +63,10 @@ function nicon_handle_create_server(int $userId): void
 
     if ($name === '' || $host === '' || $port <= 0) {
         nicon_send_error('name, host, and port are required', 400);
+        return;
+    }
+    if (nicon_is_cloud_metadata_host($host)) {
+        nicon_send_error('this host is not allowed', 400);
         return;
     }
 

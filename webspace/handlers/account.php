@@ -59,14 +59,14 @@ function nicon_handle_change_password(int $userId): void
     }
 
     $newHash = nicon_hash_password($newPassword);
-    $currentToken = nicon_bearer_token();
+    $currentTokenHash = nicon_hash_token(nicon_bearer_token());
 
     $pdo->beginTransaction();
     try {
         $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([$newHash, $userId]);
         // Signs out every other session — the recovery-code reset does the
         // same, just without keeping the session making this request alive.
-        $pdo->prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?')->execute([$userId, $currentToken]);
+        $pdo->prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?')->execute([$userId, $currentTokenHash]);
         $pdo->commit();
     } catch (Throwable $e) {
         $pdo->rollBack();
