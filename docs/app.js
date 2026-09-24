@@ -572,10 +572,28 @@
       .catch(function (err) { alert(err.message); });
   }
 
+  // The full protocol name shown as a tag in the console head — mirrors
+  // the "Add server" protocol dropdown's own option text.
+  function protocolLabel(protocol) {
+    if (protocol === "webrcon") return I18N.t("addModal.protocolWebrcon");
+    if (protocol === "palworld_rest") return I18N.t("addModal.protocolPalworldRest");
+    return I18N.t("common.protocolSource");
+  }
+
+  // A short badge for the sidebar row's meta line — omitted for plain
+  // Source RCON, since that's the common default and doesn't need calling
+  // out the way the less-common protocols do.
+  function protocolBadge(protocol) {
+    if (protocol === "webrcon") return I18N.t("common.webrcon");
+    if (protocol === "palworld_rest") return I18N.t("common.restApi");
+    return null;
+  }
+
   function serverMeta(server) {
     var parts = [];
     if (server.game) parts.push(server.game);
-    if (server.protocol === "webrcon") parts.push(I18N.t("common.webrcon"));
+    var badge = protocolBadge(server.protocol);
+    if (badge) parts.push(badge);
     parts.push(server.host + ":" + server.port);
     return parts.join(" · ");
   }
@@ -616,8 +634,8 @@
       var nameLine = document.createElement("span");
       nameLine.className = "name";
       var dot = document.createElement("span");
-      dot.className = "dot " + (consoles[server.id] ? "on" : "off");
-      if (consoles[server.id]) dot.title = I18N.t("servers.connectedTooltip");
+      dot.className = "dot " + (isConnected(server.id) ? "on" : "off");
+      if (isConnected(server.id)) dot.title = I18N.t("servers.connectedTooltip");
       nameLine.appendChild(dot);
       nameLine.appendChild(document.createTextNode(server.name));
       row.appendChild(nameLine);
@@ -862,11 +880,31 @@
   // --- server selection + detail pane ---
 
   // A console entry, once created, stays around for the session (so its
-  // log history survives a manual disconnect) — "connected" is a
-  // question about the socket's readyState, not whether the entry exists.
+  // log history survives a manual disconnect) — "connected" tracks
+  // whether the relay currently has a live connection to the game server
+  // itself, not just whether the browser's WebSocket to the relay is
+  // open. Those aren't the same thing: the relay tears down the game
+  // connection on any command error (e.g. a WebRCON timeout) without
+  // closing the browser's WebSocket, and if "connected" were based on
+  // the WebSocket alone, the UI would keep believing it's live — and the
+  // players auto-refresh would keep polling into "not connected" errors
+  // forever instead of stopping.
   function isConnected(id) {
     var c = consoles[id];
-    return !!(c && c.socket && (c.socket.readyState === WebSocket.OPEN || c.socket.readyState === WebSocket.CONNECTING));
+    return !!(c && c.gameConnected);
+  }
+
+  // Called whenever the relay's game-server connection is known to be
+  // gone (a command error, or the WebSocket itself closing) — updates
+  // state once, in one place, instead of duplicating the same cleanup at
+  // every call site that can discover a dead connection.
+  function markDisconnected(c) {
+    c.gameConnected = false;
+    renderServers();
+    if (selectedServerId === c.server.id) {
+      stopPlayersAutoRefresh();
+      renderContent();
+    }
   }
 
   function selectServer(id) {
@@ -947,7 +985,7 @@
 
     var protoTag = document.createElement("span");
     protoTag.className = "tag tag-outline";
-    protoTag.textContent = server.protocol === "webrcon" ? I18N.t("addModal.protocolWebrcon") : I18N.t("common.protocolSource");
+    protoTag.textContent = protocolLabel(server.protocol);
     head.appendChild(protoTag);
 
     if (server.source === "nitrado") {
@@ -971,10 +1009,9 @@
     if (isConnected(server.id)) {
       toggleBtn.textContent = I18N.t("content.disconnect");
       toggleBtn.addEventListener("click", function () {
-        stopPlayersAutoRefresh();
-        if (consoles[server.id] && consoles[server.id].socket) consoles[server.id].socket.close();
-        renderServers();
-        renderContent();
+        var c = consoles[server.id];
+        if (c && c.socket) c.socket.close();
+        if (c) markDisconnected(c);
       });
     } else {
       toggleBtn.textContent = I18N.t("servers.connect");
@@ -999,7 +1036,7 @@
 
   function updateCmdBarState() {
     var c = consoles[selectedServerId];
-    var ready = !!(c && c.socket && c.socket.readyState === WebSocket.OPEN);
+    var ready = !!(c && c.gameConnected && c.socket && c.socket.readyState === WebSocket.OPEN);
     cmdSendBtn.disabled = !ready;
   }
 
@@ -1017,11 +1054,13 @@
         lines: [],
         pendingPlayersRequest: false,
         authenticated: false,
+        gameConnected: false,
         gameKey: window.NICON_GUESS_GAME(server.game),
         lastParsed: null,
       };
       consoles[server.id] = c;
     }
+    c.gameConnected = false; // a fresh WebSocket means a fresh handshake either way
     appendConsoleLine(c, "system", I18N.t("console.connecting"));
 
     var socket = new WebSocket(relayWsUrl() + "/ws/rcon");
@@ -1045,6 +1084,7 @@
         c.authenticated = true;
         socket.send(JSON.stringify({ type: "connect", server_id: server.id }));
       } else if (msg.type === "connected") {
+        c.gameConnected = true;
         appendConsoleLine(c, "system", I18N.t("console.connected"));
         renderServers();
         if (selectedServerId === server.id) startPlayersAutoRefresh(c);
@@ -1065,17 +1105,18 @@
       } else if (msg.type === "error") {
         appendConsoleLine(c, "error", msg.message);
         c.pendingPlayersRequest = false;
+        // The relay tears down the game connection on any command error
+        // (not just connect-time failures), so this always means "no
+        // longer connected" — see the isConnected()/markDisconnected()
+        // comment above.
+        markDisconnected(c);
       }
       refreshIfActive(c);
     });
 
     socket.addEventListener("close", function () {
       appendConsoleLine(c, "system", I18N.t("console.disconnected"));
-      renderServers();
-      if (selectedServerId === server.id) {
-        stopPlayersAutoRefresh();
-        renderContent();
-      }
+      markDisconnected(c);
     });
 
     socket.addEventListener("error", function () {
@@ -1179,7 +1220,7 @@
       if (selectedServerId === c.server.id) renderPlayersPanel(c);
       return;
     }
-    if (!c.socket || c.socket.readyState !== WebSocket.OPEN) return;
+    if (!c.gameConnected || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
     var game = window.NICON_GAMES[c.gameKey];
     c.pendingPlayersRequest = true;
     appendConsoleLine(c, "sent", "> " + game.command);
@@ -1291,7 +1332,7 @@
 
   function sendPlayerAction(c, command, confirmMessage) {
     if (!confirm(confirmMessage)) return;
-    if (!c.socket || c.socket.readyState !== WebSocket.OPEN) return;
+    if (!c.gameConnected || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
     appendConsoleLine(c, "sent", "> " + command);
     refreshIfActive(c);
     c.socket.send(JSON.stringify({ type: "command", command: command }));
@@ -1304,7 +1345,7 @@
     e.preventDefault();
     var c = consoles[selectedServerId];
     var command = cmdInput.value.trim();
-    if (!command || !c || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
+    if (!command || !c || !c.gameConnected || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
     appendConsoleLine(c, "sent", "> " + command);
     refreshIfActive(c);
     c.socket.send(JSON.stringify({ type: "command", command: command }));

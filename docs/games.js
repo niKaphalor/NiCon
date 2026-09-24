@@ -107,30 +107,34 @@ window.NICON_GAMES = {
     ban: function (player) { return "BanPlayer " + player.id; },
   },
 
+  // Palworld's RCON support is deprecated by Pocketpair in favor of a
+  // first-party REST API (see the relay's internal/relay/palworld_rest.go
+  // — a "protocol": "palworld_rest" server talks HTTP+JSON there instead
+  // of opening a socket). "players" isn't a real RCON command; it's the
+  // verb the relay maps to GET /v1/api/players, whose JSON is what's
+  // parsed below.
   palworld: {
     label: "Palworld",
-    command: "ShowPlayers",
+    command: "players",
     parse: function (text) {
-      // Documented shape: CSV with header "name,playeruid,steamid".
-      var lines = text.split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
-      if (lines.length < 1) return null;
-      var header = lines[0].split(",").map(function (h) { return h.trim(); });
-      if (header[0].toLowerCase() !== "name") return null;
-      var uidIndex = header.findIndex(function (h) { return h.toLowerCase() === "playeruid"; });
-      var rows = lines.slice(1)
-        .filter(function (l) { return l.length > 0; })
-        .map(function (l) { return l.split(","); });
+      var data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        return null;
+      }
+      var list = data && Array.isArray(data.players) ? data.players : null;
+      if (!list) return null;
       return {
-        columns: header.map(function (h) { return h.toLowerCase(); }),
-        summary: rows.length + " player" + (rows.length === 1 ? "" : "s") + " online",
-        players: rows.map(function (cells) {
-          return { cells: cells, id: uidIndex !== -1 ? cells[uidIndex] : null, isAdmin: false };
+        columns: ["name", "userid", "ping", "level"],
+        summary: list.length + " player" + (list.length === 1 ? "" : "s") + " online",
+        players: list.map(function (p) {
+          return { cells: [p.name, p.userId, p.ping, p.level], id: p.userId, isAdmin: false };
         }),
       };
     },
-    // Only possible when the response actually included a playeruid column.
-    kick: function (player) { return player.id ? "KickPlayer " + player.id : null; },
-    ban: function (player) { return player.id ? "BanPlayer " + player.id : null; },
+    kick: function (player) { return player.id ? "kick " + player.id : null; },
+    ban: function (player) { return player.id ? "ban " + player.id + " Banned by admin" : null; },
   },
 };
 

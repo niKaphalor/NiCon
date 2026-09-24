@@ -55,6 +55,7 @@ window.NICON_I18N_STRINGS.en = {
     protocolSource: "Source RCON",
     nitrado: "Nitrado",
     webrcon: "WebRCON",
+    restApi: "REST API",
   },
   reset: {
     title: "Reset your password",
@@ -125,6 +126,7 @@ window.NICON_I18N_STRINGS.en = {
     protocolAriaLabel: "RCON protocol",
     protocolSource: "Source RCON (most games)",
     protocolWebrcon: "Rust WebRCON",
+    protocolPalworldRest: "Palworld REST API",
   },
   settings: {
     navLabel: "Settings",
@@ -168,6 +170,8 @@ window.NICON_I18N_STRINGS.en = {
       address: "Address",
       connectedSeconds: "Connected (s)",
       playeruid: "PlayerUID",
+      userid: "User ID",
+      level: "Level",
     },
   },
   errors: {

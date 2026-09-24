@@ -268,12 +268,33 @@ stored credentials by supplying a different ID. Responses come back as
 JSON (`{"type":"response", output}` / `{"type":"error", message}` /
 `{"type":"broadcast", output}` for a WebRCON server's own unsolicited push
 messages). Servers can be `"source"` (classic Source RCON via
-[gorcon/rcon](https://github.com/gorcon/rcon)) or `"webrcon"` (Rust's own
+[gorcon/rcon](https://github.com/gorcon/rcon)), `"webrcon"` (Rust's own
 WebSocket-based RCON, hand-rolled in `internal/relay/webrcon.go` since
-there's no existing Go client for it). The WebRCON connection also sends
+there's no existing Go client for it), or `"palworld_rest"` (Palworld's
+first-party REST API — see below). The WebRCON connection also sends
 itself a WebSocket ping every 25s — Rust closes WebRCON connections it
 considers idle, and this keeps it alive without sending a bogus command
 to the game.
+
+**`"palworld_rest"`** exists because Pocketpair deprecated Palworld's RCON
+support in favor of a REST API (plain HTTP + JSON, HTTP Basic auth with
+username `admin` and the server's admin password, default port `8212`,
+enabled in the server's own config with `RESTAPIEnabled=True`). It isn't a
+free-text console like the other two protocols, so
+`internal/relay/palworld_rest.go` parses the `command` string as
+`<verb> [args]` and maps it to one specific endpoint:
+`players`, `info`, `announce <message>`, `kick <userid> [message]`,
+`ban <userid> [message]`, `unban <userid>`, `save`, `shutdown [seconds]
+[message]`, `stop`. Anything else comes back as an error rather than
+silently doing nothing. `docs/games.js`'s `palworld` entry sends `players`
+and parses the JSON response the same way it parses Rust's WebRCON
+`playerlist` JSON. Note: as of this writing, the Cloud API's Nitrado sync
+(`webspace/handlers/nitrado_sync.php`) doesn't auto-detect this protocol
+for Palworld services — it still assigns the
+protocol Nitrado's API reports, which may no longer be a working
+credential now that RCON is being phased out. Add a Palworld server
+manually (host + the REST API port + the admin password, protocol
+"Palworld REST API") until that's sorted out.
 
 Only origins in `-allow-origin` (default: the GitHub Pages URL plus
 `localhost:8765`) can open that WebSocket at all — without that check, any
@@ -504,13 +525,19 @@ CI runs the Go suite against a MariaDB service container
   [Testing](#testing))
 - Automated tests for the WebSocket/RCON bridge itself — classic RCON,
   WebRCON, and broadcast-forwarding have only been exercised manually,
-  including `-race` runs, against hand-written mock servers
+  including `-race` runs, against hand-written mock servers (the new
+  Palworld REST client does have unit tests, see
+  `internal/relay/palworld_rest_test.go`)
 - The WebRCON implementation is based on Facepunch's own
   [webrcon](https://github.com/Facepunch/webrcon) tool and third-party
-  documentation, not verified against a real Rust server yet
+  documentation; the `playerlist` command and `kick` have been verified
+  against a real Rust server, the rest of it hasn't
 - Structured player-list parsing (`docs/games.js`) covers Minecraft, Rust,
-  ARK: Survival Evolved, and Palworld, based on documented command output
-  formats rather than verified live responses — see the file for details
+  ARK: Survival Evolved, and Palworld (via its REST API, see
+  [Relay](#relay)), based on documented command/API output formats rather
+  than verified live responses — Rust's is the exception, confirmed
+  against a real server; the other three haven't been — see the file for
+  details
 - The [admin panel](#admin-panel) covers account management (list, delete,
   regenerate a recovery code) but nothing about server data — an admin
   can't see, edit, or connect through another account's servers, same as

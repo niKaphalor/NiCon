@@ -44,19 +44,15 @@ type gameConn interface {
 }
 
 func connectGame(srv store.Server) (gameConn, error) {
-	if srv.Protocol == "webrcon" {
-		c, err := dialWebRcon(srv.Host, srv.Port, srv.Password)
-		if err != nil {
-			return nil, err
-		}
-		return c, nil
+	switch srv.Protocol {
+	case "webrcon":
+		return dialWebRcon(srv.Host, srv.Port, srv.Password)
+	case "palworld_rest":
+		return dialPalworldRest(srv.Host, srv.Port, srv.Password)
+	default:
+		address := fmt.Sprintf("%s:%d", srv.Host, srv.Port)
+		return rcon.Dial(address, srv.Password)
 	}
-	address := fmt.Sprintf("%s:%d", srv.Host, srv.Port)
-	c, err := rcon.Dial(address, srv.Password)
-	if err != nil {
-		return nil, err
-	}
-	return c, nil
 }
 
 func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
