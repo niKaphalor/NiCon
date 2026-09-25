@@ -1,0 +1,14 @@
+# Build context for the relay's Docker image (see Dockerfile) — deny
+# everything, then allow back in exactly what `go build` needs. Without
+# this, the whole repo (docs/, webspace/, README, and — biggest — the full
+# .git history) gets sent to the Docker daemon and copied into the build
+# stage on every single build, which does two bad things: it's slower to
+# transfer, and it makes the Docker layer cache unstable — a change to
+# docs/app.js alone would invalidate the COPY . . layer and force a full
+# recompile, even though nothing Go-related changed.
+*
+!go.mod
+!go.sum
+!main.go
+!internal
+!internal/**
