@@ -247,6 +247,12 @@
             <div class="card-kicker" data-i18n="settings.privacyKicker">Privacy</div>
             <p class="card-body"><span data-i18n="servers.subheadPart1">Your server list and RCON passwords are stored for your account only — no one else can see, edit, or connect through them.</span> <span data-i18n="servers.seeThe">See the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a><span data-i18n="settings.privacyForDetails"> for details.</span></p>
           </div>
+
+          <div id="activity-card" class="card" hidden>
+            <div class="card-kicker" data-i18n="settings.activityKicker">Activity</div>
+            <p class="card-body" data-i18n="settings.activityHint">Your own account activity, and any admin action that affected your account.</p>
+            <div id="activity-list" class="admin-notifications-list"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -286,6 +292,12 @@
         <button type="submit" class="btn-primary" data-i18n="admin.notificationSend">Send</button>
       </form>
       <div id="admin-notifications-list" class="admin-notifications-list"></div>
+
+      <div class="view-header admin-section-header">
+        <h1 data-i18n="admin.auditLogTitle">Audit log</h1>
+      </div>
+      <p class="hint view-subhead" data-i18n="admin.auditLogHint">Admin actions and security-relevant account activity across every account on this instance.</p>
+      <div id="admin-audit-log-list" class="admin-notifications-list"></div>
     </div>
   </section>
 
@@ -294,12 +306,13 @@
       <div class="view-header">
         <h1 data-i18n="health.title">Server health</h1>
       </div>
-      <p class="hint view-subhead" data-i18n="health.subhead">Connection status per server: when it last came online, the latency of its most recent player-list check, and its last error, if any. Kept in this browser only — it isn't saved to your account, so it starts empty again in a different browser.</p>
+      <p class="hint view-subhead" data-i18n="health.subhead">Connection status per server: when it last came online, the latency of its most recent player-list check, and its last error, if any, in this browser — plus an automated check the relay itself runs every 5 minutes, a real RCON connect attempt, so this stays accurate even if you never open a console.</p>
       <table class="health-table">
         <thead>
           <tr>
             <th data-i18n="health.colServer">Server</th>
             <th data-i18n="health.colStatus">Status</th>
+            <th data-i18n="health.colAutoCheck">Automated check</th>
             <th data-i18n="health.colLastConnected">Last connected</th>
             <th data-i18n="health.colLatency">Latency</th>
             <th data-i18n="health.colLastError">Last error</th>
@@ -386,6 +399,10 @@
         <option value="palworld_rest" data-i18n="addModal.protocolPalworldRest">Palworld REST API</option>
         <option value="battleye" data-i18n="addModal.protocolBattleye">BattlEye RCon (Arma 3, DayZ)</option>
       </select>
+      <div class="form-row">
+        <button type="button" id="manual-test-btn" class="btn-secondary" data-i18n="addModal.testConnection">Test connection</button>
+        <span id="manual-test-status" class="hint form-status" hidden></span>
+      </div>
       <button type="submit" class="btn-primary" data-i18n="addModal.addServerSubmit">Add server</button>
     </form>
   </div>

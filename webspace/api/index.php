@@ -10,6 +10,7 @@ require_once __DIR__ . '/../lib/crypto.php';
 require_once __DIR__ . '/../lib/http.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/ratelimit.php';
+require_once __DIR__ . '/../lib/audit.php';
 require_once __DIR__ . '/../handlers/login.php';
 require_once __DIR__ . '/../handlers/register.php';
 require_once __DIR__ . '/../handlers/reset_password.php';
@@ -19,6 +20,7 @@ require_once __DIR__ . '/../handlers/command_templates.php';
 require_once __DIR__ . '/../handlers/nitrado_sync.php';
 require_once __DIR__ . '/../handlers/admin.php';
 require_once __DIR__ . '/../handlers/notifications.php';
+require_once __DIR__ . '/../handlers/audit_log.php';
 require_once __DIR__ . '/../handlers/contact.php';
 
 function nicon_handle_healthz(): void
@@ -61,6 +63,7 @@ $routes = [
     ['DELETE', '#^/account/nitrado-token$#', 'user', 'nicon_handle_delete_nitrado_token'],
 
     ['GET', '#^/notifications$#', 'user', 'nicon_handle_list_notifications'],
+    ['GET', '#^/audit-log$#', 'user', 'nicon_handle_list_audit_log'],
 
     ['GET', '#^/servers$#', 'user', 'nicon_handle_list_servers'],
     ['POST', '#^/servers$#', 'user', 'nicon_handle_create_server'],
@@ -78,6 +81,8 @@ $routes = [
 
     ['POST', '#^/admin/notifications$#', 'admin', 'nicon_handle_admin_create_notification'],
     ['DELETE', '#^/admin/notifications/(\d+)$#', 'admin', 'nicon_handle_admin_delete_notification'],
+
+    ['GET', '#^/admin/audit-log$#', 'admin', 'nicon_handle_admin_list_audit_log'],
 ];
 
 foreach ($routes as [$routeMethod, $pattern, $authLevel, $handler]) {

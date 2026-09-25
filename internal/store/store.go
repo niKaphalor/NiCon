@@ -70,6 +70,17 @@ CREATE TABLE IF NOT EXISTS servers (
 var migrations = []string{
 	`ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_code_hash VARCHAR(255) NULL`,
 	`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE`,
+	// Written by the periodic health-check loop in main.go (runHealthChecks),
+	// the only thing that ever updates these — a real RCON connect attempt
+	// against every stored server, not just a TCP reachability check, so
+	// "healthy" actually means "host, port, and password are all still
+	// correct," not just "something is listening." health_ok is NULL until
+	// the first check runs, then true/false; health_error is set only when
+	// health_ok is false.
+	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_checked_at TIMESTAMP NULL`,
+	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_ok BOOLEAN NULL`,
+	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_latency_ms INT UNSIGNED NULL`,
+	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_error VARCHAR(255) NULL`,
 }
 
 type Store struct {
@@ -486,6 +497,56 @@ func (s *Store) DeleteServer(ctx context.Context, userID, serverID int64) error 
 		return err
 	}
 	return checkAffected(res)
+}
+
+// ListServersForHealthCheck returns every server (across every user) that
+// has a password set — the only ones actually connectable — for the
+// periodic health-check loop in main.go. Unlike ListServers, this isn't
+// scoped to one user: it's a maintenance job over the whole table, not a
+// per-request query.
+func (s *Store) ListServersForHealthCheck(ctx context.Context) ([]Server, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, user_id, name, host, port, password_enc, protocol, game, source, nitrado_service_id
+		 FROM servers WHERE password_enc IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Server
+	for rows.Next() {
+		srv, err := s.scanServer(rows)
+		if err != nil {
+			// One server's password failing to decrypt (corrupt data, a
+			// key mismatch) shouldn't stop every other server from being
+			// checked — skip just this one and keep going. Unlike
+			// GetServer/ListServers, where a decrypt failure is the
+			// caller's own data right now and worth surfacing as an
+			// error, this is a maintenance sweep over everyone's
+			// servers — best-effort is the right default here.
+			continue
+		}
+		out = append(out, srv)
+	}
+	return out, rows.Err()
+}
+
+// UpdateServerHealth records the outcome of one periodic health check (a
+// real RCON connect attempt, not just a TCP reachability check — see
+// main.go's runHealthChecks). errMsg is ignored when ok is true;
+// latencyMs is ignored (stored NULL) when ok is false, since a failed
+// connect didn't produce a meaningful round-trip time.
+func (s *Store) UpdateServerHealth(ctx context.Context, serverID int64, ok bool, latencyMs int, errMsg string) error {
+	var latencyCol, errCol any
+	if ok {
+		latencyCol = latencyMs
+	} else if errMsg != "" {
+		errCol = errMsg
+	}
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE servers SET health_checked_at = NOW(), health_ok = ?, health_latency_ms = ?, health_error = ? WHERE id = ?`,
+		ok, latencyCol, errCol, serverID)
+	return err
 }
 
 func checkAffected(res sql.Result) error {

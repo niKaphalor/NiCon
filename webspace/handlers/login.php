@@ -39,6 +39,7 @@ function nicon_handle_login(): void
     $hash = $user ? $user['password_hash'] : NICON_DUMMY_PASSWORD_HASH;
     $validPassword = nicon_verify_password($password, $hash);
     if (!$user || !$validPassword) {
+        nicon_audit_log($user ? (int) $user['id'] : null, 'login_failed', null, $username);
         nicon_send_error('invalid username or password', 401);
         return;
     }
@@ -46,6 +47,7 @@ function nicon_handle_login(): void
     $token = nicon_generate_session_token();
     $pdo->prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))')
         ->execute([nicon_hash_token($token), $user['id'], NICON_SESSION_TTL_SECONDS]);
+    nicon_audit_log((int) $user['id'], 'login_success');
 
     nicon_send_json(['token' => $token, 'is_admin' => (bool) $user['is_admin']]);
 }

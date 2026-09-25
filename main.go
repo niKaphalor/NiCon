@@ -14,6 +14,8 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -124,6 +126,33 @@ func runServer() {
 		}
 	}()
 
+	// Active, server-side health checking: a real RCON connect attempt
+	// against every stored server with a password set, every
+	// healthCheckInterval, regardless of whether any browser has that
+	// server's console open. Results land in servers.health_* (see
+	// internal/store/store.go's migrations) for the Cloud API to serve
+	// alongside the rest of a server's data. healthCheckRunning guards
+	// against a cycle still running into the next tick (a lot of servers,
+	// or several slow/unresponsive ones) overlapping with itself.
+	const healthCheckInterval = 5 * time.Minute
+	var healthCheckRunning int32
+	runHealthChecksOnce := func() {
+		if !atomic.CompareAndSwapInt32(&healthCheckRunning, 0, 1) {
+			logger.Print("health check: previous cycle still running, skipping this tick")
+			return
+		}
+		defer atomic.StoreInt32(&healthCheckRunning, 0)
+		runHealthChecks(context.Background(), logger, st)
+	}
+	go runHealthChecksOnce() // don't wait a full interval after a fresh start for first results
+	healthTicker := time.NewTicker(healthCheckInterval)
+	defer healthTicker.Stop()
+	go func() {
+		for range healthTicker.C {
+			runHealthChecksOnce()
+		}
+	}()
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
@@ -140,6 +169,39 @@ func runServer() {
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Printf("server shutdown: %v", err)
 	}
+}
+
+// healthCheckConcurrency bounds how many servers get checked at once —
+// each protocol's dial has its own timeout (5-45s depending on protocol),
+// so checking a large list fully sequentially could take a while; this
+// caps how many connections (and, transiently, open RCON sessions on
+// other people's game servers) exist at once instead of firing them all
+// simultaneously.
+const healthCheckConcurrency = 5
+
+func runHealthChecks(ctx context.Context, logger *log.Logger, st *store.Store) {
+	servers, err := st.ListServersForHealthCheck(ctx)
+	if err != nil {
+		logger.Printf("health check: list servers: %v", err)
+		return
+	}
+
+	sem := make(chan struct{}, healthCheckConcurrency)
+	var wg sync.WaitGroup
+	for _, srv := range servers {
+		srv := srv
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			ok, latencyMs, errMsg := relay.HealthCheck(srv)
+			if err := st.UpdateServerHealth(ctx, srv.ID, ok, latencyMs, errMsg); err != nil {
+				logger.Printf("health check: update server %d: %v", srv.ID, err)
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func runAddUser(args []string) {

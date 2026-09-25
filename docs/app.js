@@ -117,6 +117,8 @@
   var viewSettings = document.getElementById("view-settings");
   var privacyCard = document.getElementById("privacy-card");
   var accountCard = document.getElementById("account-card");
+  var activityCard = document.getElementById("activity-card");
+  var activityList = document.getElementById("activity-list");
   var accountUsernameLine = document.getElementById("account-username-line");
   var accountDangerZone = document.getElementById("account-danger-zone");
   var deleteAccountBtn = document.getElementById("delete-account-btn");
@@ -142,6 +144,7 @@
   var notificationType = document.getElementById("notification-type");
   var notificationMessage = document.getElementById("notification-message");
   var adminNotificationsList = document.getElementById("admin-notifications-list");
+  var adminAuditLogList = document.getElementById("admin-audit-log-list");
 
   var viewHealth = document.getElementById("view-health");
   var healthBody = document.getElementById("health-body");
@@ -155,6 +158,8 @@
   var nitradoTokenStatus = document.getElementById("nitrado-token-status");
   var forgetNitradoTokenBtn = document.getElementById("forget-nitrado-token-btn");
   var manualForm = document.getElementById("manual-form");
+  var manualTestBtn = document.getElementById("manual-test-btn");
+  var manualTestStatus = document.getElementById("manual-test-status");
 
   var filterInput = document.getElementById("filter-input");
   var filterRegexToggle = document.getElementById("filter-regex-toggle");
@@ -746,6 +751,7 @@
 
   function openAddModal() {
     loadAccountInfo();
+    manualTestStatus.hidden = true;
     addModal.showModal();
   }
 
@@ -927,6 +933,79 @@
       });
   });
 
+  // --- manual add: test connection ---
+  // Opens its own short-lived WebSocket (auth + a "test" message carrying
+  // the form's current host/port/password/protocol directly, since there's
+  // no saved server_id yet to test against) and closes it again as soon as
+  // a result comes back — never leaves a connection open.
+
+  function setManualTestStatus(text, isError) {
+    manualTestStatus.textContent = text;
+    manualTestStatus.classList.toggle("is-error", !!isError);
+    manualTestStatus.classList.toggle("is-success", !isError);
+    manualTestStatus.hidden = false;
+  }
+
+  manualTestBtn.addEventListener("click", function () {
+    var host = document.getElementById("manual-host").value.trim();
+    var port = parseInt(document.getElementById("manual-port").value, 10);
+    var password = document.getElementById("manual-password").value;
+    var protocol = document.getElementById("manual-protocol").value;
+
+    if (!host || !port) {
+      setManualTestStatus(I18N.t("addModal.testNeedsHostPort"), true);
+      return;
+    }
+
+    manualTestBtn.disabled = true;
+    setManualTestStatus(I18N.t("addModal.testing"), false);
+
+    var socket;
+    var settled = false;
+    var timer = setTimeout(function () { finish(I18N.t("addModal.testTimedOut"), true); }, 10000);
+
+    function finish(text, isError) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      setManualTestStatus(text, isError);
+      manualTestBtn.disabled = false;
+      if (socket) socket.close();
+    }
+
+    try {
+      socket = new WebSocket(relayWsUrl() + "/ws/rcon");
+    } catch (e) {
+      finish(I18N.t("addModal.testRelayUnreachable"), true);
+      return;
+    }
+
+    socket.addEventListener("open", function () {
+      socket.send(JSON.stringify({ type: "auth", token: authToken }));
+    });
+    socket.addEventListener("error", function () {
+      finish(I18N.t("addModal.testRelayUnreachable"), true);
+    });
+    socket.addEventListener("close", function () {
+      finish(I18N.t("addModal.testRelayUnreachable"), true);
+    });
+    socket.addEventListener("message", function (event) {
+      var msg;
+      try {
+        msg = JSON.parse(event.data);
+      } catch (e) {
+        return;
+      }
+      if (msg.type === "authenticated") {
+        socket.send(JSON.stringify({ type: "test", host: host, port: port, password: password, protocol: protocol }));
+      } else if (msg.type === "test_result") {
+        finish(msg.ok ? I18N.t("addModal.testOk") : I18N.t("addModal.testFailed", { message: msg.message || "" }), !msg.ok);
+      } else if (msg.type === "error") {
+        finish(I18N.t("addModal.testFailed", { message: msg.message || "" }), true);
+      }
+    });
+  });
+
   // --- manual add ---
 
   manualForm.addEventListener("submit", function (e) {
@@ -951,6 +1030,7 @@
         renderServers();
         renderContent();
         manualForm.reset();
+        manualTestStatus.hidden = true;
         addModal.close();
       })
       .catch(function (err) { showToast(I18N.t("errors.couldNotAddServer", { message: err.message })); });
@@ -1022,10 +1102,12 @@
     accountDangerZone.hidden = false;
     accountCard.hidden = false;
     privacyCard.hidden = false;
+    activityCard.hidden = false;
     accountUsernameLine.textContent = I18N.t("settings.accountUsernameLine", { username: currentUsername });
     notificationsBellBtn.hidden = false;
     loadNotifications();
     loadAccountInfo();
+    loadActivity();
     loadCommandTemplates();
     setActiveNav(navServersBtn);
     renderServers();
@@ -1066,6 +1148,7 @@
   adminNavBtn.addEventListener("click", function () {
     loadAdminUsers();
     loadAdminNotifications();
+    loadAdminAuditLog();
     showAdminView();
   });
 
@@ -1227,6 +1310,77 @@
 
       adminNotificationsList.appendChild(row);
     });
+  }
+
+  // --- audit log ---
+  // Same row shape (renderAuditLogList) feeds both the admin's full log
+  // and a user's own activity card in settings — just a different
+  // endpoint (and therefore a different, pre-filtered list) behind each.
+
+  function auditLogEntryText(entry) {
+    var actor = entry.actor_username || "?";
+    var target = entry.target_username || "?";
+    var detail = entry.detail || "";
+    switch (entry.action) {
+      case "login_success": return I18N.t("auditLog.action_loginSuccess", { actor: actor });
+      case "login_failed":
+        return entry.actor_username
+          ? I18N.t("auditLog.action_loginFailedKnown", { actor: actor })
+          : I18N.t("auditLog.action_loginFailedUnknown", { detail: detail });
+      case "password_changed": return I18N.t("auditLog.action_passwordChanged", { actor: actor });
+      case "username_changed": return I18N.t("auditLog.action_usernameChanged", { actor: actor, detail: detail });
+      case "account_deleted": return I18N.t("auditLog.action_accountDeleted", { actor: actor, detail: detail });
+      case "server_added": return I18N.t("auditLog.action_serverAdded", { actor: actor, detail: detail });
+      case "server_deleted": return I18N.t("auditLog.action_serverDeleted", { actor: actor, detail: detail });
+      case "admin_user_deleted": return I18N.t("auditLog.action_adminUserDeleted", { actor: actor, detail: detail });
+      case "admin_recovery_code_regenerated": return I18N.t("auditLog.action_adminRecoveryCodeRegenerated", { actor: actor, target: target });
+      case "admin_notification_created": return I18N.t("auditLog.action_adminNotificationCreated", { actor: actor, detail: detail });
+      case "admin_notification_deleted": return I18N.t("auditLog.action_adminNotificationDeleted", { actor: actor, detail: detail });
+      default: return entry.action; // forward-compatible fallback for an action this build doesn't know a template for yet
+    }
+  }
+
+  function renderAuditLogList(container, list, emptyTextKey) {
+    container.innerHTML = "";
+    if (!list.length) {
+      var empty = document.createElement("p");
+      empty.className = "hint";
+      empty.textContent = I18N.t(emptyTextKey);
+      container.appendChild(empty);
+      return;
+    }
+    list.forEach(function (entry) {
+      var row = document.createElement("div");
+      row.className = "admin-notification-row";
+
+      var msg = document.createElement("p");
+      msg.textContent = auditLogEntryText(entry);
+      row.appendChild(msg);
+
+      var when = document.createElement("span");
+      when.className = "hint";
+      when.textContent = new Date(entry.created_at).toLocaleString();
+      row.appendChild(when);
+
+      container.appendChild(row);
+    });
+  }
+
+  function loadActivity() {
+    return apiFetch("/api/audit-log", { method: "GET" })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (list) { renderAuditLogList(activityList, list || [], "settings.activityEmpty"); })
+      .catch(function () { /* the rest of settings still works without this */ });
+  }
+
+  function loadAdminAuditLog() {
+    return apiFetch("/api/admin/audit-log", { method: "GET" })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t)); });
+        return r.json();
+      })
+      .then(function (list) { renderAuditLogList(adminAuditLogList, list || [], "admin.auditLogEmpty"); })
+      .catch(function (err) { showToast(err.message); });
   }
 
   notificationForm.addEventListener("submit", function (e) {
@@ -1481,6 +1635,40 @@
       statusWrap.appendChild(document.createTextNode(serverStatusTooltip(server)));
       statusTd.appendChild(statusWrap);
       tr.appendChild(statusTd);
+
+      var autoCheckTd = document.createElement("td");
+      if (server.health_checked_at == null) {
+        autoCheckTd.className = "health-muted";
+        autoCheckTd.textContent = I18N.t("health.autoCheckNeverRun");
+      } else {
+        var autoCheckWrap = document.createElement("span");
+        autoCheckWrap.className = "health-status";
+        var autoDot = document.createElement("span");
+        autoDot.className = "dot " + (server.health_ok ? "ok" : "error");
+        autoDot.setAttribute("role", "img");
+        autoDot.setAttribute("aria-label", server.health_ok ? I18N.t("health.autoCheckOk") : I18N.t("health.autoCheckFailed"));
+        autoCheckWrap.appendChild(autoDot);
+        autoCheckWrap.appendChild(document.createTextNode(server.health_ok ? I18N.t("health.autoCheckOk") : I18N.t("health.autoCheckFailed")));
+        autoCheckTd.appendChild(autoCheckWrap);
+
+        var autoCheckWhen = document.createElement("span");
+        autoCheckWhen.className = "health-timestamp";
+        autoCheckWhen.textContent = new Date(server.health_checked_at).toLocaleString();
+        autoCheckTd.appendChild(autoCheckWhen);
+
+        if (!server.health_ok && server.health_error) {
+          var autoCheckError = document.createElement("span");
+          autoCheckError.className = "health-timestamp health-error";
+          autoCheckError.textContent = server.health_error;
+          autoCheckTd.appendChild(autoCheckError);
+        } else if (server.health_ok && server.health_latency_ms != null) {
+          var autoCheckLatency = document.createElement("span");
+          autoCheckLatency.className = "health-timestamp";
+          autoCheckLatency.textContent = server.health_latency_ms + " ms";
+          autoCheckTd.appendChild(autoCheckLatency);
+        }
+      }
+      tr.appendChild(autoCheckTd);
 
       var connectedTd = document.createElement("td");
       var connectedText = formatHealthTimestamp(h.lastConnectedAt);

@@ -2,8 +2,10 @@
 declare(strict_types=1);
 
 // nicon_server_response is what a server looks like over the API —
-// everything except the actual password, same as
-// internal/relay/handlers_servers.go's serverResponse.
+// everything except the actual password. health_* is written only by the
+// Go relay's periodic background check (main.go's runHealthChecks — a
+// real RCON connect every 5 minutes, not just a TCP reachability check),
+// never by this API; health_ok is null until the first check has run.
 function nicon_server_response(array $row): array
 {
     return [
@@ -15,6 +17,10 @@ function nicon_server_response(array $row): array
         'game' => $row['game'],
         'source' => $row['source'],
         'has_password' => $row['password_enc'] !== null,
+        'health_ok' => $row['health_ok'] === null ? null : (bool) $row['health_ok'],
+        'health_checked_at' => $row['health_checked_at'] !== null ? gmdate('Y-m-d\TH:i:s\Z', strtotime($row['health_checked_at'])) : null,
+        'health_latency_ms' => $row['health_latency_ms'] !== null ? (int) $row['health_latency_ms'] : null,
+        'health_error' => $row['health_error'],
     ];
 }
 
@@ -71,7 +77,8 @@ function nicon_is_cloud_metadata_host(string $host): bool
 function nicon_handle_list_servers(int $userId): void
 {
     $stmt = nicon_db()->prepare('
-        SELECT id, name, host, port, password_enc, protocol, game, source
+        SELECT id, name, host, port, password_enc, protocol, game, source,
+               health_ok, health_checked_at, health_latency_ms, health_error
         FROM servers WHERE user_id = ? ORDER BY name');
     $stmt->execute([$userId]);
     $servers = array_map('nicon_server_response', $stmt->fetchAll());
@@ -103,7 +110,12 @@ function nicon_handle_create_server(int $userId): void
     ')->execute([$userId, $name, $host, $port, nicon_encrypt_password($password), $protocol, 'manual']);
     $id = (int) $pdo->lastInsertId();
 
-    $stmt = $pdo->prepare('SELECT id, name, host, port, password_enc, protocol, game, source FROM servers WHERE id = ?');
+    nicon_audit_log($userId, 'server_added', null, $name);
+
+    $stmt = $pdo->prepare('
+        SELECT id, name, host, port, password_enc, protocol, game, source,
+               health_ok, health_checked_at, health_latency_ms, health_error
+        FROM servers WHERE id = ?');
     $stmt->execute([$id]);
     nicon_send_json(nicon_server_response($stmt->fetch()));
 }
@@ -128,11 +140,17 @@ function nicon_handle_set_server_password(int $userId, int $serverId): void
 
 function nicon_handle_delete_server(int $userId, int $serverId): void
 {
-    $stmt = nicon_db()->prepare('DELETE FROM servers WHERE id = ? AND user_id = ?');
+    $pdo = nicon_db();
+    $nameStmt = $pdo->prepare('SELECT name FROM servers WHERE id = ? AND user_id = ?');
+    $nameStmt->execute([$serverId, $userId]);
+    $name = $nameStmt->fetchColumn();
+
+    $stmt = $pdo->prepare('DELETE FROM servers WHERE id = ? AND user_id = ?');
     $stmt->execute([$serverId, $userId]);
     if ($stmt->rowCount() === 0) {
         nicon_send_error('404 page not found', 404);
         return;
     }
+    nicon_audit_log($userId, 'server_deleted', null, $name !== false ? $name : null);
     http_response_code(204);
 }

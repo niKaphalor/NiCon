@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"strconv"
@@ -465,5 +466,107 @@ func TestUpsertNitradoServerIdempotentAndPreservesPassword(t *testing.T) {
 	}
 	if servers[0].Password != "rcon-pw" {
 		t.Errorf("Password = %q, want the previously-set password preserved", servers[0].Password)
+	}
+}
+
+// health fields aren't exposed through Server/GetServer (nothing but the
+// health-check loop and this test need to read them back), so these tests
+// query st.db directly — fine from within package store itself.
+func queryServerHealth(t *testing.T, st *Store, serverID int64) (ok sql.NullBool, latencyMs sql.NullInt64, errMsg sql.NullString, checkedAt sql.NullTime) {
+	t.Helper()
+	row := st.db.QueryRow(`SELECT health_ok, health_latency_ms, health_error, health_checked_at FROM servers WHERE id = ?`, serverID)
+	if err := row.Scan(&ok, &latencyMs, &errMsg, &checkedAt); err != nil {
+		t.Fatalf("query health columns: %v", err)
+	}
+	return
+}
+
+func TestListServersForHealthCheckOnlyIncludesServersWithPassword(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	userID := mustCreateUser(t, st, uniqueUsername(t))
+
+	withPassword, err := st.CreateServer(ctx, Server{
+		UserID: userID, Name: "has-pw", Host: "h", Port: 1, Protocol: "source", Password: "secret",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	withoutPassword, err := st.CreateServer(ctx, Server{UserID: userID, Name: "no-pw", Host: "h", Port: 1, Protocol: "source"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := st.ListServersForHealthCheck(ctx)
+	if err != nil {
+		t.Fatalf("ListServersForHealthCheck: %v", err)
+	}
+	var sawWithPassword, sawWithoutPassword bool
+	for _, s := range list {
+		if s.ID == withPassword {
+			sawWithPassword = true
+			if s.Password != "secret" {
+				t.Errorf("password = %q, want the decrypted password (this is what the health checker actually dials with)", s.Password)
+			}
+		}
+		if s.ID == withoutPassword {
+			sawWithoutPassword = true
+		}
+	}
+	if !sawWithPassword {
+		t.Error("ListServersForHealthCheck omitted a server that has a password set")
+	}
+	if sawWithoutPassword {
+		t.Error("ListServersForHealthCheck included a server with no password — it can't be connected to, so it can't be health-checked")
+	}
+}
+
+func TestUpdateServerHealthOkAndFailure(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	userID := mustCreateUser(t, st, uniqueUsername(t))
+	serverID, err := st.CreateServer(ctx, Server{UserID: userID, Name: "s", Host: "h", Port: 1, Protocol: "source", Password: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Before any check: health_ok is NULL (never checked), not false.
+	ok, _, _, checkedAt := queryServerHealth(t, st, serverID)
+	if ok.Valid {
+		t.Errorf("health_ok before any check = %v, want NULL (not yet checked)", ok.Bool)
+	}
+	if checkedAt.Valid {
+		t.Error("health_checked_at before any check should be NULL")
+	}
+
+	if err := st.UpdateServerHealth(ctx, serverID, true, 42, ""); err != nil {
+		t.Fatalf("UpdateServerHealth(ok): %v", err)
+	}
+	ok, latencyMs, errMsg, checkedAt := queryServerHealth(t, st, serverID)
+	if !ok.Valid || !ok.Bool {
+		t.Errorf("health_ok after a successful check = %v (valid=%v), want true", ok.Bool, ok.Valid)
+	}
+	if !latencyMs.Valid || latencyMs.Int64 != 42 {
+		t.Errorf("health_latency_ms = %v (valid=%v), want 42", latencyMs.Int64, latencyMs.Valid)
+	}
+	if errMsg.Valid {
+		t.Errorf("health_error after a successful check = %q, want NULL", errMsg.String)
+	}
+	if !checkedAt.Valid {
+		t.Error("health_checked_at should be set after a check")
+	}
+
+	if err := st.UpdateServerHealth(ctx, serverID, false, 0, "connection refused"); err != nil {
+		t.Fatalf("UpdateServerHealth(fail): %v", err)
+	}
+	ok, latencyMs, errMsg, _ = queryServerHealth(t, st, serverID)
+	if !ok.Valid || ok.Bool {
+		t.Errorf("health_ok after a failed check = %v (valid=%v), want false", ok.Bool, ok.Valid)
+	}
+	if latencyMs.Valid {
+		t.Errorf("health_latency_ms after a failed check = %v, want NULL (a failed connect has no meaningful round-trip time)", latencyMs.Int64)
+	}
+	if !errMsg.Valid || errMsg.String != "connection refused" {
+		t.Errorf("health_error = %q (valid=%v), want %q", errMsg.String, errMsg.Valid, "connection refused")
 	}
 }

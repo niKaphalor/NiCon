@@ -30,6 +30,15 @@ import (
 // {"type":"broadcast", output} — the last is WebRCON-only: messages the
 // game server pushes unsolicited over the same connection (chat, kill
 // feed, log lines), not a response to any command the client sent.
+//
+// {"type":"test", host, port, password, protocol} is the odd one out: it
+// carries connection details directly rather than a server_id, for
+// trying a set of credentials before they're saved as a server (the "Add
+// server" form's Test Connection button) — there's no server_id yet to
+// look them up by. Answered with {"type":"test_result", ok, message}
+// (message set only when ok is false) and never leaves a connection
+// open either way; it goes through connectGame() the same as "connect"
+// does, so it's covered by the same metadata-host guard.
 type wsMessage struct {
 	Type     string `json:"type"`
 	Token    string `json:"token,omitempty"`
@@ -37,6 +46,11 @@ type wsMessage struct {
 	Command  string `json:"command,omitempty"`
 	Output   string `json:"output,omitempty"`
 	Message  string `json:"message,omitempty"`
+	Host     string `json:"host,omitempty"`
+	Port     int    `json:"port,omitempty"`
+	Password string `json:"password,omitempty"`
+	Protocol string `json:"protocol,omitempty"`
+	OK       bool   `json:"ok,omitempty"`
 }
 
 // gameConn abstracts over the RCON transports NiCon speaks: classic
@@ -134,6 +148,24 @@ func connectGame(srv store.Server) (gameConn, error) {
 		address := fmt.Sprintf("%s:%d", srv.Host, srv.Port)
 		return rcon.Dial(address, srv.Password)
 	}
+}
+
+// HealthCheck attempts a real RCON connect to srv — the same connectGame
+// path a normal console "connect" or the "test" WS message uses — and
+// reports the outcome. Used by main.go's periodic background health-check
+// loop, not by handleWS itself. Unlike a normal connect, this always
+// closes the connection right away; nothing is left open afterward. Every
+// protocol's dial has its own bounded timeout already (5-45s depending on
+// protocol), so this never hangs indefinitely on an unresponsive server.
+func HealthCheck(srv store.Server) (ok bool, latencyMs int, errMsg string) {
+	start := time.Now()
+	conn, err := connectGame(srv)
+	elapsed := time.Since(start)
+	if err != nil {
+		return false, 0, err.Error()
+	}
+	conn.Close()
+	return true, int(elapsed.Milliseconds()), ""
 }
 
 func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -285,6 +317,20 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 					}
 				}()
 			}
+
+		case "test":
+			testConn, dialErr := connectGame(store.Server{
+				Host:     msg.Host,
+				Port:     msg.Port,
+				Password: msg.Password,
+				Protocol: msg.Protocol,
+			})
+			if dialErr != nil {
+				_ = writeJSON(wsMessage{Type: "test_result", OK: false, Message: dialErr.Error()})
+				continue
+			}
+			testConn.Close()
+			_ = writeJSON(wsMessage{Type: "test_result", OK: true})
 
 		case "command":
 			if gc == nil {

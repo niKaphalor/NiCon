@@ -25,7 +25,19 @@ function nicon_handle_delete_nitrado_token(int $userId): void
 // cascade with it via ON DELETE CASCADE.
 function nicon_handle_delete_account(int $userId): void
 {
-    nicon_db()->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
+    $pdo = nicon_db();
+    $stmt = $pdo->prepare('SELECT username FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    $username = $stmt->fetchColumn();
+
+    // Logged before, not after, deleting the row: audit_log.user_id has a
+    // foreign key on users.id, so inserting a row pointing at $userId
+    // after that user no longer exists would fail outright. The FK's own
+    // ON DELETE SET NULL (see schema.sql) nulls it out the moment the
+    // DELETE below commits — detail is what keeps this row readable after
+    // that ("someone named X deleted their account"), not user_id.
+    nicon_audit_log($userId, 'account_deleted', null, $username !== false ? $username : null);
+    $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
     http_response_code(204);
 }
 
@@ -87,6 +99,7 @@ function nicon_handle_change_password(int $userId): void
         $pdo->rollBack();
         throw $e;
     }
+    nicon_audit_log($userId, 'password_changed');
     http_response_code(204);
 }
 
@@ -136,5 +149,6 @@ function nicon_handle_change_username(int $userId): void
         }
         throw $e;
     }
+    nicon_audit_log($userId, 'username_changed', null, $newUsername);
     nicon_send_json(['username' => $newUsername]);
 }

@@ -35,7 +35,7 @@ function nicon_handle_admin_delete_user(int $adminId, int $targetId): void
     }
 
     $pdo = nicon_db();
-    $stmt = $pdo->prepare('SELECT is_admin FROM users WHERE id = ?');
+    $stmt = $pdo->prepare('SELECT username, is_admin FROM users WHERE id = ?');
     $stmt->execute([$targetId]);
     $target = $stmt->fetch();
     if (!$target) {
@@ -52,6 +52,11 @@ function nicon_handle_admin_delete_user(int $adminId, int $targetId): void
         }
     }
 
+    // Logged before, not after, deleting: audit_log.target_user_id has a
+    // foreign key on users.id, same reasoning as account.php's
+    // account_deleted — inserting a row pointing at $targetId after that
+    // row is gone would fail outright.
+    nicon_audit_log($adminId, 'admin_user_deleted', $targetId, $target['username']);
     $stmt = $pdo->prepare('DELETE FROM users WHERE id = ?');
     $stmt->execute([$targetId]);
     if ($stmt->rowCount() === 0) {
@@ -77,5 +82,6 @@ function nicon_handle_admin_regenerate_recovery_code(int $adminId, int $targetId
         nicon_send_error('404 page not found', 404);
         return;
     }
+    nicon_audit_log($adminId, 'admin_recovery_code_regenerated', $targetId);
     nicon_send_json(['recovery_code' => $code]);
 }

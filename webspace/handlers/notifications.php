@@ -45,6 +45,8 @@ function nicon_handle_admin_create_notification(int $adminId): void
     $pdo->prepare('INSERT INTO notifications (type, message) VALUES (?, ?)')->execute([$type, $message]);
     $id = (int) $pdo->lastInsertId();
 
+    nicon_audit_log($adminId, 'admin_notification_created', null, substr($message, 0, 255));
+
     $stmt = $pdo->prepare('SELECT id, type, message, created_at FROM notifications WHERE id = ?');
     $stmt->execute([$id]);
     nicon_send_json(nicon_notification_response($stmt->fetch()));
@@ -52,11 +54,17 @@ function nicon_handle_admin_create_notification(int $adminId): void
 
 function nicon_handle_admin_delete_notification(int $adminId, int $notificationId): void
 {
-    $stmt = nicon_db()->prepare('DELETE FROM notifications WHERE id = ?');
+    $pdo = nicon_db();
+    $messageStmt = $pdo->prepare('SELECT message FROM notifications WHERE id = ?');
+    $messageStmt->execute([$notificationId]);
+    $message = $messageStmt->fetchColumn();
+
+    $stmt = $pdo->prepare('DELETE FROM notifications WHERE id = ?');
     $stmt->execute([$notificationId]);
     if ($stmt->rowCount() === 0) {
         nicon_send_error('404 page not found', 404);
         return;
     }
+    nicon_audit_log($adminId, 'admin_notification_deleted', null, $message !== false ? substr($message, 0, 255) : null);
     http_response_code(204);
 }

@@ -63,6 +63,20 @@ CREATE TABLE IF NOT EXISTS servers (
 	UNIQUE KEY uniq_user_nitrado_service (user_id, nitrado_service_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Written by the Go relay's periodic health-check loop (main.go's
+-- runHealthChecks — a real RCON connect attempt against every server with
+-- a password, every 5 minutes, not just a TCP reachability check), read
+-- by this API's GET /servers so the frontend doesn't need its own
+-- passive/client-only tracking to know whether a server is actually
+-- reachable right now. Same idempotent-ALTER reasoning as
+-- nitrado_token_enc above: these columns exist in
+-- internal/store/store.go's own migrations, so a Go-relay-first install
+-- already has them, but this still needs to run for a PHP-first one.
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_checked_at TIMESTAMP NULL;
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_ok BOOLEAN NULL;
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_latency_ms INT UNSIGNED NULL;
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_error VARCHAR(255) NULL;
+
 CREATE TABLE IF NOT EXISTS rate_limits (
 	bucket_key CHAR(64) NOT NULL,
 	window_start INT UNSIGNED NOT NULL,
@@ -94,4 +108,30 @@ CREATE TABLE IF NOT EXISTS command_templates (
 	command VARCHAR(500) NOT NULL,
 	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Admin actions (deleting a user, regenerating a recovery code, sending/
+-- deleting a notification) and security-relevant account actions (login
+-- success/failure, password/username changes, account deletion, adding/
+-- removing a server) — see lib/audit.php. PHP-only, like rate_limits/
+-- notifications/command_templates above: the Go relay's account-mutating
+-- endpoints were removed once this all moved to the PHP API, so nothing
+-- there could log to this table anyway.
+--
+-- user_id/target_user_id use ON DELETE SET NULL, not CASCADE: deleting an
+-- account should not erase the record that it (or an admin, on its
+-- behalf) did something — that's the opposite of what an audit log is
+-- for. detail is kept short and deliberately never holds a password,
+-- token, or recovery code.
+CREATE TABLE IF NOT EXISTS audit_log (
+	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	user_id INT UNSIGNED NULL,
+	action VARCHAR(64) NOT NULL,
+	target_user_id INT UNSIGNED NULL,
+	detail VARCHAR(255) NULL,
+	ip_address VARCHAR(45) NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+	FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL,
+	INDEX idx_audit_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
