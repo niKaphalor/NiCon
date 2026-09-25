@@ -7,8 +7,10 @@ const NICON_RESET_RATE_WINDOW = 900; // 15 minutes
 // nicon_handle_reset_password is the self-service recovery path for a
 // forgotten password. Unauthenticated by design — see
 // internal/relay/handlers_auth.go's handleResetPassword. A wrong username
-// and a wrong recovery code return the identical error, so this can't be
-// used to enumerate which usernames exist.
+// and a wrong recovery code return the identical error AND (via
+// NICON_DUMMY_PASSWORD_HASH below) take about the same time to answer, so
+// this can't be used to enumerate which usernames exist either by response
+// content or by response timing.
 function nicon_handle_reset_password(): void
 {
     if (!nicon_rate_limit_allow('reset-password', NICON_RESET_RATE_LIMIT, NICON_RESET_RATE_WINDOW)) {
@@ -36,16 +38,15 @@ function nicon_handle_reset_password(): void
     $stmt->execute([$username]);
     $user = $stmt->fetch();
 
-    $invalid = static function () {
+    // Always run the bcrypt compare, even for a username that doesn't
+    // exist (against NICON_DUMMY_PASSWORD_HASH, which no code will ever
+    // match) — see lib/crypto.php's comment. Skipping it via an early
+    // return on `!$user` would make "no such account" answer faster than
+    // "found the account, wrong code."
+    $hash = ($user && $user['recovery_code_hash']) ? $user['recovery_code_hash'] : NICON_DUMMY_PASSWORD_HASH;
+    $validCode = nicon_verify_password(nicon_normalize_recovery_code($recoveryCode), $hash);
+    if (!$user || !$user['recovery_code_hash'] || !$validCode) {
         nicon_send_error('invalid username or recovery code', 401);
-    };
-
-    if (!$user || !$user['recovery_code_hash']) {
-        $invalid();
-        return;
-    }
-    if (!nicon_verify_password(nicon_normalize_recovery_code($recoveryCode), $user['recovery_code_hash'])) {
-        $invalid();
         return;
     }
 

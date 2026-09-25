@@ -19,8 +19,14 @@ type fakeBattleyeServer struct {
 	conn     *net.UDPConn
 	password string
 	respond  func(command string) [][]byte
-	stop     chan struct{}
-	acks     chan byte // sequence numbers of received server-message ACKs
+	// rawResponses, if set, replaces respond/chunking entirely: called
+	// with the client's sequence number, its return value is sent as a
+	// sequence of raw command-response payloads verbatim (no header
+	// derived automatically), for tests that need to send malformed
+	// framing respond can't produce.
+	rawResponses func(seq byte) [][]byte
+	stop         chan struct{}
+	acks         chan byte // sequence numbers of received server-message ACKs
 }
 
 func newFakeBattleyeServer(t *testing.T, password string) (*fakeBattleyeServer, int) {
@@ -74,6 +80,16 @@ func (s *fakeBattleyeServer) run() {
 			if command == "" {
 				// keepalive: BE replies with an empty response
 				s.conn.WriteToUDP(battleyePacket(battleyePacketCommand, []byte{seq}), addr)
+				continue
+			}
+			if s.rawResponses != nil {
+				// Full control over the framing, header bytes included —
+				// for tests exercising malformed input the normal
+				// chunks-derive-their-own-header path below can't produce
+				// (e.g. a multi-part header that lies about its own total).
+				for _, payload := range s.rawResponses(seq) {
+					s.conn.WriteToUDP(battleyePacket(battleyePacketCommand, payload), addr)
+				}
 				continue
 			}
 			chunks := [][]byte{[]byte(command)}
@@ -170,6 +186,33 @@ func TestBattleyeExecuteMultiPacketReassembly(t *testing.T) {
 	}
 	if out != want.String() {
 		t.Errorf("got %q, want %q", out, want.String())
+	}
+}
+
+// TestBattleyeExecuteIgnoresMalformedZeroTotalPacket exercises the fix for
+// a real bug: a multi-part header claiming total=0 used to make
+// handleCommandResponse's "got >= total" check (0 >= 0) true before any
+// real data arrived, resolving Execute() with an empty string instead of
+// the actual response. The fix drops that packet instead; this confirms a
+// genuine response sent right after it still resolves Execute() correctly
+// rather than the call having already returned empty.
+func TestBattleyeExecuteIgnoresMalformedZeroTotalPacket(t *testing.T) {
+	srv, port := newFakeBattleyeServer(t, "secret")
+	srv.rawResponses = func(seq byte) [][]byte {
+		return [][]byte{
+			{seq, 0x00, 0x00, 0x00}, // malformed: total=0, index=0, no data
+			append([]byte{seq}, []byte("real response")...),
+		}
+	}
+	srv.start()
+	c := dialTestBattleye(t, port, "secret")
+
+	out, err := c.Execute("players")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out != "real response" {
+		t.Errorf("got %q, want %q (the malformed zero-total packet should have been ignored, not treated as a complete empty response)", out, "real response")
 	}
 }
 

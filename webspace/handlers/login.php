@@ -11,14 +11,6 @@ const NICON_LOGIN_RATE_LIMIT = 20;      // per IP, per window
 const NICON_LOGIN_USER_RATE_LIMIT = 10; // per IP+username, per window
 const NICON_LOGIN_RATE_WINDOW = 900;    // 15 minutes
 
-// A fixed bcrypt hash of a string nobody's password will ever be,
-// compared against when the username doesn't exist. bcrypt's compare is
-// what dominates this request's latency, so skipping it for an unknown
-// username (as returning early on `!$user` alone would) makes "wrong
-// password" and "no such account" distinguishable by response time — this
-// keeps both paths doing the same amount of work.
-const NICON_DUMMY_PASSWORD_HASH = '$2y$12$pB.2xa.VMH4BQtvWWpyLBu1tQJ7ai2DpOk6nZX8429cBZrSmiJX/G';
-
 function nicon_handle_login(): void
 {
     $req = nicon_json_body();

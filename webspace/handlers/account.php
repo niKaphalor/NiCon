@@ -34,8 +34,23 @@ function nicon_handle_delete_account(int $userId): void
 // recovery-code flow for when you don't. Requires the current password
 // (not just a valid session) so a moment of unattended access to an
 // unlocked browser tab can't be used to lock the real owner out.
+const NICON_ACCOUNT_CREDENTIAL_RATE_LIMIT = 10;  // per account, per window
+const NICON_ACCOUNT_CREDENTIAL_RATE_WINDOW = 900; // 15 minutes
+
 function nicon_handle_change_password(int $userId): void
 {
+    // Requiring current_password (see the comment above) only protects
+    // against unattended access if guessing it is also rate-limited —
+    // otherwise a valid session alone gives an attacker unlimited guesses
+    // at the one secret this endpoint gates. Scoped per-account, not
+    // per-IP: the thing being brute-forced here is this specific user's
+    // password, from a session that's already authenticated as them.
+    if (!nicon_rate_limit_allow('change-password:' . $userId, NICON_ACCOUNT_CREDENTIAL_RATE_LIMIT, NICON_ACCOUNT_CREDENTIAL_RATE_WINDOW)) {
+        header('Retry-After: ' . NICON_ACCOUNT_CREDENTIAL_RATE_WINDOW);
+        nicon_send_error('too many attempts — try again later', 429);
+        return;
+    }
+
     $req = nicon_json_body();
     $currentPassword = (string) ($req['current_password'] ?? '');
     $newPassword = (string) ($req['new_password'] ?? '');
@@ -81,6 +96,15 @@ function nicon_handle_change_password(int $userId): void
 // unattended session shouldn't be able to take unchallenged.
 function nicon_handle_change_username(int $userId): void
 {
+    // Same reasoning as nicon_handle_change_password's rate limit above —
+    // shares its bucket/limits, so guessing the current password via
+    // whichever of these two endpoints counts against the same allowance.
+    if (!nicon_rate_limit_allow('change-password:' . $userId, NICON_ACCOUNT_CREDENTIAL_RATE_LIMIT, NICON_ACCOUNT_CREDENTIAL_RATE_WINDOW)) {
+        header('Retry-After: ' . NICON_ACCOUNT_CREDENTIAL_RATE_WINDOW);
+        nicon_send_error('too many attempts — try again later', 429);
+        return;
+    }
+
     $req = nicon_json_body();
     $currentPassword = (string) ($req['current_password'] ?? '');
     $newUsername = trim((string) ($req['new_username'] ?? ''));

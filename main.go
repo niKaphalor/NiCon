@@ -129,8 +129,16 @@ func runServer() {
 	<-stop
 
 	logger.Print("shutting down")
-	if err := server.Close(); err != nil {
-		logger.Printf("server close: %v", err)
+	// Shutdown (not Close): lets an in-flight plain HTTP request (a
+	// /healthz check) finish instead of severing it mid-response. This
+	// makes no difference to an already-open /ws/rcon connection either
+	// way — net/http stops tracking a connection entirely once it's
+	// hijacked (which the WebSocket upgrade does), so neither Shutdown
+	// nor Close reaches those; they close only when the process exits.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		logger.Printf("server shutdown: %v", err)
 	}
 }
 

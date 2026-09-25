@@ -80,6 +80,14 @@ function nicon_verify_password(string $password, string $hash): bool
     return $hash !== '' && password_verify($password, $hash);
 }
 
+// A fixed, valid bcrypt hash with no matching input — compare against this
+// (instead of skipping the bcrypt call entirely) whenever a lookup by
+// username/account finds nothing, on every endpoint that would otherwise
+// respond faster for "no such account" than for "found the account, wrong
+// credential." Response time itself is otherwise an oracle for which
+// usernames exist. Used by both login and password reset.
+const NICON_DUMMY_PASSWORD_HASH = '$2y$12$pB.2xa.VMH4BQtvWWpyLBu1tQJ7ai2DpOk6nZX8429cBZrSmiJX/G';
+
 // nicon_generate_recovery_code returns a fresh one-time recovery code
 // formatted in groups of 5 (e.g. "ABCDE-FGH2J-KMNPQ-RST3V") — the same
 // alphabet and shape as internal/auth.GenerateRecoveryCode, purely for a

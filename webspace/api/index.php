@@ -89,10 +89,11 @@ foreach ($routes as [$routeMethod, $pattern, $authLevel, $handler]) {
     if ($authLevel === 'none') {
         $handler(...$params);
     } elseif ($authLevel === 'admin') {
-        if (nicon_require_admin() === null) {
+        $adminId = nicon_require_admin();
+        if ($adminId === null) {
             exit; // error already sent
         }
-        $handler(...$params);
+        $handler($adminId, ...$params);
     } else { // 'user'
         $userId = nicon_authenticate_request();
         if ($userId === null) {

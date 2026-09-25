@@ -114,7 +114,13 @@ func testDSN(t *testing.T) string {
 	return dsn
 }
 
-func openTestAuth(t *testing.T) *Auth {
+// openTestAuth also returns the underlying store directly — account
+// creation and session issuance both moved to the PHP Cloud API (see this
+// file's package comment), so tests below that need a user/session to
+// exercise what's left here (recovery-code regeneration, token
+// authentication) go straight through the store, the same as
+// internal/store's own tests do, rather than through Auth.
+func openTestAuth(t *testing.T) (*Auth, *store.Store) {
 	t.Helper()
 	dsn := testDSN(t)
 	key := make([]byte, store.EncryptionKeySize)
@@ -123,7 +129,7 @@ func openTestAuth(t *testing.T) *Auth {
 		t.Fatalf("open test store: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	return New(st)
+	return New(st), st
 }
 
 var usernameCounter int64
@@ -134,225 +140,45 @@ func uniqueUsername(t *testing.T) string {
 	return "auth_t_" + time.Now().Format("150405") + "_" + strconv.FormatInt(n, 10)
 }
 
-func TestRegisterAndLogin(t *testing.T) {
-	a := openTestAuth(t)
-	ctx := context.Background()
-	username := uniqueUsername(t)
-
-	token, recoveryCode, userID, err := a.Register(ctx, username, "correct-password-1")
+func mustCreateUser(t *testing.T, st *store.Store, username string) int64 {
+	t.Helper()
+	id, err := st.CreateUser(context.Background(), username, "unused-password-hash", "unused-recovery-hash")
 	if err != nil {
-		t.Fatalf("Register: %v", err)
+		t.Fatalf("CreateUser(%q): %v", username, err)
 	}
-	if token == "" || recoveryCode == "" || userID == 0 {
-		t.Fatalf("Register returned zero values: token=%q recoveryCode=%q userID=%d", token, recoveryCode, userID)
-	}
-
-	loginToken, loginUserID, err := a.Login(ctx, username, "correct-password-1")
-	if err != nil {
-		t.Fatalf("Login with correct password: %v", err)
-	}
-	if loginUserID != userID {
-		t.Errorf("Login userID = %d, want %d", loginUserID, userID)
-	}
-	if loginToken == token {
-		t.Error("Login returned the same token as Register; each login should mint a fresh one")
-	}
-
-	if _, _, err := a.Login(ctx, username, "wrong-password"); !errors.Is(err, ErrInvalidCredentials) {
-		t.Errorf("Login with wrong password: err = %v, want ErrInvalidCredentials", err)
-	}
-	if _, _, err := a.Login(ctx, "no-such-user-"+username, "whatever"); !errors.Is(err, ErrInvalidCredentials) {
-		t.Errorf("Login with unknown username: err = %v, want ErrInvalidCredentials", err)
-	}
-}
-
-func TestRegisterValidation(t *testing.T) {
-	a := openTestAuth(t)
-	ctx := context.Background()
-
-	if _, _, _, err := a.Register(ctx, "ab", "longenoughpassword"); !errors.Is(err, ErrInvalidUsername) {
-		t.Errorf("username too short: err = %v, want ErrInvalidUsername", err)
-	}
-	if _, _, _, err := a.Register(ctx, "has spaces", "longenoughpassword"); !errors.Is(err, ErrInvalidUsername) {
-		t.Errorf("username with spaces: err = %v, want ErrInvalidUsername", err)
-	}
-	if _, _, _, err := a.Register(ctx, uniqueUsername(t), "short"); !errors.Is(err, ErrPasswordTooShort) {
-		t.Errorf("password too short: err = %v, want ErrPasswordTooShort", err)
-	}
-}
-
-func TestRegisterDuplicateUsername(t *testing.T) {
-	a := openTestAuth(t)
-	ctx := context.Background()
-	username := uniqueUsername(t)
-
-	if _, _, _, err := a.Register(ctx, username, "password-one-123"); err != nil {
-		t.Fatalf("first Register: %v", err)
-	}
-	if _, _, _, err := a.Register(ctx, username, "password-two-456"); !errors.Is(err, ErrUsernameTaken) {
-		t.Errorf("duplicate Register: err = %v, want ErrUsernameTaken", err)
-	}
-}
-
-func TestResetPasswordFlow(t *testing.T) {
-	a := openTestAuth(t)
-	ctx := context.Background()
-	username := uniqueUsername(t)
-
-	_, oldCode, _, err := a.Register(ctx, username, "original-password-1")
-	if err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-
-	newCode, err := a.ResetPassword(ctx, username, oldCode, "brand-new-password-2")
-	if err != nil {
-		t.Fatalf("ResetPassword: %v", err)
-	}
-	if newCode == "" || newCode == oldCode {
-		t.Fatalf("ResetPassword returned newCode = %q, want a fresh non-empty code", newCode)
-	}
-
-	if _, _, err := a.Login(ctx, username, "original-password-1"); !errors.Is(err, ErrInvalidCredentials) {
-		t.Errorf("Login with old password after reset: err = %v, want ErrInvalidCredentials", err)
-	}
-	if _, _, err := a.Login(ctx, username, "brand-new-password-2"); err != nil {
-		t.Errorf("Login with new password after reset: %v", err)
-	}
-
-	// The old recovery code was single-use — it must not work a second time.
-	if _, err := a.ResetPassword(ctx, username, oldCode, "another-password-3"); !errors.Is(err, ErrInvalidRecoveryCode) {
-		t.Errorf("reusing the old recovery code: err = %v, want ErrInvalidRecoveryCode", err)
-	}
-
-	// The new code, however, should work.
-	if _, err := a.ResetPassword(ctx, username, newCode, "yet-another-password-4"); err != nil {
-		t.Errorf("ResetPassword with the newly issued code: %v", err)
-	}
-}
-
-func TestResetPasswordWrongCodeOrUnknownUserGivesSameError(t *testing.T) {
-	a := openTestAuth(t)
-	ctx := context.Background()
-	username := uniqueUsername(t)
-
-	if _, _, _, err := a.Register(ctx, username, "some-password-123"); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err1 := a.ResetPassword(ctx, username, "WRONGCODE0000000000", "new-password-123")
-	if !errors.Is(err1, ErrInvalidRecoveryCode) {
-		t.Errorf("wrong code: err = %v, want ErrInvalidRecoveryCode", err1)
-	}
-
-	_, err2 := a.ResetPassword(ctx, "no-such-user-"+username, "WRONGCODE0000000000", "new-password-123")
-	if !errors.Is(err2, ErrInvalidRecoveryCode) {
-		t.Errorf("unknown username: err = %v, want ErrInvalidRecoveryCode", err2)
-	}
-
-	if err1.Error() != err2.Error() {
-		t.Errorf("wrong-code and unknown-username errors differ (%q vs %q); this can leak which usernames exist", err1, err2)
-	}
-}
-
-func TestResetPasswordRejectsShortNewPassword(t *testing.T) {
-	a := openTestAuth(t)
-	ctx := context.Background()
-	username := uniqueUsername(t)
-
-	_, code, _, err := a.Register(ctx, username, "some-password-123")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := a.ResetPassword(ctx, username, code, "short"); !errors.Is(err, ErrPasswordTooShort) {
-		t.Errorf("ResetPassword with a short new password: err = %v, want ErrPasswordTooShort", err)
-	}
-}
-
-func TestResetPasswordInvalidatesExistingSessions(t *testing.T) {
-	a := openTestAuth(t)
-	ctx := context.Background()
-	username := uniqueUsername(t)
-
-	regToken, code, userID, err := a.Register(ctx, username, "original-password-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	loginToken, _, err := a.Login(ctx, username, "original-password-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := a.ResetPassword(ctx, username, code, "new-password-999"); err != nil {
-		t.Fatalf("ResetPassword: %v", err)
-	}
-
-	if _, err := a.Authenticate(ctx, regToken); !errors.Is(err, ErrUnauthenticated) {
-		t.Errorf("Authenticate(register token) after reset: err = %v, want ErrUnauthenticated", err)
-	}
-	if _, err := a.Authenticate(ctx, loginToken); !errors.Is(err, ErrUnauthenticated) {
-		t.Errorf("Authenticate(login token) after reset: err = %v, want ErrUnauthenticated", err)
-	}
-	_ = userID
+	return id
 }
 
 func TestGenerateAndSetRecoveryCode(t *testing.T) {
-	a := openTestAuth(t)
+	a, st := openTestAuth(t)
 	ctx := context.Background()
-	username := uniqueUsername(t)
+	userID := mustCreateUser(t, st, uniqueUsername(t))
 
-	_, oldCode, userID, err := a.Register(ctx, username, "some-password-123")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	newCode, err := a.GenerateAndSetRecoveryCode(ctx, userID)
+	code, err := a.GenerateAndSetRecoveryCode(ctx, userID)
 	if err != nil {
 		t.Fatalf("GenerateAndSetRecoveryCode: %v", err)
 	}
-	if newCode == "" || newCode == oldCode {
-		t.Fatalf("GenerateAndSetRecoveryCode returned %q, want a fresh non-empty code", newCode)
+	if code == "" {
+		t.Fatal("GenerateAndSetRecoveryCode returned an empty code")
 	}
 
-	// The password is untouched — logging in still works with it.
-	if _, _, err := a.Login(ctx, username, "some-password-123"); err != nil {
-		t.Errorf("Login after regenerating recovery code: %v", err)
-	}
-
-	if _, err := a.ResetPassword(ctx, username, oldCode, "irrelevant-password-1"); !errors.Is(err, ErrInvalidRecoveryCode) {
-		t.Errorf("ResetPassword with the superseded old code: err = %v, want ErrInvalidRecoveryCode", err)
-	}
-	if _, err := a.ResetPassword(ctx, username, newCode, "final-password-999"); err != nil {
-		t.Errorf("ResetPassword with the newly generated code: %v", err)
-	}
-}
-
-func TestDeleteAccount(t *testing.T) {
-	a := openTestAuth(t)
-	ctx := context.Background()
-	username := uniqueUsername(t)
-
-	_, _, userID, err := a.Register(ctx, username, "some-password-123")
+	code2, err := a.GenerateAndSetRecoveryCode(ctx, userID)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("GenerateAndSetRecoveryCode (second call): %v", err)
 	}
-
-	if err := a.DeleteAccount(ctx, userID); err != nil {
-		t.Fatalf("DeleteAccount: %v", err)
-	}
-
-	if _, _, err := a.Login(ctx, username, "some-password-123"); !errors.Is(err, ErrInvalidCredentials) {
-		t.Errorf("Login after DeleteAccount: err = %v, want ErrInvalidCredentials", err)
+	if code2 == code {
+		t.Errorf("regenerating gave the same code twice: %q", code)
 	}
 }
 
 func TestAuthenticate(t *testing.T) {
-	a := openTestAuth(t)
+	a, st := openTestAuth(t)
 	ctx := context.Background()
-	username := uniqueUsername(t)
+	userID := mustCreateUser(t, st, uniqueUsername(t))
 
-	token, _, userID, err := a.Register(ctx, username, "some-password-123")
-	if err != nil {
-		t.Fatal(err)
+	token := uniqueUsername(t) + "-token" // any unique string; a real one is a random hex string, but Authenticate doesn't care about its shape
+	if err := st.CreateSession(ctx, token, userID, 3600); err != nil {
+		t.Fatalf("CreateSession: %v", err)
 	}
 
 	gotUserID, err := a.Authenticate(ctx, token)

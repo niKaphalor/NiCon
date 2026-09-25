@@ -203,6 +203,15 @@ func (c *battleyeConn) handleCommandResponse(seq byte, rest []byte) {
 	index := byte(0)
 	if len(rest) >= 3 && rest[0] == 0x00 {
 		total, index, chunk = rest[1], rest[2], rest[3:]
+		if total == 0 {
+			// Malformed: a multi-part response claiming zero parts. Left
+			// unguarded, make([][]byte, 0) below means the "got >= total"
+			// completion check (0 >= 0) is true before any real data
+			// arrives, resolving Execute() with an empty string instead
+			// of the actual response. Drop it and let a genuine packet
+			// (or Execute's own timeout) resolve this the normal way.
+			return
+		}
 	}
 
 	c.mu.Lock()

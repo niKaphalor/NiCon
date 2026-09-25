@@ -3,7 +3,9 @@ package relay
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,7 +76,53 @@ const (
 	writeWait  = 10 * time.Second
 )
 
+// blockedMetadataHosts/blockedMetadataIPs mirror
+// webspace/handlers/servers.php's nicon_is_cloud_metadata_host — same
+// list, same reasoning (these endpoints hand out unauthenticated
+// high-privilege cloud credentials to whatever can reach them, with no
+// legitimate use as an RCON target; this deliberately does NOT block
+// localhost/private/LAN addresses, since a self-hosted game server on the
+// same network is the documented primary use case).
+//
+// The PHP check alone has a DNS-rebinding gap: a host that resolves to a
+// safe IP when a server is first added could resolve to a metadata IP by
+// the time this process actually connects to it, since DNS is looked up
+// fresh here, in a different process, later. This check happens
+// immediately before dialing — the only place that gap can actually be
+// closed — checked against every resolved IP, not just the literal host
+// string.
+var blockedMetadataHosts = map[string]bool{
+	"metadata.google.internal": true,
+}
+
+var blockedMetadataIPs = map[string]bool{
+	"169.254.169.254": true, // AWS, GCP, Azure, DigitalOcean, Oracle Cloud, ...
+	"169.254.170.2":   true, // AWS ECS task metadata
+	"fd00:ec2::254":   true, // AWS IMDSv2, IPv6
+	"100.100.100.200": true, // Alibaba Cloud
+}
+
+func isBlockedMetadataHost(host string) bool {
+	normalized := strings.ToLower(strings.Trim(host, "[]"))
+	if blockedMetadataHosts[normalized] || blockedMetadataIPs[normalized] {
+		return true
+	}
+	ips, err := net.LookupIP(normalized)
+	if err != nil {
+		return false // unresolvable either way — dialing will fail on its own
+	}
+	for _, ip := range ips {
+		if blockedMetadataIPs[ip.String()] {
+			return true
+		}
+	}
+	return false
+}
+
 func connectGame(srv store.Server) (gameConn, error) {
+	if isBlockedMetadataHost(srv.Host) {
+		return nil, errors.New("this host is not allowed")
+	}
 	switch srv.Protocol {
 	case "webrcon":
 		return dialWebRcon(srv.Host, srv.Port, srv.Password)

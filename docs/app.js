@@ -2094,9 +2094,11 @@
       cmdHistoryPanel.appendChild(hint);
       return;
     }
-    // Most recently sent first.
-    for (var i = entries.length - 1; i >= 0; i--) {
-      var command = entries[i];
+    // Most recently sent first. .forEach() (not a for-loop reusing one
+    // `var`) so each button's click handler closes over its own `command`
+    // — a shared `var` across loop iterations would make every button
+    // recall whichever entry the loop last visited, not the one clicked.
+    entries.slice().reverse().forEach(function (command) {
       var btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = command;
@@ -2110,7 +2112,7 @@
         cmdInput.focus();
       });
       cmdHistoryPanel.appendChild(btn);
-    }
+    });
   }
 
   cmdHistoryBtn.addEventListener("click", function () {

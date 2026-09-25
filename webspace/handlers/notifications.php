@@ -26,7 +26,7 @@ function nicon_handle_list_notifications(int $userId): void
     nicon_send_json(array_map('nicon_notification_response', $stmt->fetchAll()));
 }
 
-function nicon_handle_admin_create_notification(): void
+function nicon_handle_admin_create_notification(int $adminId): void
 {
     $req = nicon_json_body();
     $type = (string) ($req['type'] ?? 'info');
@@ -50,7 +50,7 @@ function nicon_handle_admin_create_notification(): void
     nicon_send_json(nicon_notification_response($stmt->fetch()));
 }
 
-function nicon_handle_admin_delete_notification(int $notificationId): void
+function nicon_handle_admin_delete_notification(int $adminId, int $notificationId): void
 {
     $stmt = nicon_db()->prepare('DELETE FROM notifications WHERE id = ?');
     $stmt->execute([$notificationId]);

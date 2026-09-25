@@ -5,7 +5,7 @@ declare(strict_types=1);
 // internal/relay/handlers_admin.go's handleAdminListUsers — returns only
 // account metadata (never password/recovery-code hashes, never another
 // account's server details).
-function nicon_handle_admin_list_users(): void
+function nicon_handle_admin_list_users(int $adminId): void
 {
     $stmt = nicon_db()->query('
         SELECT u.id, u.username, u.created_at, u.is_admin, COUNT(s.id) AS server_count
@@ -27,9 +27,32 @@ function nicon_handle_admin_list_users(): void
     nicon_send_json($users);
 }
 
-function nicon_handle_admin_delete_user(int $targetId): void
+function nicon_handle_admin_delete_user(int $adminId, int $targetId): void
 {
-    $stmt = nicon_db()->prepare('DELETE FROM users WHERE id = ?');
+    if ($targetId === $adminId) {
+        nicon_send_error('use your own account settings to delete your account, not the admin panel', 400);
+        return;
+    }
+
+    $pdo = nicon_db();
+    $stmt = $pdo->prepare('SELECT is_admin FROM users WHERE id = ?');
+    $stmt->execute([$targetId]);
+    $target = $stmt->fetch();
+    if (!$target) {
+        nicon_send_error('404 page not found', 404);
+        return;
+    }
+    // Deleting the last admin would lock everyone out of this instance's
+    // admin panel with no way back in short of a direct database edit.
+    if ($target['is_admin']) {
+        $adminCount = (int) $pdo->query('SELECT COUNT(*) FROM users WHERE is_admin = 1')->fetchColumn();
+        if ($adminCount <= 1) {
+            nicon_send_error('cannot delete the only remaining admin account', 400);
+            return;
+        }
+    }
+
+    $stmt = $pdo->prepare('DELETE FROM users WHERE id = ?');
     $stmt->execute([$targetId]);
     if ($stmt->rowCount() === 0) {
         nicon_send_error('404 page not found', 404);
@@ -43,7 +66,7 @@ function nicon_handle_admin_delete_user(int $targetId): void
 // lost their code and can't reach the relay operator's terminal. The
 // admin is responsible for relaying the new code to that user themselves
 // — there's no email address on file to send it to.
-function nicon_handle_admin_regenerate_recovery_code(int $targetId): void
+function nicon_handle_admin_regenerate_recovery_code(int $adminId, int $targetId): void
 {
     $code = nicon_generate_recovery_code();
     $hash = nicon_hash_password(nicon_normalize_recovery_code($code));

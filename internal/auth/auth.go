@@ -1,27 +1,28 @@
-// Package auth handles password hashing and session tokens on top of
-// internal/store. It never touches passwords in plaintext except to check
-// them at login (bcrypt) or hand a freshly-generated random token back to
-// the caller.
+// Package auth handles password hashing, recovery codes, and session-token
+// authentication on top of internal/store.
+//
+// Login/registration/password-reset used to live here too, but that whole
+// account-management surface moved to the PHP Cloud API (see
+// webspace/handlers/) when the project split the relay from account
+// management — see README.md's "Cloud API vs. relay" section. What
+// remains is what the relay itself still needs directly: hashing/
+// generating recovery codes for the `adduser`/`gen-recovery-code` CLI
+// commands and the admin panel's regenerate action (main.go), and
+// resolving a session token to a user ID for an incoming /ws/rcon
+// connection (internal/relay/ws.go) — sessions are created by the PHP API
+// now, not here.
 package auth
 
 import (
 	"context"
 	"crypto/rand"
-	"encoding/hex"
 	"errors"
-	"regexp"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/niKaphalor/NiCon/internal/store"
 )
-
-// SessionTTLSeconds is how long a login stays valid. There's no "remember
-// me" distinction — every login gets the same lifetime.
-const SessionTTLSeconds = 7 * 24 * 3600 // 7 days
-
-const MinPasswordLength = 8
 
 // RecoveryCodeLength is the number of characters in a generated recovery
 // code (before the display formatting adds hyphens every 5 characters).
@@ -32,16 +33,7 @@ const RecoveryCodeLength = 20
 // retyped correctly from a saved copy, often by hand.
 const recoveryCodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
-var (
-	ErrInvalidCredentials  = errors.New("invalid username or password")
-	ErrUnauthenticated     = errors.New("not authenticated")
-	ErrUsernameTaken       = errors.New("username already taken")
-	ErrInvalidUsername     = errors.New("username must be 3-32 characters: letters, numbers, underscore, hyphen, or dot")
-	ErrPasswordTooShort    = errors.New("password must be at least 8 characters")
-	ErrInvalidRecoveryCode = errors.New("invalid username or recovery code")
-)
-
-var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,32}$`)
+var ErrUnauthenticated = errors.New("not authenticated")
 
 type Auth struct {
 	store *store.Store
@@ -59,128 +51,6 @@ func HashPassword(password string) (string, error) {
 		return "", err
 	}
 	return string(hash), nil
-}
-
-// Login verifies username/password and returns a new session token.
-func (a *Auth) Login(ctx context.Context, username, password string) (token string, userID int64, err error) {
-	user, err := a.store.GetUserByUsername(ctx, username)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return "", 0, ErrInvalidCredentials
-		}
-		return "", 0, err
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		return "", 0, ErrInvalidCredentials
-	}
-
-	token, err = generateToken()
-	if err != nil {
-		return "", 0, err
-	}
-	if err := a.store.CreateSession(ctx, token, user.ID, SessionTTLSeconds); err != nil {
-		return "", 0, err
-	}
-	return token, user.ID, nil
-}
-
-func (a *Auth) Logout(ctx context.Context, token string) error {
-	return a.store.DeleteSession(ctx, token)
-}
-
-// Register creates a new account and, on success, logs it in immediately
-// (same as a fresh Login) so a signup doesn't need a second round trip. It
-// also generates a one-time recovery code — the only way back into the
-// account if the password is later forgotten — and returns it in plaintext
-// exactly once; only its bcrypt hash is stored.
-func (a *Auth) Register(ctx context.Context, username, password string) (token, recoveryCode string, userID int64, err error) {
-	username = strings.TrimSpace(username)
-	if !usernamePattern.MatchString(username) {
-		return "", "", 0, ErrInvalidUsername
-	}
-	if len(password) < MinPasswordLength {
-		return "", "", 0, ErrPasswordTooShort
-	}
-
-	hash, err := HashPassword(password)
-	if err != nil {
-		return "", "", 0, err
-	}
-	recoveryCode, err = GenerateRecoveryCode()
-	if err != nil {
-		return "", "", 0, err
-	}
-	recoveryCodeHash, err := HashPassword(NormalizeRecoveryCode(recoveryCode))
-	if err != nil {
-		return "", "", 0, err
-	}
-
-	id, err := a.store.CreateUser(ctx, username, hash, recoveryCodeHash)
-	if err != nil {
-		if errors.Is(err, store.ErrUsernameTaken) {
-			return "", "", 0, ErrUsernameTaken
-		}
-		return "", "", 0, err
-	}
-
-	token, err = generateToken()
-	if err != nil {
-		return "", "", 0, err
-	}
-	if err := a.store.CreateSession(ctx, token, id, SessionTTLSeconds); err != nil {
-		return "", "", 0, err
-	}
-	return token, recoveryCode, id, nil
-}
-
-// ResetPassword verifies username+recoveryCode and, on success, sets a new
-// password and issues a fresh recovery code — the old one is single-use,
-// same as a 2FA backup code, so it's rotated on every successful reset and
-// returned once, exactly like at registration. Every existing session for
-// the account is invalidated as part of the same reset (see
-// store.ResetPassword), in case the old password had leaked.
-//
-// A wrong username and a wrong recovery code return the identical
-// ErrInvalidRecoveryCode, so this endpoint can't be used to check which
-// usernames exist on the relay.
-func (a *Auth) ResetPassword(ctx context.Context, username, recoveryCode, newPassword string) (newRecoveryCode string, err error) {
-	if len(newPassword) < MinPasswordLength {
-		return "", ErrPasswordTooShort
-	}
-
-	user, err := a.store.GetUserByUsername(ctx, username)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return "", ErrInvalidRecoveryCode
-		}
-		return "", err
-	}
-	if user.RecoveryCodeHash == "" {
-		return "", ErrInvalidRecoveryCode
-	}
-	if err := bcrypt.CompareHashAndPassword(
-		[]byte(user.RecoveryCodeHash), []byte(NormalizeRecoveryCode(recoveryCode)),
-	); err != nil {
-		return "", ErrInvalidRecoveryCode
-	}
-
-	newHash, err := HashPassword(newPassword)
-	if err != nil {
-		return "", err
-	}
-	newRecoveryCode, err = GenerateRecoveryCode()
-	if err != nil {
-		return "", err
-	}
-	newRecoveryCodeHash, err := HashPassword(NormalizeRecoveryCode(newRecoveryCode))
-	if err != nil {
-		return "", err
-	}
-
-	if err := a.store.ResetPassword(ctx, user.ID, newHash, newRecoveryCodeHash); err != nil {
-		return "", err
-	}
-	return newRecoveryCode, nil
 }
 
 // GenerateAndSetRecoveryCode generates a fresh recovery code, stores its
@@ -252,12 +122,6 @@ func NormalizeRecoveryCode(code string) string {
 	return b.String()
 }
 
-// DeleteAccount permanently removes an account and everything tied to it
-// (sessions, servers) — the self-service "right to erasure" path.
-func (a *Auth) DeleteAccount(ctx context.Context, userID int64) error {
-	return a.store.DeleteUser(ctx, userID)
-}
-
 // Authenticate resolves a session token to a user ID, or ErrUnauthenticated
 // if the token is missing, unknown, or expired.
 func (a *Auth) Authenticate(ctx context.Context, token string) (int64, error) {
@@ -272,12 +136,4 @@ func (a *Auth) Authenticate(ctx context.Context, token string) (int64, error) {
 		return 0, err
 	}
 	return userID, nil
-}
-
-func generateToken() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
 }
