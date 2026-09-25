@@ -34,25 +34,41 @@ jobs:
           go-version: "1.26"
 
       # No Docker health-cmd on the service above: mariadb's own
-      # mysqladmin-based health check reported unhealthy well past 90s in
-      # practice even though the server logs showed it accepting
-      # connections within a few seconds — some auth/exec quirk specific
-      # to this image on the Actions runner, not worth chasing further.
-      # A plain TCP-readiness loop is a reliable enough substitute: the
-      # real server only binds :3306 after its (fast) first-run init
-      # completes, so a successful connect here means it's actually ready.
+      # mysqladmin-based health check (run via `docker exec` inside the
+      # service container) reported unhealthy well past 90s in practice
+      # even though the server logs showed it accepting connections
+      # within a few seconds — some auth/exec quirk specific to that
+      # in-container mechanism on the Actions runner, not worth chasing
+      # further. A plain TCP-readiness loop was tried as a substitute,
+      # but that's not actually reliable either: mariadb binds :3306 very
+      # early, well before its internal init (system tables, the
+      # nicon_test database, the root password) has finished — a bare
+      # TCP connect succeeds in well under a second while the server is
+      # still busy initializing, and every real connection attempt
+      # during that window fails with a driver-level "bad connection" /
+      # "unexpected EOF" (confirmed: every single test failed this way
+      # in CI, not just new ones, so this was never about the code under
+      # test). mysqladmin ping does a real MySQL-protocol handshake
+      # (including auth), so it can't return healthy before the server
+      # actually is — that's what the driver itself will do a moment
+      # later, so this loop and the real test connections wait on
+      # exactly the same condition. Installed locally on the runner and
+      # connecting over the mapped port from outside, not via `docker
+      # exec` into the container, so this isn't a repeat of the
+      # Docker-health-cmd issue above.
       - name: Wait for MariaDB
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends mariadb-client
           for i in $(seq 1 30); do
-            if (exec 3<>/dev/tcp/127.0.0.1/3306) 2>/dev/null; then
-              exec 3<&- 3>&-
-              echo "MariaDB is accepting connections."
+            if mysqladmin ping -h127.0.0.1 -P3306 -uroot -pci_test_root_password --silent 2>/dev/null; then
+              echo "MariaDB is accepting real connections."
               exit 0
             fi
             echo "waiting for MariaDB ($i/30)..."
             sleep 2
           done
-          echo "MariaDB never became reachable on :3306" >&2
+          echo "MariaDB never became ready" >&2
           exit 1
 
       - name: Build
