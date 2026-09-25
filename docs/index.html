@@ -16,6 +16,12 @@
      constants if you point this frontend at a different deployment. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://nicon.mylss.de https://relay.130.61.8.150.sslip.io wss://relay.130.61.8.150.sslip.io; base-uri 'self'; form-action 'self'">
 <title>NiCon</title>
+<link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="NiCon">
+<link rel="manifest" href="site.webmanifest">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -23,7 +29,7 @@
 <body>
 
 <header class="topbar">
-  <span class="wordmark">NiCon</span>
+  <span class="wordmark"><picture><source srcset="nicon-favicon.webp" type="image/webp"><img src="nicon-favicon.png" alt="" width="22" height="22"></picture>NiCon</span>
   <nav class="topbar-nav" aria-label="Main">
     <button type="button" id="nav-servers-btn" class="navlink" data-i18n="servers.title" hidden>Servers</button>
     <button type="button" id="nav-health-btn" class="navlink" data-i18n="health.navLabel" hidden>Health</button>
