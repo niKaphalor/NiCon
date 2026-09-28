@@ -34,15 +34,21 @@ if ($method === 'GET' && $path === '/services') {
     $data = ['services' => [['id' => 9001]]];
 } elseif ($method === 'GET' && $path === '/services/9001/gameservers') {
     $data = ['gameserver' => [
-        'game' => 'rust',
-        'game_human' => 'Rust',
+        'game' => 'gmod',
+        'game_human' => "Garry's Mod",
         'ip' => '127.0.0.1',
         'rcon_port' => 28016,
         'status' => 'started',
         'slots' => 50,
         'game_specific' => ['features' => ['has_rcon' => true]],
+        'settings' => ['config' => [
+            'server_name' => 'Public name',
+            'pvp' => true,
+            'rcon_password' => 'must-not-leak',
+            'api_token' => 'must-not-leak-either',
+        ]],
         'query' => [
-            'server_name' => 'Integration Rust',
+            'server_name' => 'Integration GMod',
             'player_current' => 3,
             'player_max' => 50,
             'map' => 'Procedural Map',
@@ -51,8 +57,8 @@ if ($method === 'GET' && $path === '/services') {
     ]];
 } elseif ($method === 'GET' && $path === '/services/9001/gameservers/games') {
     $data = ['games' => [[
-        'game' => 'rust',
-        'icons' => ['x64' => 'https://assets.nitrado.net/rust-64.png'],
+        'game' => 'gmod',
+        'icons' => ['x64' => 'https://assets.nitrado.net/gmod-64.png'],
     ]]];
 } elseif ($method === 'POST' && in_array($path, [
     '/services/9001/gameservers/start',

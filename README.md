@@ -1,8 +1,8 @@
 # NiCon
 
-A browser-based command center for game servers. NiCon combines RCON,
-WebRCON, BattlEye RCon, and Palworld's REST API in one interface, imports
-compatible Nitrado services, monitors connectivity, enriches player lists
+A browser-based command center for game servers. NiCon combines Source RCON,
+WebRCON, BattleBit WebRCON, BattlEye RCon, Palworld REST, and 7 Days to Die Telnet in one interface, imports
+allow-listed Nitrado services, monitors connectivity and player history, enriches player lists
 with optional Steam data, and provides moderation rules, macros, and
 Nitrado power controls.
 
@@ -36,9 +36,9 @@ account itself from Settings, at any time.
 
 ## Status
 
-NiCon is an actively developed, self-hosted application. The Nitrado sync,
-game catalog/icons, Rust WebRCON path, and Palworld service discovery have
-been exercised against real services; the automated Go suite covers the
+NiCon is an actively developed, self-hosted application. Its selectable and
+Nitrado-importable catalog is a fixed, explicitly maintained list of supported
+games; games absent from it are not exposed as new integrations. The automated Go suite covers the
 store, authentication, health checks, and protocol clients with test
 servers. Compatibility still depends on each game's command/output format,
 and the structured parsers other than Rust have not all been validated
@@ -77,10 +77,11 @@ hands-off production control plane.
    **Stop**, and **Restart** controls; those go through the always-on Cloud
    API and therefore don't require the RCON relay.
 
-Most games speak classic Source RCON, but **Rust doesn't** — it uses its
-own WebSocket-based "WebRCON" protocol instead. NiCon detects this
-automatically for servers found via Nitrado sync; for a manually-added
-Rust server, pick "Rust WebRCON" in the protocol dropdown when adding it.
+7 Days to Die uses its configured **Telnet Port**, not a Source-RCON port.
+Selecting the game chooses NiCon's dedicated Telnet transport automatically.
+Several games use proprietary or game-specific protocol variants;
+the [compatibility matrix](docs/compatibility.md) marks those as provisional
+until NiCon has been tested against a disposable live server.
 
 You can keep several consoles connected at once — selecting another server
 doesn't disconnect the current one; its socket and console history remain
@@ -117,7 +118,12 @@ The command center includes:
   disabled unless the Cloud API has a Steam Web API key configured.
 
 The separate **Health** view combines the relay's automatic five-minute
-RCON checks with connection time, latency, and recent client-side errors.
+RCON checks with retained 24-hour, 7-day, 30-day, and 90-day uptime/player
+graphs, sample completeness, connection time, latency, and recent client-side errors.
+For uninterrupted Nitrado player history, schedule
+`php webspace/cron/sample_nitrado.php` every five minutes in the hosting
+control panel; the command reuses the shared 30–60-second Nitrado cache and
+removes samples older than 90 days.
 Settings contains account/security controls, recent account activity, and
 Nitrado-token removal. Admins additionally get account management,
 instance-wide notifications, and the latest audit entries.
@@ -285,12 +291,12 @@ Once deployed, it serves the same JSON API the relay used to (except
   `{"token": "..."}`, calls the Nitrado API server-side over HTTPS (an
   ordinary outbound web request, which shared hosting handles fine — see
   [Cloud API vs. relay](#cloud-api-vs-relay) above for what it *can't*
-  do), and upserts each RCON-capable service into the caller's own server
-  list (matched on Nitrado's service ID, so re-syncing updates rather
-  than duplicates, and never touches an already-set password). Rust
-  services are included even though Nitrado's `has_rcon` flag apparently
-  doesn't cover WebRCON — any service whose game is Rust is treated as
-  eligible on host/port alone. A token sent in the request body is saved
+  do), and upserts each RCON-capable service whose current game is on NiCon's
+  supported-game list into the caller's own server list (matched on
+  Nitrado's service ID, so re-syncing updates rather than duplicates, and
+  never touches an already-set password). 7 Days to Die is accepted when
+  Nitrado supplies its Telnet port even if the generic `has_rcon` flag is
+  false. A token sent in the request body is saved
   encrypted (overwriting whatever was saved before) and reused on any
   later sync that omits one — see [User accounts](#user-accounts) and
   `DELETE /account/nitrado-token` for removing a saved token without
@@ -379,12 +385,10 @@ JSON (`{"type":"response", output, upstream_ms, relay_overhead_ms}` /
 `{"type":"error", message}` /
 `{"type":"broadcast", output}` for a WebRCON/BattlEye server's own
 unsolicited push messages). Servers can be `"source"` (classic Source
-RCON via [gorcon/rcon](https://github.com/gorcon/rcon) — this is what
-Garry's Mod and ARK: Survival Evolved/Ascended use too, no special
-handling needed), `"webrcon"` (Rust's own WebSocket-based RCON,
-hand-rolled in `internal/relay/webrcon.go` since there's no existing Go
-client for it), `"palworld_rest"` (Palworld's first-party REST API — see
-below), or `"battleye"` (Arma 3 and DayZ's BattlEye RCon — see below).
+RCON via [gorcon/rcon](https://github.com/gorcon/rcon)), `"battlebit"`
+(BattleBit's Community API WebSocket protocol), `"telnet"`
+(7 Days to Die), `"battleye"` (BattlEye-compatible UDP RCon), `"webrcon"`
+(Rust), or `"palworld_rest"` (Palworld's supported REST API).
 The WebRCON connection also sends itself a WebSocket ping every 25s —
 Rust closes WebRCON connections it considers idle, and this keeps it
 alive without sending a bogus command to the game.
@@ -420,8 +424,8 @@ Nitrado, so worth double-checking if a sync ever gets it wrong.
 
 **`"battleye"`** speaks [BattlEye's RCon
 protocol](https://www.battleye.com/downloads/BERConProtocol.txt), used by
-Arma 3 and DayZ (both BattlEye-protected, unlike the Source-RCON-based
-games) — a UDP protocol, not TCP, with CRC32-checked packets and no
+Arma 2, Arma 3, Arma Reforger, and DayZ — a UDP protocol, not TCP, with
+CRC32-checked packets and no
 delivery guarantee, unlike everything else the relay speaks. Long
 responses arrive split across several packets that
 `internal/relay/battleye.go` reassembles by sequence number; the server
@@ -430,9 +434,9 @@ chat) that must be ACKed immediately or BattlEye drops the client —
 those surface as `{"type":"broadcast"}` the same way WebRCON's are. Unit
 tests (`internal/relay/battleye_test.go`) exercise the framing,
 reassembly, and ACK behavior against a fake UDP server, including under
-`-race`, but the implementation hasn't been checked against a real Arma
-3 or DayZ server yet. Nitrado sync detects both games by name (matching
-`arma`/`dayz` in `game_human`) and assigns this protocol automatically.
+`-race`, but the implementation hasn't been checked against a live server
+for any of these four games yet. Nitrado sync detects their canonical names
+and assigns this protocol automatically.
 
 Only origins in `-allow-origin` (default: the GitHub Pages URL plus
 `localhost:8765`) can open that WebSocket at all — without that check, any
@@ -706,17 +710,17 @@ for the distinction between mock coverage and real-server verification.
   [webrcon](https://github.com/Facepunch/webrcon) tool and third-party
   documentation; the `playerlist` command and `kick` have been verified
   against a real Rust server, the rest of it hasn't. The BattlEye
-  implementation (Arma 3, DayZ) is based on BattlEye's own published
+  implementation (Arma 2, Arma 3, Arma Reforger, DayZ) is based on BattlEye's own published
   protocol spec and hasn't been checked against a real server at all yet
-- Structured player-list parsing (`docs/games.js`) covers Minecraft, Rust,
+- Structured player-list parsing (`docs/games.js`) covers Rust,
   ARK: Survival Evolved/Ascended, Palworld (via its REST API, see
-  [Relay](#relay)), Arma 3, DayZ, and Garry's Mod, based on documented
+  [Relay](#relay)), the BattlEye games, and Garry's Mod, based on documented
   command/API output formats rather than verified live responses — Rust's
   is the exception, confirmed against a real server; none of the others
   have been — see the file for details
 - Mute and whisper are intentionally available only where a documented
-  base-game/protocol command exists (currently Rust mute, Minecraft and
-  BattlEye whisper). NiCon does not assume optional admin plugins such as
+  base-game/protocol command exists (currently Rust mute and BattlEye
+  whisper). NiCon does not assume optional admin plugins such as
   uMod/ULX on other games.
 - The [admin panel](#admin-panel) covers account management (list, delete,
   regenerate a recovery code) but nothing about server data — an admin

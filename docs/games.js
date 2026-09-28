@@ -317,25 +317,111 @@ window.NICON_GAMES = {
   },
 };
 
+// NiCon's supported-game list is deliberately explicit. Some protocols expose only a basic
+// command response, so parsers are conservative and return null instead of
+// inventing player rows when output differs between game versions.
+function parseLoosePlayerLines(text) {
+  var lines = text.split("\n").map(function (line) { return line.trim(); }).filter(Boolean);
+  var players = [];
+  lines.forEach(function (line) {
+    var m = line.match(/^(?:\d+[.)#]?\s+)?["']?([^,"']{1,64})["']?(?:\s*,|\s{2,}|$)/);
+    if (m && !/^(players?|name|id|steam|connected|server)/i.test(m[1])) {
+      players.push({ cells: [m[1]], id: m[1], isAdmin: false });
+    }
+  });
+  return players.length ? { columns: ["name"], summary: players.length + " players online", players: players } : null;
+}
+
+Object.assign(window.NICON_GAMES, {
+  sevendaystodie: { label: "7 Days to Die", protocol: "telnet", command: "lp", parse: parseLoosePlayerLines,
+    kick: function (p) { return "kick " + p.id; }, ban: function (p) { return "ban add " + p.id + " 100 years Banned by admin"; },
+    commands: ["lp", "say", "kick", "ban", "saveworld", "shutdown", "getgamepref"] },
+  eightythree: { label: "83", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status"] },
+  arksurvivalascended: Object.assign({}, window.NICON_GAMES.ark, { label: "ARK: Survival Ascended" }),
+  arksurvivalevolved: Object.assign({}, window.NICON_GAMES.ark, { label: "ARK: Survival Evolved" }),
+  arma2: Object.assign({}, window.NICON_GAMES.arma3, { label: "Arma 2" }),
+  armareforger: Object.assign({}, window.NICON_GAMES.arma3, { label: "Arma Reforger" }),
+  atlas: { label: "ATLAS", protocol: "source", command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "Broadcast", "SaveWorld", "DoExit"] },
+  battlebit: { label: "BattleBit Remastered", protocol: "battlebit", command: "playerlist", parse: function (text) {
+    try {
+      var data = JSON.parse(text); var list = Array.isArray(data.players) ? data.players : [];
+      return { columns: ["name", "steamid", "ping"], summary: list.length + " players online", players: list.map(function (p) {
+        return { cells: [p.name || p.Name, p.steamID || p.SteamID, p.ping || p.Ping], id: p.steamID || p.SteamID, isAdmin: false };
+      }) };
+    } catch (_) { return null; }
+  }, kick: function (p) { return "kick " + p.id; }, commands: ["playerlist", "state", "say", "kick"] },
+  beyondthewire: { label: "Beyond the Wire", protocol: "source", command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "AdminKick", "AdminBan", "AdminBroadcast"] },
+  conanexiles: { label: "Conan Exiles", protocol: "source", command: "listplayers", parse: parseLoosePlayerLines, commands: ["listplayers", "broadcast", "kick", "ban"] },
+  counterstrike2: { label: "Counter-Strike 2", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status", "say", "kickid", "banid", "changelevel"] },
+  darkandlight: { label: "Dark and Light", protocol: "source", command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "Broadcast", "SaveWorld", "DoExit"] },
+  hellletloose: { label: "Hell Let Loose", protocol: "source", command: "get playerids", parse: parseLoosePlayerLines, commands: ["get playerids", "kick", "punish", "broadcast"] },
+  hellletloosevietnam: { label: "Hell Let Loose: Vietnam", protocol: "source", command: "get playerids", parse: parseLoosePlayerLines, commands: ["get playerids", "kick", "punish", "broadcast"] },
+  insurgency: { label: "Insurgency", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status", "say", "kickid", "banid"] },
+  mordhau: { label: "MORDHAU", protocol: "source", command: "playerlist", parse: parseLoosePlayerLines, commands: ["playerlist", "say", "kick", "ban"] },
+  projectzomboid: { label: "Project Zomboid", protocol: "source", command: "players", parse: parseLoosePlayerLines, commands: ["players", "servermsg", "kickuser", "banuser", "save", "quit"] },
+  risingstorm2: { label: "Rising Storm 2: Vietnam", protocol: "source", command: "get playerlist", parse: parseLoosePlayerLines, commands: ["get playerlist", "broadcast", "kick", "ban"] },
+  squad: { label: "Squad", protocol: "source", command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "AdminKick", "AdminBan", "AdminBroadcast"] },
+  squad44: { label: "Squad 44", protocol: "source", command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "AdminKick", "AdminBan", "AdminBroadcast"] },
+  soulmask: { label: "Soulmask", protocol: "source", command: "listplayers", parse: parseLoosePlayerLines, commands: ["listplayers", "say", "kick", "ban"] },
+  vrising: { label: "V Rising", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status", "announce", "announcerestart"] },
+  wardogs: { label: "WARDOGS", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status"] },
+});
+
+// Keep shared parser templates in this file, but do not expose games absent
+// from NiCon's supported-game list as selectable integrations.
+["minecraft", "ark"].forEach(function (key) {
+  delete window.NICON_GAMES[key];
+});
+
 // Best-effort mapping from a Nitrado "game" string (e.g. "Minecraft
 // Vanilla") to one of the keys above, for auto-selecting the parser. Most
 // keys already are the substring to look for; a few games' key names
 // don't literally appear in Nitrado's label (a space, an abbreviation, an
 // apostrophe), so those get an explicit alias list instead.
 window.NICON_GUESS_GAME_ALIASES = {
+  sevendaystodie: ["7 days to die", "7dtd", "seven days to die"],
+  eightythree: ["83"],
+  arksurvivalascended: ["ark: survival ascended", "ark survival ascended", "arksa"],
+  arksurvivalevolved: ["ark: survival evolved", "ark survival evolved", "arkse"],
+  arma2: ["arma 2", "arma2"],
   arma3: ["arma 3", "arma3"],
+  armareforger: ["arma reforger", "reforger"],
+  atlas: ["atlas"],
+  battlebit: ["battlebit remastered", "battlebit"],
+  beyondthewire: ["beyond the wire"],
+  conanexiles: ["conan exiles"],
+  counterstrike2: ["counter-strike 2", "counter strike 2", "cs2"],
+  darkandlight: ["dark and light"],
   dayz: ["dayz", "day z"],
   gmod: ["garry's mod", "garrys mod", "gmod"],
+  hellletloosevietnam: ["hell let loose: vietnam", "hell let loose vietnam"],
+  hellletloose: ["hell let loose"],
+  insurgency: ["insurgency"],
+  mordhau: ["mordhau"],
+  palworld: ["palworld"],
+  projectzomboid: ["project zomboid"],
+  risingstorm2: ["rising storm 2", "rising storm ii"],
+  rust: ["rust"],
+  squad44: ["squad 44", "post scriptum"],
+  squad: ["squad"],
+  soulmask: ["soulmask"],
+  vrising: ["v rising", "vrising"],
+  wardogs: ["wardogs", "war dogs"],
 };
 window.NICON_GUESS_GAME = function (gameLabel) {
   if (!gameLabel) return "";
   var lower = gameLabel.toLowerCase();
   var keys = Object.keys(window.NICON_GAMES);
+  var bestKey = "";
+  var bestLength = -1;
   for (var i = 0; i < keys.length; i++) {
     var aliases = window.NICON_GUESS_GAME_ALIASES[keys[i]] || [keys[i]];
     for (var j = 0; j < aliases.length; j++) {
-      if (lower.indexOf(aliases[j]) !== -1) return keys[i];
+      if (lower.indexOf(aliases[j]) !== -1 && aliases[j].length > bestLength) {
+        bestKey = keys[i];
+        bestLength = aliases[j].length;
+      }
     }
   }
-  return "";
+  return bestKey;
 };

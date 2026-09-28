@@ -152,6 +152,24 @@ func runServer() {
 			runHealthChecksOnce()
 		}
 	}()
+	// Five-minute raw samples are retained for 90 days. Cleanup runs once on
+	// startup and daily afterwards; this covers every fixed UI range without
+	// allowing an unbounded telemetry table.
+	cleanupHealth := func() {
+		if n, err := st.CleanupHealthSamples(context.Background(), 90*24*time.Hour); err != nil {
+			logger.Printf("cleanup health samples: %v", err)
+		} else if n > 0 {
+			logger.Printf("cleaned up %d expired health sample(s)", n)
+		}
+	}
+	cleanupHealth()
+	healthCleanupTicker := time.NewTicker(24 * time.Hour)
+	defer healthCleanupTicker.Stop()
+	go func() {
+		for range healthCleanupTicker.C {
+			cleanupHealth()
+		}
+	}()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

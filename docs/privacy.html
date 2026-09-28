@@ -51,8 +51,9 @@
       browser's <code>sessionStorage</code>.</li>
     <li><strong>Server data:</strong> name, host, port, protocol, game,
       source, Nitrado service/game identifiers and icon URL, connection
-      health, latency/error details, and the RCON/admin password encrypted
-      with AES-256-GCM.</li>
+      health, latency/error details, five-minute availability samples and
+      aggregate player counts, and the RCON/admin password encrypted with
+      AES-256-GCM. Player names are not written to health history.</li>
     <li><strong>Nitrado credential:</strong> an optional API token,
       encrypted with AES-256-GCM.</li>
     <li><strong>Command-center settings:</strong> saved macro names and
@@ -67,8 +68,9 @@
     <li><strong>Player/console data:</strong> player names and identifiers,
       chat/log output, commands, latency, and public Steam profile/ban data
       are processed while the console is open. Console lines, command
-      history, parsed players, and Steam results are held in browser memory
-      and are not persisted by NiCon.</li>
+      history, parsed player names/identifiers, and Steam results are held in
+      browser memory and are not persisted by NiCon. Only the numeric player
+      count is added to health history.</li>
     <li><strong>Contact requests:</strong> name, email address, and message
       entered on the contact page are delivered by email to the operator;
       NiCon does not insert them into its database.</li>
@@ -151,6 +153,9 @@
     <li>Console/player/Steam data in browser memory disappears on reload or
       when the tab closes. Browser preferences remain until site data is
       cleared.</li>
+    <li>Availability, latency, and aggregate player-count samples are kept
+      for 90 days and then removed automatically. Deleting a server or
+      account deletes its samples immediately through database cascading.</li>
     <li>Notifications remain until an administrator deletes them.</li>
     <li>Expired rate-limit windows are deleted opportunistically; entries
       older than one day are eligible for cleanup.</li>

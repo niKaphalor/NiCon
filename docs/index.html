@@ -73,11 +73,11 @@
   <div id="auth-shell" class="auth-shell">
     <div class="auth-hero">
       <h1 class="auth-hero-title" data-i18n="hero.title">One console for every game server you run.</h1>
-      <p class="hint auth-hero-subhead" data-i18n="hero.subhead">NiCon speaks RCON to Rust, Palworld, ARK, Arma 3, DayZ, Garry's Mod, and more — sign in to manage your servers from any browser.</p>
+      <p class="hint auth-hero-subhead" data-i18n="hero.subhead">NiCon manages a focused catalog of supported RCON games — sign in to manage your servers from any browser.</p>
       <ul class="auth-feature-list">
         <li>
           <span class="auth-feature-mark" aria-hidden="true"></span>
-          <div><strong data-i18n="hero.feature1Title">Every game, one console</strong><span data-i18n="hero.feature1Body">A single browser tab for RCON across Rust, Palworld, ARK, Arma 3, DayZ, Garry's Mod, and more — no extra software to install.</span></div>
+          <div><strong data-i18n="hero.feature1Title">Every game, one console</strong><span data-i18n="hero.feature1Body">One browser tab for NiCon's supported game catalog, including 7 Days to Die, Squad, Garry's Mod, and more.</span></div>
         </li>
         <li>
           <span class="auth-feature-mark" aria-hidden="true"></span>
@@ -336,12 +336,22 @@
         <h1 data-i18n="health.title">Server health</h1>
       </div>
       <p class="hint view-subhead" data-i18n="health.subhead">Connection status per server: browser round trip, relay overhead, game/protocol time, and recent errors, plus a real automatic RCON connect every five minutes.</p>
+      <label class="health-range"><span data-i18n="health.range">Range</span>
+        <select id="health-range-select">
+          <option value="24h" data-i18n="health.range24h">24 hours</option>
+          <option value="7d" data-i18n="health.range7d">7 days</option>
+          <option value="30d" data-i18n="health.range30d">30 days</option>
+          <option value="90d" data-i18n="health.range90d">90 days</option>
+        </select>
+      </label>
       <table class="health-table">
         <thead>
           <tr>
             <th data-i18n="health.colServer">Server</th>
             <th data-i18n="health.colStatus">Status</th>
             <th data-i18n="health.colAutoCheck">Automated check</th>
+            <th data-i18n="health.colUptime">Uptime</th>
+            <th data-i18n="health.colPlayers">Players</th>
             <th data-i18n="health.colLastConnected">Last connected</th>
             <th data-i18n="health.colLatency">Latency</th>
             <th data-i18n="health.colLastError">Last error</th>
@@ -439,19 +449,42 @@
       <input id="manual-password" type="password" placeholder="RCON password" required autocomplete="off" aria-label="RCON password" data-i18n-placeholder="common.rconPassword" data-i18n-aria-label="common.rconPassword">
       <select id="manual-protocol" aria-label="RCON protocol" data-i18n-aria-label="addModal.protocolAriaLabel">
         <option value="source" data-i18n="addModal.protocolSource">Source RCON (most games)</option>
-        <option value="webrcon" data-i18n="addModal.protocolWebrcon">Rust WebRCON</option>
+        <option value="webrcon" data-i18n="addModal.protocolWebrcon">WebRCON</option>
+        <option value="battleye" data-i18n="addModal.protocolBattleye">BattlEye-compatible RCon</option>
+        <option value="telnet">Telnet (7 Days to Die)</option>
+        <option value="battlebit">BattleBit WebRCON</option>
         <option value="palworld_rest" data-i18n="addModal.protocolPalworldRest">Palworld REST API</option>
-        <option value="battleye" data-i18n="addModal.protocolBattleye">BattlEye RCon (Arma 3, DayZ)</option>
       </select>
       <select id="manual-game" aria-label="Game" data-i18n-aria-label="info.gameAriaLabel">
         <option value="" data-i18n="info.genericOption">Generic (no parsing)</option>
-        <option value="Minecraft">Minecraft</option>
-        <option value="Rust">Rust</option>
-        <option value="ARK: Survival Evolved / Ascended">ARK: Survival Evolved / Ascended</option>
-        <option value="Palworld">Palworld</option>
+        <option value="7 Days to Die">7 Days to Die</option>
+        <option value="83">83</option>
+        <option value="ARK: Survival Ascended">ARK: Survival Ascended</option>
+        <option value="ARK: Survival Evolved">ARK: Survival Evolved</option>
+        <option value="Arma 2">Arma 2</option>
         <option value="Arma 3">Arma 3</option>
+        <option value="Arma Reforger">Arma Reforger</option>
+        <option value="ATLAS">ATLAS</option>
+        <option value="BattleBit Remastered">BattleBit Remastered</option>
+        <option value="Beyond the Wire">Beyond the Wire</option>
+        <option value="Conan Exiles">Conan Exiles</option>
+        <option value="Counter-Strike 2">Counter-Strike 2</option>
+        <option value="Dark and Light">Dark and Light</option>
         <option value="DayZ">DayZ</option>
         <option value="Garry's Mod">Garry's Mod</option>
+        <option value="Hell Let Loose">Hell Let Loose</option>
+        <option value="Hell Let Loose: Vietnam">Hell Let Loose: Vietnam</option>
+        <option value="Insurgency">Insurgency</option>
+        <option value="MORDHAU">MORDHAU</option>
+        <option value="Palworld">Palworld</option>
+        <option value="Project Zomboid">Project Zomboid</option>
+        <option value="Rising Storm 2: Vietnam">Rising Storm 2: Vietnam</option>
+        <option value="Squad">Squad</option>
+        <option value="Squad 44">Squad 44</option>
+        <option value="Soulmask">Soulmask</option>
+        <option value="Rust">Rust</option>
+        <option value="V Rising">V Rising</option>
+        <option value="WARDOGS">WARDOGS</option>
       </select>
       <div class="form-row">
         <button type="button" id="manual-test-btn" class="btn-secondary" data-i18n="addModal.testConnection">Test connection</button>
@@ -476,19 +509,42 @@
     </div>
     <select id="edit-server-protocol" aria-label="RCON protocol" data-i18n-aria-label="addModal.protocolAriaLabel">
       <option value="source" data-i18n="addModal.protocolSource">Source RCON (most games)</option>
-      <option value="webrcon" data-i18n="addModal.protocolWebrcon">Rust WebRCON</option>
+      <option value="webrcon" data-i18n="addModal.protocolWebrcon">WebRCON</option>
+      <option value="battleye" data-i18n="addModal.protocolBattleye">BattlEye-compatible RCon</option>
+      <option value="telnet">Telnet (7 Days to Die)</option>
+      <option value="battlebit">BattleBit WebRCON</option>
       <option value="palworld_rest" data-i18n="addModal.protocolPalworldRest">Palworld REST API</option>
-      <option value="battleye" data-i18n="addModal.protocolBattleye">BattlEye RCon (Arma 3, DayZ)</option>
     </select>
     <select id="edit-server-game" aria-label="Game" data-i18n-aria-label="info.gameAriaLabel">
       <option value="" data-i18n="info.genericOption">Generic (no parsing)</option>
-      <option value="Minecraft">Minecraft</option>
-      <option value="Rust">Rust</option>
-      <option value="ARK: Survival Evolved / Ascended">ARK: Survival Evolved / Ascended</option>
-      <option value="Palworld">Palworld</option>
+      <option value="7 Days to Die">7 Days to Die</option>
+      <option value="83">83</option>
+      <option value="ARK: Survival Ascended">ARK: Survival Ascended</option>
+      <option value="ARK: Survival Evolved">ARK: Survival Evolved</option>
+      <option value="Arma 2">Arma 2</option>
       <option value="Arma 3">Arma 3</option>
+      <option value="Arma Reforger">Arma Reforger</option>
+      <option value="ATLAS">ATLAS</option>
+      <option value="BattleBit Remastered">BattleBit Remastered</option>
+      <option value="Beyond the Wire">Beyond the Wire</option>
+      <option value="Conan Exiles">Conan Exiles</option>
+      <option value="Counter-Strike 2">Counter-Strike 2</option>
+      <option value="Dark and Light">Dark and Light</option>
       <option value="DayZ">DayZ</option>
       <option value="Garry's Mod">Garry's Mod</option>
+      <option value="Hell Let Loose">Hell Let Loose</option>
+      <option value="Hell Let Loose: Vietnam">Hell Let Loose: Vietnam</option>
+      <option value="Insurgency">Insurgency</option>
+      <option value="MORDHAU">MORDHAU</option>
+      <option value="Palworld">Palworld</option>
+      <option value="Project Zomboid">Project Zomboid</option>
+      <option value="Rising Storm 2: Vietnam">Rising Storm 2: Vietnam</option>
+      <option value="Squad">Squad</option>
+      <option value="Squad 44">Squad 44</option>
+      <option value="Soulmask">Soulmask</option>
+      <option value="Rust">Rust</option>
+      <option value="V Rising">V Rising</option>
+      <option value="WARDOGS">WARDOGS</option>
     </select>
     <input id="edit-server-password" type="password" autocomplete="off" data-i18n-placeholder="editServer.passwordPlaceholder" data-i18n-aria-label="editServer.passwordPlaceholder" placeholder="New RCON password (leave blank to keep current)" aria-label="New RCON password">
     <p id="edit-server-error" class="hint login-error" hidden></p>

@@ -71,6 +71,8 @@ $routes = [
     ['POST', '#^/servers$#', 'user', 'nicon_handle_create_server'],
     ['PUT', '#^/servers/(\d+)$#', 'user', 'nicon_handle_update_server'],
     ['PUT', '#^/servers/(\d+)/password$#', 'user', 'nicon_handle_set_server_password'],
+    ['GET', '#^/servers/(\d+)/health-history$#', 'user', 'nicon_handle_server_health_history'],
+    ['POST', '#^/servers/(\d+)/player-sample$#', 'user', 'nicon_handle_server_player_sample'],
     ['POST', '#^/servers/(\d+)/nitrado-power$#', 'user', 'nicon_handle_nitrado_power'],
     ['GET', '#^/servers/(\d+)/nitrado-status$#', 'user', 'nicon_handle_nitrado_status'],
     ['DELETE', '#^/servers/(\d+)$#', 'user', 'nicon_handle_delete_server'],

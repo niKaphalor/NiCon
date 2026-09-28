@@ -1,6 +1,114 @@
 <?php
 declare(strict_types=1);
 
+function nicon_game_is_allowed(string $game): bool
+{
+    if ($game === '') return true; // generic console, not a game integration
+    return in_array($game, [
+        '7 Days to Die', '83', 'ARK: Survival Ascended', 'ARK: Survival Evolved',
+        'Arma 2', 'Arma 3', 'Arma Reforger', 'ATLAS', 'BattleBit Remastered',
+        'Beyond the Wire', 'Conan Exiles', 'Counter-Strike 2', 'Dark and Light',
+        'DayZ', "Garry's Mod", 'Hell Let Loose', 'Hell Let Loose: Vietnam',
+        'Insurgency', 'MORDHAU', 'Palworld', 'Project Zomboid',
+        'Rising Storm 2: Vietnam', 'Rust', 'Squad', 'Squad 44', 'Soulmask',
+        'V Rising', 'WARDOGS',
+    ], true);
+}
+
+function nicon_handle_server_health_history(int $userId, int $serverId): void
+{
+    $ranges = ['24h' => 1, '7d' => 7, '30d' => 30, '90d' => 90];
+    $range = strtolower((string) ($_GET['range'] ?? '24h'));
+    if (!isset($ranges[$range])) {
+        nicon_send_error('range must be 24h, 7d, 30d, or 90d', 400);
+        return;
+    }
+    $pdo = nicon_db();
+    $owner = $pdo->prepare('SELECT id FROM servers WHERE id = ? AND user_id = ?');
+    $owner->execute([$serverId, $userId]);
+    if (!$owner->fetchColumn()) {
+        nicon_send_error('server not found', 404);
+        return;
+    }
+    $days = $ranges[$range];
+    $stmt = $pdo->prepare("
+        SELECT sampled_at, online, latency_ms, player_current, player_max, source
+        FROM server_health_samples
+        WHERE server_id = ? AND sampled_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL $days DAY)
+        ORDER BY sampled_at ASC
+    ");
+    $stmt->execute([$serverId]);
+    $samples = [];
+    $online = 0;
+    $availabilityCount = 0;
+    $playersTotal = 0;
+    $playersCount = 0;
+    $playersPeak = null;
+    foreach ($stmt as $row) {
+        $isOnline = (bool) $row['online'];
+        $source = (string) $row['source'];
+        if ($source !== 'client') {
+            $availabilityCount++;
+            if ($isOnline) $online++;
+        }
+        $current = $row['player_current'] === null ? null : (int) $row['player_current'];
+        if ($current !== null) {
+            $playersTotal += $current;
+            $playersCount++;
+            $playersPeak = $playersPeak === null ? $current : max($playersPeak, $current);
+        }
+        $samples[] = [
+            'at' => gmdate('Y-m-d\TH:i:s\Z', strtotime((string) $row['sampled_at'])),
+            'online' => $isOnline,
+            'latency_ms' => $row['latency_ms'] === null ? null : (int) $row['latency_ms'],
+            'players' => $current,
+            'players_max' => $row['player_max'] === null ? null : (int) $row['player_max'],
+            'source' => $source,
+        ];
+    }
+    $expected = $ranges[$range] * 24 * 12;
+    nicon_send_json([
+        'range' => $range,
+        'uptime_percent' => $availabilityCount ? round($online * 100 / $availabilityCount, 2) : null,
+        'sample_completeness_percent' => round(min(100, $availabilityCount * 100 / $expected), 2),
+        'players_average' => $playersCount ? round($playersTotal / $playersCount, 1) : null,
+        'players_peak' => $playersPeak,
+        'samples' => $samples,
+    ]);
+}
+
+function nicon_handle_server_player_sample(int $userId, int $serverId): void
+{
+    $req = nicon_json_body();
+    $current = filter_var($req['players'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 100000]]);
+    $maximum = isset($req['players_max'])
+        ? filter_var($req['players_max'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 100000]])
+        : null;
+    if ($current === false || $maximum === false) {
+        nicon_send_error('invalid player count', 400);
+        return;
+    }
+    $pdo = nicon_db();
+    $stmt = $pdo->prepare('
+        INSERT INTO server_health_samples (server_id, online, player_current, player_max, source)
+        SELECT s.id, TRUE, ?, ?, \'client\' FROM servers s
+        WHERE s.id = ? AND s.user_id = ? AND NOT EXISTS (
+            SELECT 1 FROM server_health_samples h
+            WHERE h.server_id = s.id AND h.source = \'client\' AND h.sampled_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 4 MINUTE)
+        )
+    ');
+    $stmt->execute([(int) $current, $maximum === null ? null : (int) $maximum, $serverId, $userId]);
+    if ($stmt->rowCount() === 0) {
+        $owner = $pdo->prepare('SELECT 1 FROM servers WHERE id = ? AND user_id = ?');
+        $owner->execute([$serverId, $userId]);
+        if (!$owner->fetchColumn()) {
+            nicon_send_error('server not found', 404);
+            return;
+        }
+    }
+    http_response_code(204);
+}
+
 // nicon_server_response is what a server looks like over the API —
 // everything except the actual password. health_* is written only by the
 // Go relay's periodic background check (main.go's runHealthChecks — a
@@ -97,12 +205,16 @@ function nicon_handle_create_server(int $userId): void
     $password = (string) ($req['password'] ?? '');
     $protocol = (string) ($req['protocol'] ?? '') ?: 'source';
     $game = trim((string) ($req['game'] ?? ''));
+    if (!nicon_game_is_allowed($game)) {
+        nicon_send_error('unsupported game', 400);
+        return;
+    }
 
     if ($name === '' || strlen($name) > 255 || $host === '' || strlen($host) > 255 || $port <= 0 || $port > 65535) {
         nicon_send_error('name, host, and port are required', 400);
         return;
     }
-    if (!in_array($protocol, ['source', 'webrcon', 'palworld_rest', 'battleye'], true)) {
+    if (!in_array($protocol, ['source', 'webrcon', 'palworld_rest', 'battleye', 'telnet', 'battlebit'], true)) {
         nicon_send_error('unsupported protocol', 400);
         return;
     }
@@ -141,12 +253,16 @@ function nicon_handle_update_server(int $userId, int $serverId): void
     $port = (int) ($req['port'] ?? 0);
     $protocol = strtolower(trim((string) ($req['protocol'] ?? '')));
     $game = trim((string) ($req['game'] ?? ''));
+    if (!nicon_game_is_allowed($game)) {
+        nicon_send_error('unsupported game', 400);
+        return;
+    }
 
     if ($name === '' || strlen($name) > 255 || $host === '' || strlen($host) > 255 || $port <= 0 || $port > 65535) {
         nicon_send_error('valid name, host, and port are required', 400);
         return;
     }
-    if (!in_array($protocol, ['source', 'webrcon', 'palworld_rest', 'battleye'], true)) {
+    if (!in_array($protocol, ['source', 'webrcon', 'palworld_rest', 'battleye', 'telnet', 'battlebit'], true)) {
         nicon_send_error('unsupported protocol', 400);
         return;
     }

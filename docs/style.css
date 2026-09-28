@@ -391,6 +391,14 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .health-table .health-timestamp { display: block; color: var(--color-muted); font-size: 0.72rem; font-family: var(--font-body); }
 .health-table .health-timestamp.health-error { color: var(--color-error); max-width: 32ch; overflow-wrap: anywhere; }
 .health-table .health-muted { color: var(--color-muted); font-family: var(--font-body); }
+.health-range { display: flex; align-items: center; gap: 8px; width: max-content; margin: 0 0 14px auto; color: var(--color-muted); font-size: .78rem; }
+.health-chart { display: block; width: 150px; height: 34px; margin-top: 6px; overflow: visible; }
+.health-chart .online { fill: var(--color-success); }
+.health-chart .offline { fill: var(--color-error); }
+.health-chart .unknown-bg { fill: var(--color-border); }
+.health-chart .player-line { fill: none; stroke: var(--color-accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.health-summary { display: block; white-space: nowrap; font-weight: 600; }
+.health-completeness { display: block; color: var(--color-muted); font-size: .7rem; white-space: nowrap; }
 .admin-notifications-list { display: flex; flex-direction: column; gap: 8px; }
 .admin-notification-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--color-border); border-left: 3px solid var(--color-accent); border-radius: var(--radius-md); background: var(--color-surface); }
 .admin-notification-row.type-success { border-left-color: var(--color-success); }

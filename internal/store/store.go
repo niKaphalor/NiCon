@@ -60,6 +60,19 @@ CREATE TABLE IF NOT EXISTS servers (
 	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
 	UNIQUE KEY uniq_user_nitrado_service (user_id, nitrado_service_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS server_health_samples (
+	id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	server_id INT UNSIGNED NOT NULL,
+	sampled_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	online BOOLEAN NOT NULL,
+	latency_ms INT UNSIGNED NULL,
+	player_current INT UNSIGNED NULL,
+	player_max INT UNSIGNED NULL,
+	source VARCHAR(16) NOT NULL DEFAULT 'relay',
+	FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+	INDEX idx_health_server_time (server_id, sampled_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 `
 
 // migrations covers columns added after a table's initial CREATE TABLE IF
@@ -545,10 +558,33 @@ func (s *Store) UpdateServerHealth(ctx context.Context, serverID int64, ok bool,
 	} else if errMsg != "" {
 		errCol = errMsg
 	}
-	_, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx,
 		`UPDATE servers SET health_checked_at = NOW(), health_ok = ?, health_latency_ms = ?, health_error = ? WHERE id = ?`,
-		ok, latencyCol, errCol, serverID)
-	return err
+		ok, latencyCol, errCol, serverID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx,
+		`INSERT INTO server_health_samples (server_id, online, latency_ms, source) VALUES (?, ?, ?, 'relay')`,
+		serverID, ok, latencyCol); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// CleanupHealthSamples keeps the detailed five-minute series bounded. Older
+// samples are deliberately removed rather than silently growing forever.
+func (s *Store) CleanupHealthSamples(ctx context.Context, retention time.Duration) (int64, error) {
+	cutoff := time.Now().UTC().Add(-retention)
+	res, err := s.db.ExecContext(ctx, `DELETE FROM server_health_samples WHERE sampled_at < ?`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func checkAffected(res sql.Result) error {

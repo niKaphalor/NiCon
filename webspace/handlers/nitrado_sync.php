@@ -200,6 +200,74 @@ function nicon_nitrado_saved_token(PDO $pdo, int $userId): string
     return $encrypted ? nicon_decrypt_password($encrypted) : '';
 }
 
+function nicon_supported_game(string $label): ?array
+{
+    $games = [
+        ['7 Days to Die', 'telnet', ['7 days to die', '7dtd']],
+        ['83', 'source', ['83']],
+        ['ARK: Survival Ascended', 'source', ['ark: survival ascended', 'ark survival ascended', 'arksa']],
+        ['ARK: Survival Evolved', 'source', ['ark: survival evolved', 'ark survival evolved', 'arkse']],
+        ['Arma 2', 'battleye', ['arma 2', 'arma2']],
+        ['Arma 3', 'battleye', ['arma 3', 'arma3']],
+        ['Arma Reforger', 'battleye', ['arma reforger', 'reforger']],
+        ['ATLAS', 'source', ['atlas']],
+        ['BattleBit Remastered', 'battlebit', ['battlebit']],
+        ['Beyond the Wire', 'source', ['beyond the wire']],
+        ['Conan Exiles', 'source', ['conan exiles']],
+        ['Counter-Strike 2', 'source', ['counter-strike 2', 'counter strike 2', 'cs2']],
+        ['Dark and Light', 'source', ['dark and light']],
+        ['DayZ', 'battleye', ['dayz', 'day z']],
+        ["Garry's Mod", 'source', ["garry's mod", 'garrys mod', 'gmod']],
+        ['Hell Let Loose: Vietnam', 'source', ['hell let loose: vietnam', 'hell let loose vietnam']],
+        ['Hell Let Loose', 'source', ['hell let loose']],
+        ['Insurgency', 'source', ['insurgency']],
+        ['MORDHAU', 'source', ['mordhau']],
+        ['Palworld', 'palworld_rest', ['palworld']],
+        ['Project Zomboid', 'source', ['project zomboid']],
+        ['Rising Storm 2: Vietnam', 'source', ['rising storm 2', 'rising storm ii']],
+        ['Rust', 'webrcon', ['rust']],
+        ['Squad 44', 'source', ['squad 44', 'post scriptum']],
+        ['Squad', 'source', ['squad']],
+        ['Soulmask', 'source', ['soulmask']],
+        ['V Rising', 'source', ['v rising', 'vrising']],
+        ['WARDOGS', 'source', ['wardogs', 'war dogs']],
+    ];
+    $lower = strtolower($label);
+    foreach ($games as [$name, $protocol, $aliases]) {
+        foreach ($aliases as $alias) {
+            $matches = $alias === '83'
+                ? preg_match('/(?:^|[^0-9])83(?:[^0-9]|$)/', $lower) === 1
+                : str_contains($lower, $alias);
+            if ($matches) return ['name' => $name, 'protocol' => $protocol];
+        }
+    }
+    return null;
+}
+
+// Return a compact read-only subset of Nitrado settings. Secrets are denied
+// first, then only operationally useful keys are admitted. The raw settings
+// object never crosses the API boundary.
+function nicon_nitrado_public_settings(array $settings): array
+{
+    $safe = [];
+    $walk = function (array $node, string $category = '') use (&$walk, &$safe): void {
+        foreach ($node as $key => $value) {
+            $name = (string) $key;
+            $path = $category === '' ? $name : "$category.$name";
+            if (preg_match('/password|passwd|token|secret|api.?key|credential|ftp|rcon/i', $path)) continue;
+            if (is_array($value)) {
+                $walk($value, $path);
+                continue;
+            }
+            if (count($safe) >= 50 || !is_scalar($value) || strlen((string) $value) > 300) continue;
+            if (!preg_match('/server.?name|hostname|map|players?|slots?|pvp|pve|friendly.?fire|difficulty|whitelist|mods?|rate|multiplier|day|night|restart/i', $path)) continue;
+            $safe[] = ['key' => $path, 'value' => $value];
+        }
+    };
+    $walk($settings);
+    return $safe;
+}
+
 // nicon_handle_nitrado_sync upserts every RCON-capable service from
 // Nitrado into the caller's own server list, and returns the full updated
 // list. A token in the request body is saved (encrypted, AES-256-GCM —
@@ -260,33 +328,25 @@ function nicon_handle_nitrado_sync(int $userId): void
         }
 
         $gameHuman = (string) ($gs['game_human'] ?? '');
-        $isRust = stripos($gameHuman, 'rust') !== false;
-        // Palworld's RCON is deprecated (Pocketpair-wide, not a Nitrado
-        // choice) — Nitrado may already report has_rcon=false for it, so
-        // this game is eligible on its own merits, independent of that
-        // flag. Nitrado's API has no dedicated field for the REST API's
-        // port; confirmed directly against a real Nitrado Palworld
-        // service that it's the reported rcon_port + 1.
-        $isPalworld = stripos($gameHuman, 'palworld') !== false;
-        // Arma (3 and 2) and DayZ are BattlEye-protected — a different
-        // wire protocol from Source RCON entirely (see
-        // internal/relay/battleye.go), even though Nitrado reports the
-        // same has_rcon/rcon_port fields for them.
-        $isBattleye = stripos($gameHuman, 'arma') !== false || stripos($gameHuman, 'dayz') !== false;
+        $supported = nicon_supported_game($gameHuman . ' ' . $gameCode);
+        if ($supported === null) continue;
         $hasRcon = (bool) ($gs['game_specific']['features']['has_rcon'] ?? false);
         $rconPort = (int) ($gs['rcon_port'] ?? 0);
         $ip = (string) ($gs['ip'] ?? '');
         $hasConnectionInfo = $rconPort !== 0 && $ip !== '';
-        $eligible = ($hasRcon || $isRust || $isPalworld || $isBattleye) && $hasConnectionInfo;
+        $protocol = $supported['protocol'];
+        $eligibleWithoutRconFlag = in_array($protocol, ['telnet', 'palworld_rest', 'webrcon', 'battleye'], true);
+        $eligible = ($hasRcon || $eligibleWithoutRconFlag) && $hasConnectionInfo;
         if (!$eligible) {
             continue;
         }
 
-        $protocol = $isRust ? 'webrcon' : ($isPalworld ? 'palworld_rest' : ($isBattleye ? 'battleye' : 'source'));
-        $port = $isPalworld ? $rconPort + 1 : $rconPort;
+        // Nitrado currently reports Palworld's former RCON port, while its
+        // replacement REST API is conventionally exposed on the next port.
+        $port = $protocol === 'palworld_rest' ? $rconPort + 1 : $rconPort;
         $name = (string) ($gs['query']['server_name'] ?? '');
         if ($name === '') {
-            $name = $gameHuman;
+            $name = $supported['name'];
         }
 
         // Matches internal/store's UpsertNitradoServer: keyed on
@@ -298,7 +358,7 @@ function nicon_handle_nitrado_sync(int $userId): void
             ON DUPLICATE KEY UPDATE name = VALUES(name), host = VALUES(host), port = VALUES(port),
               protocol = VALUES(protocol), game = VALUES(game), nitrado_game_code = VALUES(nitrado_game_code),
               nitrado_game_icon_url = COALESCE(VALUES(nitrado_game_icon_url), nitrado_game_icon_url)
-        ')->execute([$userId, $name, $ip, $port, $protocol, $gameHuman, $serviceId, $gameCode, $gameIconUrl]);
+        ')->execute([$userId, $name, $ip, $port, $protocol, $supported['name'], $serviceId, $gameCode, $gameIconUrl]);
     }
 
     nicon_handle_list_servers($userId);
@@ -392,11 +452,21 @@ function nicon_handle_nitrado_status(int $userId, int $serverId): void
             'players_max' => (int) ($query['player_max'] ?? $gs['slots'] ?? 0),
             'map' => (string) ($query['map'] ?? ''),
             'version' => (string) ($query['version'] ?? ''),
+            'settings' => nicon_nitrado_public_settings(is_array($gs['settings'] ?? null) ? $gs['settings'] : []),
         ];
         $resourceGame = strtolower((string) ($server['game'] ?? '') . ' ' . (string) ($server['nitrado_game_code'] ?? ''));
         if (str_contains($resourceGame, 'minecraft') || str_contains($resourceGame, 'hytale') || preg_match('/\bmc[a-z0-9_-]*/', $resourceGame)) {
             $result['memory_mb'] = (int) ($gs['memory_mb'] ?? $gs['memory'] ?? 0);
         }
+        $online = in_array(strtolower((string) ($gs['status'] ?? '')), ['started', 'running', 'online'], true);
+        $pdo->prepare('
+            INSERT INTO server_health_samples (server_id, online, player_current, player_max, source)
+            SELECT ?, ?, ?, ?, \'nitrado\'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM server_health_samples
+                WHERE server_id = ? AND source = \'nitrado\' AND sampled_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 4 MINUTE)
+            )
+        ')->execute([$serverId, $online, $result['players'], $result['players_max'], $serverId]);
         nicon_send_json($result);
     } catch (RuntimeException $e) {
         nicon_send_error($e->getMessage(), 502);

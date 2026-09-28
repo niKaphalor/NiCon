@@ -156,30 +156,36 @@ try {
     $createdUsers = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
 
     [$status, $server] = request_json($base, 'POST', '/api/servers', [
-        'name' => 'Manual Rust',
+        'name' => 'Manual GMod',
         'host' => '127.0.0.1',
         'port' => 28016,
         'password' => 'secret',
-        'protocol' => 'webrcon',
-        'game' => 'Rust',
+        'protocol' => 'source',
+        'game' => "Garry's Mod",
     ], $aliceToken);
-    assert_test($status === 200 && ($server['game'] ?? '') === 'Rust', 'manual server game was not persisted');
+    assert_test($status === 200 && ($server['game'] ?? '') === "Garry's Mod", 'manual server game was not persisted');
     assert_test(($server['has_password'] ?? false) === true && !array_key_exists('password', $server), 'server response exposed or lost password state');
     $serverId = (int) $server['id'];
 
+    [$status] = request_json($base, 'POST', '/api/servers', [
+        'name' => 'Not allow-listed', 'host' => '127.0.0.1', 'port' => 25575,
+        'password' => 'secret', 'protocol' => 'source', 'game' => 'Minecraft',
+    ], $aliceToken);
+    assert_test($status === 400, 'games outside NiCon\'s supported-game list must be rejected');
+
     [$status] = request_json($base, 'PUT', "/api/servers/$serverId", [
-        'name' => 'Stolen', 'host' => '127.0.0.1', 'port' => 1, 'protocol' => 'source', 'game' => 'Minecraft',
+        'name' => 'Stolen', 'host' => '127.0.0.1', 'port' => 1, 'protocol' => 'source', 'game' => "Garry's Mod",
     ], $bobToken);
     assert_test($status === 404, 'cross-account server update must look not found');
 
     [$status, $updated] = request_json($base, 'PUT', "/api/servers/$serverId", [
-        'name' => 'Edited Rust',
+        'name' => 'Edited GMod',
         'host' => '127.0.0.2',
         'port' => 28017,
-        'protocol' => 'webrcon',
-        'game' => 'Rust',
+        'protocol' => 'source',
+        'game' => "Garry's Mod",
     ], $aliceToken);
-    assert_test($status === 200 && ($updated['name'] ?? '') === 'Edited Rust' && ($updated['port'] ?? 0) === 28017, 'profile update failed');
+    assert_test($status === 200 && ($updated['name'] ?? '') === 'Edited GMod' && ($updated['port'] ?? 0) === 28017, 'profile update failed');
 
     [$status] = request_json($base, 'PUT', "/api/servers/$serverId/password", ['password' => 'new-secret'], $aliceToken);
     assert_test($status === 204, 'password update failed');
@@ -195,11 +201,15 @@ try {
     $nitradoServer = null;
     foreach ($synced as $candidate) if (($candidate['source'] ?? '') === 'nitrado') $nitradoServer = $candidate;
     assert_test(is_array($nitradoServer), 'Nitrado server missing from sync response');
-    assert_test(($nitradoServer['game_icon_url'] ?? '') === 'https://assets.nitrado.net/rust-64.png', 'Nitrado icon URL missing');
+    assert_test(($nitradoServer['game_icon_url'] ?? '') === 'https://assets.nitrado.net/gmod-64.png', 'Nitrado icon URL missing');
 
     [$status, $nitradoStatus] = request_json($base, 'GET', '/api/servers/' . $nitradoServer['id'] . '/nitrado-status', null, $aliceToken);
     assert_test($status === 200 && ($nitradoStatus['players'] ?? null) === 3, 'Nitrado status lookup failed');
-    assert_test(!array_key_exists('memory_mb', $nitradoStatus) && !array_key_exists('cpu', $nitradoStatus), 'Rust status must not expose memory or CPU');
+    assert_test(!array_key_exists('memory_mb', $nitradoStatus) && !array_key_exists('cpu', $nitradoStatus), 'GMod status must not expose memory or CPU');
+    assert_test(count($nitradoStatus['settings'] ?? []) === 2, 'safe Nitrado settings were not normalized');
+    assert_test(strpos(json_encode($nitradoStatus), 'must-not-leak') === false, 'Nitrado secrets leaked through settings');
+    [$status, $history] = request_json($base, 'GET', '/api/servers/' . $nitradoServer['id'] . '/health-history?range=24h', null, $aliceToken);
+    assert_test($status === 200 && ($history['players_peak'] ?? null) === 3 && count($history['samples'] ?? []) >= 1, 'health history did not include Nitrado player sample');
     $counts = json_decode((string) file_get_contents($counterFile), true);
     assert_test(($counts['GET /services/9001/gameservers'] ?? 0) === 1, 'Nitrado GET responses were not shared through the backend cache');
 
@@ -215,8 +225,8 @@ try {
         'name' => 'Temporarily edited Nitrado server',
         'host' => $nitradoServer['host'],
         'port' => $nitradoServer['port'],
-        'protocol' => 'palworld_rest',
-        'game' => 'Palworld',
+        'protocol' => 'telnet',
+        'game' => '7 Days to Die',
     ], $aliceToken);
     assert_test($status === 200 && ($editedNitrado['source'] ?? '') === 'nitrado', 'Nitrado profile update failed');
     assert_test(($editedNitrado['game_icon_url'] ?? null) === null, 'changing a Nitrado game must clear its now-stale icon');

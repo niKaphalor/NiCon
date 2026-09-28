@@ -152,6 +152,7 @@
 
   var viewHealth = document.getElementById("view-health");
   var healthBody = document.getElementById("health-body");
+  var healthRangeSelect = document.getElementById("health-range-select");
 
   var addModal = document.getElementById("add-modal");
   var addClose = document.getElementById("add-close");
@@ -936,6 +937,8 @@
     if (protocol === "webrcon") return I18N.t("addModal.protocolWebrcon");
     if (protocol === "palworld_rest") return I18N.t("addModal.protocolPalworldRest");
     if (protocol === "battleye") return I18N.t("addModal.protocolBattleye");
+    if (protocol === "telnet") return "Telnet";
+    if (protocol === "battlebit") return "BattleBit WebRCON";
     return I18N.t("common.protocolSource");
   }
 
@@ -946,14 +949,18 @@
     if (protocol === "webrcon") return I18N.t("common.webrcon");
     if (protocol === "palworld_rest") return I18N.t("common.restApi");
     if (protocol === "battleye") return I18N.t("common.battleye");
+    if (protocol === "telnet") return "Telnet";
+    if (protocol === "battlebit") return "BattleBit";
     return null;
   }
 
   function suggestedProtocolForGame(game) {
     var key = window.NICON_GUESS_GAME(game);
+    if (key === "sevendaystodie") return "telnet";
+    if (["arma2", "arma3", "armareforger", "dayz"].indexOf(key) !== -1) return "battleye";
+    if (key === "battlebit") return "battlebit";
     if (key === "rust") return "webrcon";
     if (key === "palworld") return "palworld_rest";
-    if (key === "arma3" || key === "dayz") return "battleye";
     return "source";
   }
 
@@ -1798,6 +1805,8 @@
   // wouldn't.
   var HEALTH_STORAGE_KEY = "nicon_health";
   var serverHealth = {}; // { [serverId]: { lastConnectedAt, lastError, lastErrorAt, latencyMs, relayOverheadMs, upstreamMs } }
+  var healthHistoryCache = {};
+  healthRangeSelect.addEventListener("change", function () { renderHealth(); });
 
   (function loadServerHealth() {
     try {
@@ -1910,6 +1919,42 @@
       }
       tr.appendChild(autoCheckTd);
 
+      var range = healthRangeSelect.value;
+      var historyKey = server.id + ":" + range;
+      var historyEntry = healthHistoryCache[historyKey];
+      var uptimeTd = document.createElement("td");
+      var playersTd = document.createElement("td");
+      if (!historyEntry || !historyEntry.data) {
+        uptimeTd.className = playersTd.className = "health-muted";
+        uptimeTd.textContent = playersTd.textContent = historyEntry && historyEntry.failed ? "—" : "Loading…";
+        if (!historyEntry) {
+          healthHistoryCache[historyKey] = { loading: true };
+          apiFetch("/api/servers/" + server.id + "/health-history?range=" + encodeURIComponent(range))
+            .then(function (response) { if (!response.ok) throw new Error("history unavailable"); return response.json(); })
+            .then(function (data) { healthHistoryCache[historyKey] = { data: data, fetchedAt: Date.now() }; if (!viewHealth.hidden) renderHealth(); })
+            .catch(function () { healthHistoryCache[historyKey] = { data: null, failed: true }; if (!viewHealth.hidden) renderHealth(); });
+        }
+      } else {
+        var history = historyEntry.data;
+        var uptimeSummary = document.createElement("span");
+        uptimeSummary.className = "health-summary";
+        uptimeSummary.textContent = history.uptime_percent == null ? "—" : history.uptime_percent.toFixed(2) + "%";
+        uptimeTd.appendChild(uptimeSummary);
+        var completeness = document.createElement("span");
+        completeness.className = "health-completeness";
+        completeness.textContent = I18N.t("health.samples", { value: history.sample_completeness_percent });
+        uptimeTd.appendChild(completeness);
+        uptimeTd.appendChild(buildHealthChart(history.samples, false, history.range));
+
+        var playersSummary = document.createElement("span");
+        playersSummary.className = "health-summary";
+        playersSummary.textContent = history.players_peak == null ? "—" : I18N.t("health.playerSummary", { average: history.players_average, peak: history.players_peak });
+        playersTd.appendChild(playersSummary);
+        playersTd.appendChild(buildHealthChart(history.samples, true, history.range));
+      }
+      tr.appendChild(uptimeTd);
+      tr.appendChild(playersTd);
+
       var connectedTd = document.createElement("td");
       var connectedText = formatHealthTimestamp(h.lastConnectedAt);
       connectedTd.className = connectedText ? "" : "health-muted";
@@ -1948,6 +1993,42 @@
 
       healthBody.appendChild(tr);
     });
+  }
+
+  function buildHealthChart(samples, players, range) {
+    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "health-chart");
+    svg.setAttribute("viewBox", "0 0 150 34");
+    svg.setAttribute("aria-hidden", "true");
+    if (!samples || !samples.length) return svg;
+    if (!players) {
+      var availability = samples.filter(function (sample) { return sample.source !== "client"; });
+      if (!availability.length) return svg;
+      var background = document.createElementNS(svg.namespaceURI, "rect");
+      background.setAttribute("x", "0"); background.setAttribute("y", "3");
+      background.setAttribute("width", "150"); background.setAttribute("height", "28");
+      background.setAttribute("class", "unknown-bg"); svg.appendChild(background);
+      var rangeMs = { "24h": 86400000, "7d": 604800000, "30d": 2592000000, "90d": 7776000000 }[range] || 86400000;
+      var end = Date.now(); var start = end - rangeMs;
+      availability.forEach(function (sample) {
+        var rect = document.createElementNS(svg.namespaceURI, "rect");
+        var x = Math.max(0, Math.min(149, (Date.parse(sample.at) - start) * 150 / rangeMs));
+        rect.setAttribute("x", String(x)); rect.setAttribute("y", "3");
+        rect.setAttribute("width", "1.5"); rect.setAttribute("height", "28");
+        rect.setAttribute("class", sample.online ? "online" : "offline"); svg.appendChild(rect);
+      });
+      return svg;
+    }
+    var values = samples.filter(function (sample) { return sample.players != null; });
+    if (!values.length) return svg;
+    var max = Math.max(1, values.reduce(function (peak, sample) { return Math.max(peak, sample.players_max || sample.players); }, 0));
+    var points = values.map(function (sample, index) {
+      var x = values.length === 1 ? 0 : index * 150 / (values.length - 1);
+      return x.toFixed(1) + "," + (32 - sample.players * 29 / max).toFixed(1);
+    }).join(" ");
+    var line = document.createElementNS(svg.namespaceURI, "polyline");
+    line.setAttribute("class", "player-line"); line.setAttribute("points", points); svg.appendChild(line);
+    return svg;
   }
 
   // Called whenever the relay's game-server connection is known to be
@@ -2132,6 +2213,7 @@
         [I18N.t("phase2.version"), data.version || "—"],
       ];
       if (data.memory_mb != null) items.splice(2, 0, [I18N.t("phase2.memory"), data.memory_mb ? data.memory_mb + " MB" : "—"]);
+      (data.settings || []).slice(0, 12).forEach(function (setting) { items.push([setting.key, String(setting.value)]); });
       items.forEach(function (item) {
         var box = document.createElement("div"); box.className = "resource-item";
         var label = document.createElement("span"); label.textContent = item[0];
@@ -2390,7 +2472,17 @@
           c.lastParsed = parsed
             ? { ok: true, summary: parsed.summary, columns: parsed.columns, players: parsed.players }
             : { ok: false };
-          if (parsed) requestSteamProfiles(c, parsed.columns, parsed.players);
+          if (parsed) {
+            requestSteamProfiles(c, parsed.columns, parsed.players);
+            apiFetch("/api/servers/" + c.server.id + "/player-sample", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ players: parsed.players.length }),
+            }).then(function () {
+              Object.keys(healthHistoryCache).forEach(function (key) {
+                if (key.indexOf(c.server.id + ":") === 0) delete healthHistoryCache[key];
+              });
+            }).catch(function () { /* telemetry must never interrupt the console */ });
+          }
           if (selectedServerId === c.server.id) renderPlayersPanel(c);
         }
       } else if (msg.type === "broadcast") {

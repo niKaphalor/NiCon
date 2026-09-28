@@ -79,6 +79,19 @@ ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_error VARCHAR(255) NULL;
 ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_code VARCHAR(128) NOT NULL DEFAULT '';
 ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_icon_url VARCHAR(2048) NULL;
 
+CREATE TABLE IF NOT EXISTS server_health_samples (
+	id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	server_id INT UNSIGNED NOT NULL,
+	sampled_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	online BOOLEAN NOT NULL,
+	latency_ms INT UNSIGNED NULL,
+	player_current INT UNSIGNED NULL,
+	player_max INT UNSIGNED NULL,
+	source VARCHAR(16) NOT NULL DEFAULT 'relay',
+	FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+	INDEX idx_health_server_time (server_id, sampled_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS rate_limits (
 	bucket_key CHAR(64) NOT NULL,
 	window_start INT UNSIGNED NOT NULL,

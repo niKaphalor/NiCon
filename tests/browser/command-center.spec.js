@@ -6,11 +6,11 @@ const RELAY_SOCKET = "wss://relay.130.61.8.150.sslip.io/ws/rcon";
 function server(overrides) {
   return {
     id: 1,
-    name: "Rust Alpha",
+    name: "GMod Alpha",
     host: "127.0.0.1",
     port: 28016,
-    protocol: "webrcon",
-    game: "Rust",
+    protocol: "source",
+    game: "Garry's Mod",
     source: "manual",
     nitrado_game_code: "",
     game_icon_url: null,
@@ -66,6 +66,11 @@ async function installBackend(page, initialServers = []) {
     }
     if (method === "POST" && path === "/api/logout") return route.fulfill({ status: 204 });
     if (method === "GET" && path === "/api/servers") return json(state.servers);
+    if (method === "GET" && /^\/api\/servers\/\d+\/health-history$/.test(path)) return json({
+      range: url.searchParams.get("range") || "24h", uptime_percent: 100, sample_completeness_percent: 1,
+      players_average: 1, players_peak: 1,
+      samples: [{ at: "2026-09-28T10:00:00Z", online: true, latency_ms: 12, players: 1, players_max: 16, source: "relay" }],
+    });
     if (method === "POST" && path === "/api/servers") {
       const created = server({ ...body, id: state.nextServerId++, source: "manual", has_password: !!body.password });
       delete created.password;
@@ -99,10 +104,10 @@ async function installBackend(page, initialServers = []) {
     if (method === "POST" && path === "/api/nitrado/sync") {
       const nitrado = server({
         id: 9001,
-        name: "Nitrado Rust",
+        name: "Nitrado GMod",
         source: "nitrado",
-        nitrado_game_code: "rust",
-        game_icon_url: "https://assets.nitrado.net/rust-64.png",
+        nitrado_game_code: "gmod",
+        game_icon_url: "https://assets.nitrado.net/gmod-64.png",
       });
       state.servers = state.servers.filter((item) => item.id !== nitrado.id).concat(nitrado);
       return json(state.servers);
@@ -129,14 +134,8 @@ async function installBackend(page, initialServers = []) {
       } else if (message.type === "command") {
         state.commands.push({ serverId: connection.serverId, command: message.command });
         let output = `ok: ${message.command}`;
-        if (message.command === "playerlist") {
-          output = JSON.stringify([{
-            DisplayName: "Alice",
-            SteamID: "76561198000112233",
-            Ping: 24,
-            Address: "127.0.0.1:28015",
-            ConnectedSeconds: 300,
-          }]);
+        if (message.command === "status") {
+          output = '# 2 "Alice" STEAM_0:1:12345678 05:23 24 0 active';
         } else if (message.command === "list") {
           output = "There are 1 of a max of 20 players online: Steve";
         }
@@ -163,31 +162,38 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
 
   await page.locator("#add-server-btn").click();
   await page.locator('[data-tab="manual"]').click();
-  await page.locator("#manual-name").fill("Manual DayZ");
+  await expect(page.locator("#manual-game option")).toHaveCount(29);
+  await expect(page.locator("#manual-game")).toContainText("Counter-Strike 2");
+  await expect(page.locator("#manual-game")).not.toContainText("Minecraft");
+  await page.locator("#manual-game").selectOption("Rust");
+  await expect(page.locator("#manual-protocol")).toHaveValue("webrcon");
+  await page.locator("#manual-game").selectOption("Palworld");
+  await expect(page.locator("#manual-protocol")).toHaveValue("palworld_rest");
+  await page.locator("#manual-name").fill("Manual 7DTD");
   await page.locator("#manual-host").fill("127.0.0.1");
   await page.locator("#manual-port").fill("2302");
   await page.locator("#manual-password").fill("secret");
-  await page.locator("#manual-game").selectOption("DayZ");
-  await expect(page.locator("#manual-protocol")).toHaveValue("battleye");
+  await page.locator("#manual-game").selectOption("7 Days to Die");
+  await expect(page.locator("#manual-protocol")).toHaveValue("telnet");
   await page.locator("#manual-form button[type=submit]").click();
-  await expect(page.locator(".server-row", { hasText: "Manual DayZ" })).toBeVisible();
-  expect(state.servers.find((item) => item.name === "Manual DayZ")).toMatchObject({ game: "DayZ", protocol: "battleye" });
+  await expect(page.locator(".server-row", { hasText: "Manual 7DTD" })).toBeVisible();
+  expect(state.servers.find((item) => item.name === "Manual 7DTD")).toMatchObject({ game: "7 Days to Die", protocol: "telnet" });
 
-  await page.locator(".server-row", { hasText: "Manual DayZ" }).click();
+  await page.locator(".server-row", { hasText: "Manual 7DTD" }).click();
   await page.locator("#head .head-actions button", { hasText: "Edit" }).click();
-  await page.locator("#edit-server-name").fill("Edited DayZ");
-  await page.locator("#edit-server-game").selectOption("Arma 3");
+  await page.locator("#edit-server-name").fill("Edited Reforger");
+  await page.locator("#edit-server-game").selectOption("Arma Reforger");
   await page.locator('#edit-server-form button[type="submit"]').click();
-  await expect(page.locator(".server-row", { hasText: "Edited DayZ" })).toBeVisible();
-  expect(state.servers.find((item) => item.name === "Edited DayZ")).toMatchObject({ game: "Arma 3", protocol: "battleye" });
+  await expect(page.locator(".server-row", { hasText: "Edited Reforger" })).toBeVisible();
+  expect(state.servers.find((item) => item.name === "Edited Reforger")).toMatchObject({ game: "Arma Reforger", protocol: "battleye" });
 
   await page.locator("#add-server-btn").click();
   await page.locator('[data-tab="nitrado"]').click();
   await page.locator("#nitrado-token").fill("test-token");
   await page.locator("#nitrado-form button[type=submit]").click();
-  const nitradoRow = page.locator(".server-row", { hasText: "Nitrado Rust" });
+  const nitradoRow = page.locator(".server-row", { hasText: "Nitrado GMod" });
   await expect(nitradoRow).toBeVisible();
-  await expect(nitradoRow.locator(".server-game-icon")).toHaveAttribute("src", "https://assets.nitrado.net/rust-64.png");
+  await expect(nitradoRow.locator(".server-game-icon")).toHaveAttribute("src", "https://assets.nitrado.net/gmod-64.png");
   const rowBox = await nitradoRow.boundingBox();
   const iconBox = await nitradoRow.locator(".server-game-icon").boundingBox();
   expect(iconBox.height).toBeGreaterThanOrEqual(rowBox.height - 12);
@@ -195,33 +201,33 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
 
 test("two consoles stay connected and player actions reach the selected server", async ({ page }) => {
   const state = await installBackend(page, [
-    server({ id: 1, name: "Rust Alpha" }),
-    server({ id: 2, name: "Rust Beta", port: 28017 }),
+    server({ id: 1, name: "GMod Alpha" }),
+    server({ id: 2, name: "GMod Beta", port: 27016 }),
   ]);
   await login(page);
 
-  await page.locator(".server-row", { hasText: "Rust Alpha" }).click();
+  await page.locator(".server-row", { hasText: "GMod Alpha" }).click();
   await expect(page.locator("#players-panel .player-name")).toHaveText("Alice");
-  await page.locator(".server-row", { hasText: "Rust Beta" }).click();
+  await page.locator(".server-row", { hasText: "GMod Beta" }).click();
   await expect.poll(() => state.connectedServerIds).toEqual(expect.arrayContaining([1, 2]));
 
   await page.locator("#players-panel .player-actions-row button", { hasText: "Kick" }).click();
   await expect(page.locator("#confirm-dialog")).toBeVisible();
   await page.locator("#confirm-dialog-ok").click();
-  await expect.poll(() => state.commands).toContainEqual({ serverId: 2, command: "kick 76561198000112233" });
+  await expect.poll(() => state.commands).toContainEqual({ serverId: 2, command: "kickid 2" });
 
-  await page.locator(".server-row", { hasText: "Rust Alpha" }).click();
+  await page.locator(".server-row", { hasText: "GMod Alpha" }).click();
   await page.locator("#cmd-input").fill("status");
   await page.locator("#cmd-form button[type=submit]").click();
   await expect.poll(() => state.commands).toContainEqual({ serverId: 1, command: "status" });
   await page.locator("#nav-health-btn").click();
-  await expect(page.locator("#health-body tr", { hasText: "Rust Alpha" })).toContainText("relay 0.8 ms");
+  await expect(page.locator("#health-body tr", { hasText: "GMod Alpha" })).toContainText("relay 0.8 ms");
 });
 
 test("macros and moderation rules execute through the live console", async ({ page }) => {
   const state = await installBackend(page, [server({ id: 1 })]);
   await login(page);
-  await page.locator(".server-row", { hasText: "Rust Alpha" }).click();
+  await page.locator(".server-row", { hasText: "GMod Alpha" }).click();
   await expect(page.locator("#players-panel .player-name")).toHaveText("Alice");
 
   await page.locator("#cmd-templates-btn").click();
@@ -241,9 +247,9 @@ test("macros and moderation rules execute through the live console", async ({ pa
   await page.locator('#moderation-rule-form button[type="submit"]').click();
   await expect(page.locator("#moderation-rules-list", { hasText: "badword" })).toBeVisible();
 
-  const rustSocket = state.sockets.find((connection) => connection.serverId === 1);
-  rustSocket.socket.send(JSON.stringify({ type: "broadcast", output: "Alice: badword" }));
-  await expect.poll(() => state.commands).toContainEqual({ serverId: 1, command: "kick 76561198000112233" });
+  const gameSocket = state.sockets.find((connection) => connection.serverId === 1);
+  gameSocket.socket.send(JSON.stringify({ type: "broadcast", output: "Alice: badword" }));
+  await expect.poll(() => state.commands).toContainEqual({ serverId: 1, command: "kickid 2" });
 });
 
 test("PWA is installable and its app shell works offline", async ({ page, context }) => {

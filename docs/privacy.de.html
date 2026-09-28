@@ -53,8 +53,10 @@
       Klartext-Token liegt im <code>sessionStorage</code> des Browsers.</li>
     <li><strong>Serverdaten:</strong> Name, Host, Port, Protokoll, Spiel,
       Quelle, Nitrado-Service-/Spielkennungen und Icon-URL,
-      Verbindungszustand, Latenz-/Fehlerdetails sowie das mit AES-256-GCM
-      verschlüsselte RCON-/Admin-Passwort.</li>
+      Verbindungszustand, Latenz-/Fehlerdetails, fünfminütige
+      Verfügbarkeitsmessungen und aggregierte Spielerzahlen sowie das mit
+      AES-256-GCM verschlüsselte RCON-/Admin-Passwort. Spielernamen werden
+      nicht in der Health-Historie gespeichert.</li>
     <li><strong>Nitrado-Zugangsdaten:</strong> ein optionaler, mit
       AES-256-GCM verschlüsselter API-Token.</li>
     <li><strong>Command-Center-Einstellungen:</strong> Namen und Befehle
@@ -73,8 +75,9 @@
       Kennungen, Chat-/Logausgabe, Befehle, Latenz sowie öffentliche
       Steam-Profil-/Sperrdaten werden verarbeitet, solange die Konsole
       geöffnet ist. Konsolenzeilen, Befehlsverlauf, geparste Spieler und
-      Steam-Ergebnisse liegen nur im Browserspeicher und werden von NiCon
-      nicht dauerhaft gespeichert.</li>
+      Steam-Ergebnisse sowie geparste Spielernamen/-kennungen liegen nur im
+      Browserspeicher und werden nicht dauerhaft gespeichert. Lediglich die
+      numerische Spielerzahl wird der Health-Historie hinzugefügt.</li>
     <li><strong>Kontaktanfragen:</strong> Name, E-Mail-Adresse und Nachricht
       aus dem Kontaktformular werden per E-Mail an den Betreiber
       übermittelt und nicht in die NiCon-Datenbank geschrieben.</li>
@@ -163,6 +166,10 @@
     <li>Konsolen-/Spieler-/Steam-Daten im Browserspeicher verschwinden beim
       Neuladen oder Schließen des Tabs. Browser-Einstellungen bleiben bis
       zum Löschen der Website-Daten erhalten.</li>
+    <li>Verfügbarkeits-, Latenz- und aggregierte Spielerzahlmessungen werden
+      90 Tage aufbewahrt und danach automatisch gelöscht. Beim Löschen eines
+      Servers oder Kontos werden die zugehörigen Messungen sofort per
+      Datenbank-Kaskade entfernt.</li>
     <li>Benachrichtigungen bleiben bestehen, bis ein Administrator sie
       löscht.</li>
     <li>Abgelaufene Rate-Limit-Zeitfenster werden bei Gelegenheit

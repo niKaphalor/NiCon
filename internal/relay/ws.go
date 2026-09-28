@@ -151,6 +151,10 @@ func connectGame(srv store.Server) (gameConn, error) {
 		return dialPalworldRest(srv.Host, srv.Port, srv.Password)
 	case "battleye":
 		return dialBattleye(srv.Host, srv.Port, srv.Password)
+	case "telnet":
+		return dialTelnet(srv.Host, srv.Port, srv.Password)
+	case "battlebit":
+		return dialBattlebit(srv.Host, srv.Port, srv.Password)
 	default:
 		address := fmt.Sprintf("%s:%d", srv.Host, srv.Port)
 		return rcon.Dial(address, srv.Password)
@@ -312,6 +316,8 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 				broadcast = wrc.Broadcast
 			} else if bc, ok := newConn.(*battleyeConn); ok {
 				broadcast = bc.Broadcast
+			} else if bbc, ok := newConn.(*battlebitConn); ok {
+				broadcast = bbc.Broadcast
 			}
 			if broadcast != nil {
 				done := make(chan struct{})
