@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy — NiCon</title>
+<link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="NiCon">
+<link rel="manifest" href="site.webmanifest">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <span class="wordmark"><picture><source srcset="nicon-favicon.webp" type="image/webp"><img src="nicon-favicon.png" alt="" width="22" height="22"></picture>NiCon</span>
+</header>
+
+<main class="legal-page">
+  <a href="index.html" class="back-link link-button">← Back to NiCon</a>
+  <nav class="lang-switch" aria-label="Language">
+    <a href="privacy.html" lang="en" hreflang="en" aria-current="page">EN</a>
+    <span aria-hidden="true">·</span>
+    <a href="privacy.de.html" lang="de" hreflang="de">DE</a>
+  </nav>
+  <h1>Privacy policy</h1>
+  <p class="hint">
+    Last updated: September 28, 2026. This policy applies to the NiCon
+    instance served at this URL: its static web frontend, Cloud API,
+    database, relay, and the integrations described below. See the
+    <a href="imprint.html">imprint</a> for the operator's contact details.
+  </p>
+
+  <h2>1. Controller</h2>
+  <p>
+    The operator named in the <a href="imprint.html">imprint</a> is the
+    controller for this instance under the GDPR. NiCon is open-source
+    software; a person operating another installation is responsible for
+    that installation's processing and must adapt this policy accordingly.
+  </p>
+
+  <h2>2. Data processed by NiCon</h2>
+  <ul>
+    <li><strong>Account data:</strong> username, bcrypt password hash,
+      bcrypt recovery-code hash, role, and account creation time. No email
+      address is required for an account.</li>
+    <li><strong>Sessions:</strong> a random login token. Only its hash and
+      expiry are stored in the database; the raw token is held in the
+      browser's <code>sessionStorage</code>.</li>
+    <li><strong>Server data:</strong> name, host, port, protocol, game,
+      source, Nitrado service/game identifiers and icon URL, connection
+      health, latency/error details, five-minute availability samples and
+      aggregate player counts, and the RCON/admin password encrypted with
+      AES-256-GCM. Player names are not written to health history.</li>
+    <li><strong>Nitrado credential:</strong> an optional API token,
+      encrypted with AES-256-GCM.</li>
+    <li><strong>Command-center settings:</strong> saved macro names and
+      commands, moderation words/actions, and their creation metadata.</li>
+    <li><strong>Security/activity records:</strong> action type, timestamp,
+      request IP address, involved account IDs, and short context such as
+      a username, server name, or notification text. Passwords, recovery
+      codes, and API tokens are never written to the audit log.</li>
+    <li><strong>Rate-limit records:</strong> a SHA-256-derived bucket key
+      based on the action and request IP address, the time window, and a
+      counter. The plaintext IP cannot be recovered from this table alone.</li>
+    <li><strong>Player/console data:</strong> player names and identifiers,
+      chat/log output, commands, latency, and public Steam profile/ban data
+      are processed while the console is open. Console lines, command
+      history, parsed player names/identifiers, and Steam results are held in
+      browser memory and are not persisted by NiCon. Only the numeric player
+      count is added to health history.</li>
+    <li><strong>Contact requests:</strong> name, email address, and message
+      entered on the contact page are delivered by email to the operator;
+      NiCon does not insert them into its database.</li>
+  </ul>
+
+  <h2>3. Browser storage and cookies</h2>
+  <p>
+    NiCon sets no cookies and uses no analytics, tracking pixels, or
+    advertising services. <code>sessionStorage</code> holds the login token
+    and username until the tab is closed. <code>localStorage</code> holds
+    non-secret preferences such as language, dashboard layout, dismissed
+    notification IDs, and client-side health observations. Clearing site
+    data removes these browser-local values. The PWA service worker stores
+    only NiCon's static app shell (HTML, CSS, JavaScript, icons, and local
+    fonts) in browser Cache Storage for offline startup; API responses,
+    credentials, and console data are not cached there.
+  </p>
+
+  <h2>4. Nitrado integration</h2>
+  <p>
+    When you synchronize Nitrado services, the Cloud API uses your saved
+    token to request service, gameserver, resource, and games-catalog data
+    from Nitrado. It stores compatible connection metadata and official
+    game-icon URLs. The same token is used for start, stop, restart, and
+    status requests you initiate. It is never returned to the browser and
+    can be removed independently in the sync/account interface. To reduce
+    duplicate requests, the backend caches Nitrado GET responses for 30-60
+    seconds (45 seconds by default), scoped by an installation-keyed token
+    HMAC and request path; the token itself is not stored in the cache.
+    The browser
+    loads a displayed game icon directly from
+    <code>assets.nitrado.net</code>, which exposes ordinary request data
+    such as the browser's IP address and user agent to that host.
+  </p>
+
+  <h2>5. Steam integration</h2>
+  <p>
+    If the operator configured Steam enrichment and a player list contains
+    SteamID64 values, the Cloud API sends newly observed IDs to Valve's
+    Steam Web API and returns public profile name/URL, account creation
+    time, and public VAC, community-ban, and game-ban information. The
+    operator's Steam API key remains server-side. NiCon does not persist
+    the IDs or returned Steam profiles; they remain in browser memory for
+    the current console session. Opening a Steam profile link is a separate,
+    user-initiated visit to Steam Community. The supported-games overview
+    and the selected server's backdrop load official header/background art
+    directly from <code>*.steamstatic.com</code>. Its CDN operator receives
+    ordinary connection data such as IP address and user agent; NiCon sends
+    no referrer.
+  </p>
+
+  <h2>6. Other recipients and external resources</h2>
+  <ul>
+    <li>The relay sends commands to, and receives responses/player data
+      from, the game servers you choose to connect to.</li>
+    <li>Contact-form content is transmitted through the operator's web/mail
+      hosting and email provider to the mailbox used for support.</li>
+    <li>The frontend, API, database, relay, Nitrado, Valve, and game
+      server may be hosted by different providers or in different countries;
+      their own privacy terms and legal transfer mechanisms apply.</li>
+  </ul>
+
+  <h2>7. Purposes and legal bases</h2>
+  <p>
+    Account, server, console, macro, moderation, Nitrado, and optional Steam
+    processing is necessary to provide the requested NiCon functionality
+    (Art. 6(1)(b) GDPR). Sessions, rate limiting, health checks, and audit
+    records support secure and reliable operation and the investigation of
+    misuse (Art. 6(1)(f) GDPR). Contact data is processed to answer your
+    request (Art. 6(1)(b) or (f) GDPR, depending on its context). External
+    game icons and header/background art support a consistent, recognizable interface (Art. 6(1)(f)
+    GDPR). Inter is delivered locally by NiCon and does not contact Google.
+    You may object to processing based on legitimate
+    interests as described in section 9.
+  </p>
+
+  <h2>8. Retention and deletion</h2>
+  <ul>
+    <li>Account data, servers, encrypted credentials, macros, moderation
+      rules, and sessions are deleted when the account is deleted; a saved
+      Nitrado token can also be removed separately. Sessions otherwise
+      expire after seven days and are invalidated on sign-out/reset as
+      applicable.</li>
+    <li>Console/player/Steam data in browser memory disappears on reload or
+      when the tab closes. Browser preferences remain until site data is
+      cleared.</li>
+    <li>Availability, latency, and aggregate player-count samples are kept
+      for 90 days and then removed automatically. Deleting a server or
+      account deletes its samples immediately through database cascading.</li>
+    <li>Notifications remain until an administrator deletes them.</li>
+    <li>Expired rate-limit windows are deleted opportunistically; entries
+      older than one day are eligible for cleanup.</li>
+    <li>Cached Nitrado GET responses expire after 30-60 seconds and are
+      deleted opportunistically when the cache is written; power operations
+      as well as token replacement/removal and account deletion invalidate
+      the affected token cache immediately.</li>
+    <li>Audit records, including executed RCON commands, target players,
+      outcome status, truncated server output, and latency, are retained for 180 days by default (operator-
+      configurable from 30 days to 10 years) and are cleaned when the audit
+      log is written or viewed. When an account is deleted, its database link
+      is removed, but the remaining audit fields persist only until that
+      retention period ends.</li>
+    <li>Contact messages remain in the involved mail systems according to
+      the operator's and providers' mailbox/backup retention settings.</li>
+    <li>Hosting providers may keep their own access/security logs for the
+      periods defined in their policies; those logs are outside NiCon's
+      application database.</li>
+  </ul>
+
+  <h2>9. Your rights</h2>
+  <p>
+    Subject to the statutory requirements, you may request access (Art. 15),
+    rectification (Art. 16), erasure (Art. 17), restriction (Art. 18), data
+    portability (Art. 20), and object to processing (Art. 21 GDPR). You may
+    also complain to a supervisory authority (Art. 77 GDPR). The in-app
+    <strong>Settings → Delete account</strong> action immediately removes
+    the account and its directly associated rows, subject to the audit-log
+    retention described above. Contact the address in the
+    <a href="imprint.html">imprint</a> for any broader request.
+  </p>
+
+  <h2>10. Security</h2>
+  <p>
+    RCON passwords and Nitrado tokens are encrypted at rest with
+    AES-256-GCM; passwords and recovery codes are one-way hashed with
+    bcrypt; session tokens are hashed in the database. Access to account
+    data is scoped server-side by user ID, sensitive endpoints are
+    authenticated and/or rate-limited, and the browser is restricted by
+    CORS and a Content Security Policy. No system can guarantee absolute
+    security; keep recovery codes, RCON credentials, and API tokens secret.
+  </p>
+</main>
+
+<footer class="site-footer">
+  <a href="imprint.html">Imprint</a>
+  <span aria-hidden="true">·</span>
+  <a href="privacy.html">Privacy</a>
+  <span aria-hidden="true">·</span>
+  <a href="contact.html">Contact</a>
+</footer>
+
+</body>
+</html>
