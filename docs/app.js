@@ -113,6 +113,7 @@
   var passwordPowerActions = document.getElementById("password-power-actions");
   var passwordForm = document.getElementById("password-form");
   var passwordInput = document.getElementById("password-input");
+  var passwordEditServerBtn = document.getElementById("password-edit-server-btn");
   var contentConsole = document.getElementById("content-console");
   var head = document.getElementById("head");
 
@@ -162,6 +163,20 @@
   var manualForm = document.getElementById("manual-form");
   var manualTestBtn = document.getElementById("manual-test-btn");
   var manualTestStatus = document.getElementById("manual-test-status");
+  var manualGameSelect = document.getElementById("manual-game");
+
+  var editServerModal = document.getElementById("edit-server-modal");
+  var editServerClose = document.getElementById("edit-server-close");
+  var editServerForm = document.getElementById("edit-server-form");
+  var editServerName = document.getElementById("edit-server-name");
+  var editServerHost = document.getElementById("edit-server-host");
+  var editServerPort = document.getElementById("edit-server-port");
+  var editServerProtocol = document.getElementById("edit-server-protocol");
+  var editServerGame = document.getElementById("edit-server-game");
+  var editServerPassword = document.getElementById("edit-server-password");
+  var editServerError = document.getElementById("edit-server-error");
+  var editServerNitradoHint = document.getElementById("edit-server-nitrado-hint");
+  var editingServerId = null;
 
   var filterInput = document.getElementById("filter-input");
   var filterRegexToggle = document.getElementById("filter-regex-toggle");
@@ -856,6 +871,107 @@
     return null;
   }
 
+  function suggestedProtocolForGame(game) {
+    var key = window.NICON_GUESS_GAME(game);
+    if (key === "rust") return "webrcon";
+    if (key === "palworld") return "palworld_rest";
+    if (key === "arma3" || key === "dayz") return "battleye";
+    return "source";
+  }
+
+  manualGameSelect.addEventListener("change", function () {
+    document.getElementById("manual-protocol").value = suggestedProtocolForGame(manualGameSelect.value);
+  });
+
+  function setGameSelectValue(select, game) {
+    var value = game || "";
+    var custom = select.querySelector("option[data-custom-game]");
+    if (custom) custom.remove();
+    var exists = Array.prototype.some.call(select.options, function (option) { return option.value === value; });
+    if (value && !exists) {
+      custom = document.createElement("option");
+      custom.value = value;
+      custom.textContent = value;
+      custom.dataset.customGame = "true";
+      select.appendChild(custom);
+    }
+    select.value = value;
+  }
+
+  function openEditServerModal(server) {
+    editingServerId = server.id;
+    editServerName.value = server.name;
+    editServerHost.value = server.host;
+    editServerPort.value = server.port;
+    editServerProtocol.value = server.protocol || "source";
+    setGameSelectValue(editServerGame, server.game);
+    editServerPassword.value = "";
+    editServerError.hidden = true;
+    editServerNitradoHint.hidden = server.source !== "nitrado";
+    editServerModal.showModal();
+  }
+
+  editServerClose.addEventListener("click", function () { editServerModal.close(); });
+  editServerModal.addEventListener("click", function (event) {
+    if (event.target === editServerModal) editServerModal.close();
+  });
+  editServerGame.addEventListener("change", function () {
+    editServerProtocol.value = suggestedProtocolForGame(editServerGame.value);
+  });
+  passwordEditServerBtn.addEventListener("click", function () {
+    var server = findServer(selectedServerId);
+    if (server) openEditServerModal(server);
+  });
+
+  editServerForm.addEventListener("submit", function (event) {
+    event.preventDefault();
+    var server = findServer(editingServerId);
+    if (!server) return;
+    editServerError.hidden = true;
+    var password = editServerPassword.value;
+    var payload = {
+      name: editServerName.value.trim(),
+      host: editServerHost.value.trim(),
+      port: parseInt(editServerPort.value, 10),
+      protocol: editServerProtocol.value,
+      game: editServerGame.value,
+    };
+
+    apiFetch("/api/servers/" + server.id, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).then(function (response) {
+      if (!response.ok) return response.text().then(function (text) { throw new Error(apiErrorMessage(text) || I18N.t("editServer.updateFailed")); });
+      return response.json();
+    }).then(function (updated) {
+      if (!password) return updated;
+      return apiFetch("/api/servers/" + server.id + "/password", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: password }),
+      }).then(function (response) {
+        if (!response.ok) throw new Error(I18N.t("errors.failedToSavePassword"));
+        updated.has_password = true;
+        return updated;
+      });
+    }).then(function (updated) {
+      var index = servers.findIndex(function (item) { return item.id === updated.id; });
+      if (index !== -1) servers[index] = updated;
+      if (consoles[updated.id]) {
+        disposeConsole(consoles[updated.id]);
+        delete consoles[updated.id];
+      }
+      stopPlayersAutoRefresh();
+      editServerModal.close();
+      renderServers();
+      renderContent();
+    }).catch(function (error) {
+      editServerError.textContent = error.message;
+      editServerError.hidden = false;
+    });
+  });
+
   function serverMeta(server) {
     var parts = [];
     if (server.game) parts.push(server.game);
@@ -1041,11 +1157,12 @@
     var port = parseInt(document.getElementById("manual-port").value, 10);
     var password = document.getElementById("manual-password").value;
     var protocol = document.getElementById("manual-protocol").value;
+    var game = manualGameSelect.value;
 
     apiFetch("/api/servers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name, host: host, port: port, password: password, protocol: protocol }),
+      body: JSON.stringify({ name: name, host: host, port: port, password: password, protocol: protocol, game: game }),
     })
       .then(function (r) {
         if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t)); });
@@ -1358,6 +1475,8 @@
       case "username_changed": return I18N.t("auditLog.action_usernameChanged", { actor: actor, detail: detail });
       case "account_deleted": return I18N.t("auditLog.action_accountDeleted", { actor: actor, detail: detail });
       case "server_added": return I18N.t("auditLog.action_serverAdded", { actor: actor, detail: detail });
+      case "server_updated": return I18N.t("auditLog.action_serverUpdated", { actor: actor, detail: detail });
+      case "server_password_changed": return I18N.t("auditLog.action_serverPasswordChanged", { actor: actor, detail: detail });
       case "server_deleted": return I18N.t("auditLog.action_serverDeleted", { actor: actor, detail: detail });
       case "nitrado_server_started": return I18N.t("auditLog.action_nitradoServerStarted", { actor: actor, detail: detail });
       case "nitrado_server_stopped": return I18N.t("auditLog.action_nitradoServerStopped", { actor: actor, detail: detail });
@@ -2011,6 +2130,13 @@
     actions.appendChild(toggleBtn);
 
     appendNitradoPowerButtons(actions, server, false);
+
+    var editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn-secondary";
+    editBtn.textContent = I18N.t("common.edit");
+    editBtn.addEventListener("click", function () { openEditServerModal(server); });
+    actions.appendChild(editBtn);
 
     var removeBtn = document.createElement("button");
     removeBtn.type = "button";
@@ -3068,7 +3194,10 @@
   // Driven by NICON_GAMES itself (docs/games.js) rather than a hand-kept
   // duplicate list here, so it can't drift when a game is added/removed.
 
-  var TESTED_GAMES = ["rust", "palworld"];
+  // This badge deliberately means a real game-server verification, not
+  // merely a passing parser fixture or protocol mock. The detailed and
+  // more granular evidence lives in docs/compatibility.md.
+  var TESTED_GAMES = ["rust"];
 
   function renderSupportedGamesList() {
     supportedGamesList.innerHTML = "";

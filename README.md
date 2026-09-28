@@ -42,7 +42,9 @@ been exercised against real services; the automated Go suite covers the
 store, authentication, health checks, and protocol clients with test
 servers. Compatibility still depends on each game's command/output format,
 and the structured parsers other than Rust have not all been validated
-against live public servers. Review the limitations under
+against live public servers. The maintained
+[compatibility matrix](docs/compatibility.md) separates live verification
+from automated mock coverage. Review the limitations under
 [Not implemented yet](#not-implemented-yet) before treating it as a
 hands-off production control plane.
 
@@ -64,8 +66,10 @@ hands-off production control plane.
 4. Click **+ Add server**: sync from a Nitrado API token (adds every
    server whose current game has RCON enabled; the RCON password itself
    isn't in Nitrado's API response, so add it inline on the server card
-   before connecting), or add one manually. Servers you add belong to your
-   account only.
+   before connecting), or add one manually and select the game so NiCon can
+   choose the matching protocol and player parser. Servers you add belong to
+   your account only. Their name, address, port, game, protocol, and optional
+   replacement RCON password can be edited later from the server header.
 5. Click **Connect** on a server to open its console — this is the one
    action that needs the **relay** running. For recognized games, the
    player list is queried automatically and refreshed every 10 seconds
@@ -618,6 +622,10 @@ language.
 
 ```sh
 go test ./...
+php tests/php/api_integration.php
+npm ci
+npx playwright install chromium
+npm run test:browser
 ```
 
 `internal/store` and `internal/auth` each have a test suite; a handful of
@@ -637,31 +645,33 @@ go test ./...
 ```
 
 The relay tests cover its HTTP health/CORS surface, metadata-host blocking,
-and the Palworld REST and BattlEye protocol clients with fake servers,
-including BattlEye framing/reassembly. The PHP API currently has no
-automated test suite; lint it and exercise it manually with PHP's built-in
-server against a test database:
+and a full browser-WebSocket-to-mock-game-server round trip for Source RCON,
+Rust WebRCON, Palworld REST, and BattlEye. Protocol-specific tests additionally
+cover BattlEye framing/reassembly and Palworld request mapping.
+
+The PHP API integration suite requires a disposable MariaDB/MySQL database.
+It skips cleanly when `NICON_PHP_TEST_DB_DSN` is unset. Configure all three
+variables before running it locally:
 
 ```sh
-cd webspace && php -S localhost:8080 -t .
+export NICON_PHP_TEST_DB_DSN="mysql:host=127.0.0.1;port=3306;dbname=nicon_test;charset=utf8mb4"
+export NICON_PHP_TEST_DB_USER="nicon"
+export NICON_PHP_TEST_DB_PASS="<password>"
+php tests/php/api_integration.php
 ```
 
-CI runs the Go suite against a MariaDB service container
-(`.github/workflows/ci.yml`) on every push; it doesn't touch `webspace/`.
+The Playwright suite serves the unchanged static `docs/` frontend and replaces
+the Cloud API and relay only at the browser network boundary. It covers login,
+manual creation/profile editing, Nitrado sync/icons, multi-console behavior,
+player actions, macros, and moderation rules. CI runs Go and PHP against a
+MariaDB service container and runs the Chromium suite in a separate job.
+See [the compatibility matrix](docs/compatibility.md) for the distinction
+between mock coverage and real-server verification.
 
 ## Not implemented yet
 
 - Windows binary packaging for the relay (`GOOS=windows GOARCH=amd64 go
   build` works today, just not automated/released anywhere yet)
-- Any automated tests for `webspace/`'s PHP API or browser-level tests for
-  the Phase 2 command-center interactions; these are currently checked by
-  PHP linting and manual browser/API verification (see [Testing](#testing))
-- Automated tests for the WebSocket/RCON bridge itself — classic RCON and
-  broadcast-forwarding have only been exercised manually, including
-  `-race` runs, against hand-written mock servers. The Palworld REST and
-  BattlEye clients do have unit tests (`internal/relay/palworld_rest_test.go`,
-  `internal/relay/battleye_test.go`), but only against fake HTTP/UDP
-  servers, not the real thing
 - The WebRCON implementation is based on Facepunch's own
   [webrcon](https://github.com/Facepunch/webrcon) tool and third-party
   documentation; the `playerlist` command and `kick` have been verified
@@ -695,8 +705,10 @@ Phase 1 (accounts, server storage, connectivity/health, Nitrado power
 controls, notifications, activity, and responsive console basics) and the
 current Phase 2 command-center scope (automatic player lists, contextual
 actions, classified logs, moderation rules, autocomplete/history, macros,
-Nitrado metadata/icons, and optional Steam enrichment) are implemented.
-Server-profile editing remains deliberately outside the completed Phase 1
-scope. Likely next steps are scheduled/triggered commands, durable player
-history/notes, shared ban lists or teams/roles, Discord/webhook delivery,
-and automated browser/PHP integration tests.
+Nitrado metadata/icons, optional Steam enrichment, manual game selection,
+and server-profile editing) are implemented. Automated API, relay-protocol,
+and browser end-to-end coverage is active in CI. Likely next steps are the
+remaining live game/protocol verification tracked in the
+[compatibility matrix](docs/compatibility.md), scheduled/triggered commands,
+durable player history/notes, shared ban lists or teams/roles, and
+Discord/webhook delivery.

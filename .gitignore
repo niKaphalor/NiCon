@@ -3,3 +3,6 @@
 *.exe
 /webspace/config.local.php
 /.env
+/node_modules/
+/playwright-report/
+/test-results/

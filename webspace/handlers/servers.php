@@ -91,14 +91,23 @@ function nicon_handle_list_servers(int $userId): void
 function nicon_handle_create_server(int $userId): void
 {
     $req = nicon_json_body();
-    $name = (string) ($req['name'] ?? '');
-    $host = (string) ($req['host'] ?? '');
+    $name = trim((string) ($req['name'] ?? ''));
+    $host = trim((string) ($req['host'] ?? ''));
     $port = (int) ($req['port'] ?? 0);
     $password = (string) ($req['password'] ?? '');
     $protocol = (string) ($req['protocol'] ?? '') ?: 'source';
+    $game = trim((string) ($req['game'] ?? ''));
 
-    if ($name === '' || $host === '' || $port <= 0) {
+    if ($name === '' || strlen($name) > 255 || $host === '' || strlen($host) > 255 || $port <= 0 || $port > 65535) {
         nicon_send_error('name, host, and port are required', 400);
+        return;
+    }
+    if (!in_array($protocol, ['source', 'webrcon', 'palworld_rest', 'battleye'], true)) {
+        nicon_send_error('unsupported protocol', 400);
+        return;
+    }
+    if (strlen($game) > 255) {
+        nicon_send_error('game is too long', 400);
         return;
     }
     if (nicon_is_cloud_metadata_host($host)) {
@@ -108,9 +117,9 @@ function nicon_handle_create_server(int $userId): void
 
     $pdo = nicon_db();
     $pdo->prepare('
-        INSERT INTO servers (user_id, name, host, port, password_enc, protocol, source)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ')->execute([$userId, $name, $host, $port, nicon_encrypt_password($password), $protocol, 'manual']);
+        INSERT INTO servers (user_id, name, host, port, password_enc, protocol, game, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ')->execute([$userId, $name, $host, $port, nicon_encrypt_password($password), $protocol, $game, 'manual']);
     $id = (int) $pdo->lastInsertId();
 
     nicon_audit_log($userId, 'server_added', null, $name);
@@ -124,6 +133,62 @@ function nicon_handle_create_server(int $userId): void
     nicon_send_json(nicon_server_response($stmt->fetch()));
 }
 
+function nicon_handle_update_server(int $userId, int $serverId): void
+{
+    $req = nicon_json_body();
+    $name = trim((string) ($req['name'] ?? ''));
+    $host = trim((string) ($req['host'] ?? ''));
+    $port = (int) ($req['port'] ?? 0);
+    $protocol = strtolower(trim((string) ($req['protocol'] ?? '')));
+    $game = trim((string) ($req['game'] ?? ''));
+
+    if ($name === '' || strlen($name) > 255 || $host === '' || strlen($host) > 255 || $port <= 0 || $port > 65535) {
+        nicon_send_error('valid name, host, and port are required', 400);
+        return;
+    }
+    if (!in_array($protocol, ['source', 'webrcon', 'palworld_rest', 'battleye'], true)) {
+        nicon_send_error('unsupported protocol', 400);
+        return;
+    }
+    if (strlen($game) > 255) {
+        nicon_send_error('game is too long', 400);
+        return;
+    }
+    if (nicon_is_cloud_metadata_host($host)) {
+        nicon_send_error('this host is not allowed', 400);
+        return;
+    }
+
+    $pdo = nicon_db();
+    $stmt = $pdo->prepare('
+        UPDATE servers
+        SET name = ?, host = ?, port = ?, protocol = ?,
+            nitrado_game_code = CASE WHEN game <> ? THEN \'\' ELSE nitrado_game_code END,
+            nitrado_game_icon_url = CASE WHEN game <> ? THEN NULL ELSE nitrado_game_icon_url END,
+            game = ?,
+            health_ok = NULL, health_checked_at = NULL,
+            health_latency_ms = NULL, health_error = NULL
+        WHERE id = ? AND user_id = ?
+    ');
+    $stmt->execute([$name, $host, $port, $protocol, $game, $game, $game, $serverId, $userId]);
+
+    $serverStmt = $pdo->prepare('
+        SELECT id, name, host, port, password_enc, protocol, game, source,
+               health_ok, health_checked_at, health_latency_ms, health_error,
+               nitrado_game_code, nitrado_game_icon_url
+        FROM servers WHERE id = ? AND user_id = ?
+    ');
+    $serverStmt->execute([$serverId, $userId]);
+    $server = $serverStmt->fetch();
+    if (!$server) {
+        nicon_send_error('server not found', 404);
+        return;
+    }
+
+    nicon_audit_log($userId, 'server_updated', null, $name);
+    nicon_send_json(nicon_server_response($server));
+}
+
 function nicon_handle_set_server_password(int $userId, int $serverId): void
 {
     $req = nicon_json_body();
@@ -133,12 +198,22 @@ function nicon_handle_set_server_password(int $userId, int $serverId): void
         return;
     }
 
-    $stmt = nicon_db()->prepare('UPDATE servers SET password_enc = ? WHERE id = ? AND user_id = ?');
+    $pdo = nicon_db();
+    $nameStmt = $pdo->prepare('SELECT name FROM servers WHERE id = ? AND user_id = ?');
+    $nameStmt->execute([$serverId, $userId]);
+    $name = $nameStmt->fetchColumn();
+    if ($name === false) {
+        nicon_send_error('404 page not found', 404);
+        return;
+    }
+
+    $stmt = $pdo->prepare('UPDATE servers SET password_enc = ?, health_ok = NULL, health_checked_at = NULL, health_latency_ms = NULL, health_error = NULL WHERE id = ? AND user_id = ?');
     $stmt->execute([nicon_encrypt_password($password), $serverId, $userId]);
     if ($stmt->rowCount() === 0) {
         nicon_send_error('404 page not found', 404);
         return;
     }
+    nicon_audit_log($userId, 'server_password_changed', null, (string) $name);
     http_response_code(204);
 }
 

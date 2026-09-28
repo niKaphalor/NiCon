@@ -168,6 +168,7 @@
             <input id="password-input" type="password" placeholder="RCON password" required autocomplete="off" aria-label="RCON password" data-i18n-placeholder="common.rconPassword" data-i18n-aria-label="common.rconPassword">
             <button type="submit" class="btn-primary" data-i18n="common.save">Save</button>
           </form>
+          <button type="button" id="password-edit-server-btn" class="btn-secondary" data-i18n="common.edit">Edit</button>
         </div>
 
         <div id="content-console" hidden>
@@ -442,6 +443,16 @@
         <option value="palworld_rest" data-i18n="addModal.protocolPalworldRest">Palworld REST API</option>
         <option value="battleye" data-i18n="addModal.protocolBattleye">BattlEye RCon (Arma 3, DayZ)</option>
       </select>
+      <select id="manual-game" aria-label="Game" data-i18n-aria-label="info.gameAriaLabel">
+        <option value="" data-i18n="info.genericOption">Generic (no parsing)</option>
+        <option value="Minecraft">Minecraft</option>
+        <option value="Rust">Rust</option>
+        <option value="ARK: Survival Evolved / Ascended">ARK: Survival Evolved / Ascended</option>
+        <option value="Palworld">Palworld</option>
+        <option value="Arma 3">Arma 3</option>
+        <option value="DayZ">DayZ</option>
+        <option value="Garry's Mod">Garry's Mod</option>
+      </select>
       <div class="form-row">
         <button type="button" id="manual-test-btn" class="btn-secondary" data-i18n="addModal.testConnection">Test connection</button>
         <span id="manual-test-status" class="hint form-status" hidden></span>
@@ -449,6 +460,40 @@
       <button type="submit" class="btn-primary" data-i18n="addModal.addServerSubmit">Add server</button>
     </form>
   </div>
+</dialog>
+
+<dialog id="edit-server-modal">
+  <div class="modal-header">
+    <h2 data-i18n="editServer.title">Edit server</h2>
+    <button type="button" id="edit-server-close" class="link-button" data-i18n="common.close">Close</button>
+  </div>
+  <p id="edit-server-nitrado-hint" class="hint" data-i18n="editServer.nitradoHint" hidden>Nitrado may overwrite connection data during the next sync.</p>
+  <form id="edit-server-form" class="stacked-form">
+    <input id="edit-server-name" type="text" maxlength="255" required aria-label="Server name" data-i18n-placeholder="addModal.manualNamePlaceholder" data-i18n-aria-label="addModal.manualNameAriaLabel">
+    <div class="form-row">
+      <input id="edit-server-host" type="text" maxlength="255" required aria-label="Host" data-i18n-placeholder="common.host" data-i18n-aria-label="common.host">
+      <input id="edit-server-port" type="number" min="1" max="65535" required aria-label="Port" data-i18n-placeholder="common.port" data-i18n-aria-label="common.port">
+    </div>
+    <select id="edit-server-protocol" aria-label="RCON protocol" data-i18n-aria-label="addModal.protocolAriaLabel">
+      <option value="source" data-i18n="addModal.protocolSource">Source RCON (most games)</option>
+      <option value="webrcon" data-i18n="addModal.protocolWebrcon">Rust WebRCON</option>
+      <option value="palworld_rest" data-i18n="addModal.protocolPalworldRest">Palworld REST API</option>
+      <option value="battleye" data-i18n="addModal.protocolBattleye">BattlEye RCon (Arma 3, DayZ)</option>
+    </select>
+    <select id="edit-server-game" aria-label="Game" data-i18n-aria-label="info.gameAriaLabel">
+      <option value="" data-i18n="info.genericOption">Generic (no parsing)</option>
+      <option value="Minecraft">Minecraft</option>
+      <option value="Rust">Rust</option>
+      <option value="ARK: Survival Evolved / Ascended">ARK: Survival Evolved / Ascended</option>
+      <option value="Palworld">Palworld</option>
+      <option value="Arma 3">Arma 3</option>
+      <option value="DayZ">DayZ</option>
+      <option value="Garry's Mod">Garry's Mod</option>
+    </select>
+    <input id="edit-server-password" type="password" autocomplete="off" data-i18n-placeholder="editServer.passwordPlaceholder" data-i18n-aria-label="editServer.passwordPlaceholder" placeholder="New RCON password (leave blank to keep current)" aria-label="New RCON password">
+    <p id="edit-server-error" class="hint login-error" hidden></p>
+    <button type="submit" class="btn-primary" data-i18n="editServer.save">Save changes</button>
+  </form>
 </dialog>
 
 <dialog id="quick-command-modal">

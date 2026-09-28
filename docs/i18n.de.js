@@ -58,6 +58,7 @@ window.NICON_I18N_STRINGS.de = {
     save: "Speichern",
     close: "Schließen",
     remove: "Entfernen",
+    edit: "Bearbeiten",
     continue: "Weiter",
     cancel: "Abbrechen",
     confirm: "Bestätigen",
@@ -228,6 +229,13 @@ window.NICON_I18N_STRINGS.de = {
     testTimedOut: "Zeitüberschreitung beim Warten auf eine Antwort.",
     testRelayUnreachable: "Relay zum Testen nicht erreichbar.",
   },
+  editServer: {
+    title: "Server bearbeiten",
+    save: "Änderungen speichern",
+    passwordPlaceholder: "Neues RCON-Passwort (leer lassen zum Beibehalten)",
+    nitradoHint: "Nitrado kann Name, Host, Port, Protokoll und Spiel beim nächsten Sync überschreiben.",
+    updateFailed: "Server konnte nicht aktualisiert werden.",
+  },
   // Geteilt zwischen dem vollen Admin-Audit-Log und der eigenen
   // Aktivitäts-Karte in den Einstellungen — gleiche Zeilenform, nur auf
   // weniger Zeilen gefiltert. {{actor}} ist, wer es getan hat, {{target}}
@@ -241,6 +249,8 @@ window.NICON_I18N_STRINGS.de = {
     action_usernameChanged: "{{actor}} hat den Benutzernamen zu „{{detail}}“ geändert",
     action_accountDeleted: "{{actor}} hat das Konto „{{detail}}“ gelöscht",
     action_serverAdded: "{{actor}} hat den Server „{{detail}}“ hinzugefügt",
+    action_serverUpdated: "{{actor}} hat den Server „{{detail}}“ aktualisiert",
+    action_serverPasswordChanged: "{{actor}} hat das Passwort für „{{detail}}“ geändert",
     action_serverDeleted: "{{actor}} hat den Server „{{detail}}“ entfernt",
     action_nitradoServerStarted: "{{actor}} hat den Nitrado-Server „{{detail}}“ gestartet",
     action_nitradoServerStopped: "{{actor}} hat den Nitrado-Server „{{detail}}“ gestoppt",
@@ -294,8 +304,8 @@ window.NICON_I18N_STRINGS.de = {
     title: "Willkommen bei NiCon",
     gamesTitle: "Unterstützte Spiele",
     gamesHint: "Live getestete Spiele sind entsprechend markiert; die übrigen sind nur nach dokumentierten Befehlsformaten implementiert, noch nicht gegen einen echten Server geprüft.",
-    tested: "Getestet",
-    untested: "Ungetestet",
+    tested: "Live getestet",
+    untested: "Nicht live getestet",
   },
   players: {
     kick: "Kick",

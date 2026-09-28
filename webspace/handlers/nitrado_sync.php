@@ -1,7 +1,14 @@
 <?php
 declare(strict_types=1);
 
-const NICON_NITRADO_BASE_URL = 'https://api.nitrado.net';
+function nicon_nitrado_base_url(): string
+{
+    $url = rtrim((string) (nicon_config()['nitrado_api_base_url'] ?? 'https://api.nitrado.net'), '/');
+    if (!preg_match('#^https?://#', $url)) {
+        throw new RuntimeException('invalid Nitrado API base URL');
+    }
+    return $url;
+}
 
 // NICON_NITRADO_MAX_RESPONSE_BYTES bounds how much of a Nitrado API
 // response this reads into memory — Nitrado's own responses are small
@@ -20,7 +27,7 @@ const NICON_NITRADO_MAX_RESPONSE_BYTES = 5 * 1024 * 1024; // 5 MiB
 // start/stop/restart actions below.
 function nicon_nitrado_request(string $token, string $method, string $path, array $params = []): array
 {
-    $ch = curl_init(NICON_NITRADO_BASE_URL . $path);
+    $ch = curl_init(nicon_nitrado_base_url() . $path);
     $body = '';
     $tooLarge = false;
     $headers = ['Authorization: Bearer ' . $token];

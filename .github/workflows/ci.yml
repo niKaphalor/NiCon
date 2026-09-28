@@ -119,3 +119,29 @@ jobs:
             php -l "$f" || status=1
           done < <(find webspace -name '*.php' -print0)
           exit $status
+
+      - name: PHP API integration tests
+        env:
+          NICON_PHP_TEST_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=nicon_test;charset=utf8mb4
+          NICON_PHP_TEST_DB_USER: root
+          NICON_PHP_TEST_DB_PASS: ci_test_root_password
+        run: php tests/php/api_integration.php
+
+  browser:
+    name: Browser end-to-end tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install browser test dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: npm run test:browser

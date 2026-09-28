@@ -57,6 +57,7 @@ window.NICON_I18N_STRINGS.en = {
     save: "Save",
     close: "Close",
     remove: "Remove",
+    edit: "Edit",
     continue: "Continue",
     cancel: "Cancel",
     confirm: "Confirm",
@@ -227,6 +228,13 @@ window.NICON_I18N_STRINGS.en = {
     testTimedOut: "Timed out waiting for a response.",
     testRelayUnreachable: "Could not reach the relay to test this.",
   },
+  editServer: {
+    title: "Edit server",
+    save: "Save changes",
+    passwordPlaceholder: "New RCON password (leave blank to keep current)",
+    nitradoHint: "Nitrado may overwrite name, host, port, protocol, and game during the next sync.",
+    updateFailed: "Could not update the server.",
+  },
   // Shared between the admin's full audit log and a user's own activity
   // card in settings — the same row shape either way, just filtered to
   // fewer rows for the latter. {{actor}} is who did it, {{target}} who
@@ -240,6 +248,8 @@ window.NICON_I18N_STRINGS.en = {
     action_usernameChanged: "{{actor}} changed their username to \"{{detail}}\"",
     action_accountDeleted: "{{actor}} deleted the account \"{{detail}}\"",
     action_serverAdded: "{{actor}} added the server \"{{detail}}\"",
+    action_serverUpdated: "{{actor}} updated the server \"{{detail}}\"",
+    action_serverPasswordChanged: "{{actor}} changed the password for \"{{detail}}\"",
     action_serverDeleted: "{{actor}} removed the server \"{{detail}}\"",
     action_nitradoServerStarted: "{{actor}} started the Nitrado server \"{{detail}}\"",
     action_nitradoServerStopped: "{{actor}} stopped the Nitrado server \"{{detail}}\"",
@@ -293,8 +303,8 @@ window.NICON_I18N_STRINGS.en = {
     title: "Welcome to NiCon",
     gamesTitle: "Supported games",
     gamesHint: "Live-tested games are marked accordingly; the rest are implemented from documented command formats only, not yet checked against a real server.",
-    tested: "Tested",
-    untested: "Untested",
+    tested: "Live tested",
+    untested: "Not live tested",
   },
   players: {
     kick: "Kick",
