@@ -29,118 +29,176 @@
   </nav>
   <h1>Datenschutzerklärung</h1>
   <p class="hint">
-    Stand: 23. September 2026. Diese Erklärung gilt für die unter dieser
-    URL bereitgestellte Instanz von NiCon — die Weboberfläche, ihre
-    Cloud-API (zuständig für dein Konto und deine Serverliste) sowie den
-    lokalen Relay, den du für die eigentliche Verbindung zur
-    Server-Konsole betreibst. Siehe <a href="imprint.de.html">Impressum</a>
-    für die Kontaktangaben des Betreibers dieser Instanz.
+    Stand: 28. September 2026. Diese Erklärung gilt für die unter dieser
+    URL bereitgestellte NiCon-Instanz: statische Weboberfläche, Cloud-API,
+    Datenbank, Relay und die unten beschriebenen Integrationen. Die
+    Kontaktdaten des Betreibers stehen im
+    <a href="imprint.de.html">Impressum</a>.
   </p>
 
   <h2>1. Verantwortlicher</h2>
   <p>
-    Verantwortlich für die Datenverarbeitung im Sinne der DSGVO ist der im
+    Verantwortlich im Sinne der DSGVO ist der im
     <a href="imprint.de.html">Impressum</a> genannte Betreiber dieser
-    NiCon-Instanz. NiCon ist Open-Source-Software; jeder, der seine
-    eigene Cloud-API, seinen eigenen Relay und seine eigene Kopie der
-    Weboberfläche betreibt, ist für die von ihm verarbeiteten Daten selbst
-    verantwortlich — nicht die Autoren des NiCon-Projekts.
+    Instanz. NiCon ist Open-Source-Software. Wer eine andere Installation
+    betreibt, ist für deren Verarbeitung verantwortlich und muss diese
+    Erklärung entsprechend anpassen.
   </p>
 
-  <h2>2. Welche Daten wir verarbeiten</h2>
-  <p>Beim Erstellen und Nutzen eines Kontos verarbeiten wir:</p>
+  <h2>2. Von NiCon verarbeitete Daten</h2>
   <ul>
-    <li><strong>Benutzername</strong> — frei gewählt, keine E-Mail-Adresse erforderlich.</li>
-    <li><strong>Passwort</strong> — wird nie im Klartext gespeichert, sondern ausschließlich als bcrypt-Hash.</li>
-    <li><strong>Wiederherstellungscode</strong> — ein 20-stelliger, einmaliger Code, der bei Kontoerstellung (bzw. beim letzten Zurücksetzen) erzeugt und dir genau einmal angezeigt wird. Wie beim Passwort wird nur sein bcrypt-Hash gespeichert — er ist der einzige Weg, dein Passwort zurückzusetzen, da keine E-Mail-Adresse hinterlegt ist.</li>
-    <li><strong>Server-Daten, die du selbst hinzufügst</strong> — Name, Host, Port und Spiel eines Spieleservers, sowie dessen RCON-Passwort. Das RCON-Passwort wird verschlüsselt (AES-256-GCM) gespeichert, mit einem Schlüssel, der getrennt von der Datenbank verwaltet wird.</li>
-    <li><strong>Nitrado-API-Token</strong> (nur falls du "Von Nitrado synchronisieren" nutzt) — wird genauso verschlüsselt gespeichert wie ein RCON-Passwort, damit du ihn nicht bei jedem Sync erneut eingeben musst. Siehe Abschnitt 3.</li>
-    <li><strong>Moderationsregeln und Befehlsmakros</strong> — die Wörter, Aktionen, Namen und Befehle, die du für dein Konto speicherst.</li>
-    <li><strong>SteamID64-Werte</strong> aus der Spielerliste eines verbundenen Servers — werden vorübergehend an Valves Steam Web API übermittelt, um öffentliche Profil- und Sperrinformationen abzurufen; NiCon speichert die zurückgegebenen Profile nicht.</li>
-    <li><strong>Sitzungs-Token</strong> — ein zufälliger Token, der dich nach dem Login für bis zu 7 Tage identifiziert. Er wird serverseitig in der Datenbank sowie browserseitig in <code>sessionStorage</code> (nicht <code>localStorage</code>) gespeichert und beim Schließen des Browser-Tabs aus dem Browser entfernt.</li>
+    <li><strong>Kontodaten:</strong> Benutzername, bcrypt-Passwort-Hash,
+      bcrypt-Hash des Wiederherstellungscodes, Rolle und Erstellungszeit.
+      Für ein Konto ist keine E-Mail-Adresse erforderlich.</li>
+    <li><strong>Sitzungen:</strong> ein zufälliger Anmelde-Token. In der
+      Datenbank werden nur sein Hash und Ablaufzeitpunkt gespeichert; der
+      Klartext-Token liegt im <code>sessionStorage</code> des Browsers.</li>
+    <li><strong>Serverdaten:</strong> Name, Host, Port, Protokoll, Spiel,
+      Quelle, Nitrado-Service-/Spielkennungen und Icon-URL,
+      Verbindungszustand, Latenz-/Fehlerdetails sowie das mit AES-256-GCM
+      verschlüsselte RCON-/Admin-Passwort.</li>
+    <li><strong>Nitrado-Zugangsdaten:</strong> ein optionaler, mit
+      AES-256-GCM verschlüsselter API-Token.</li>
+    <li><strong>Command-Center-Einstellungen:</strong> Namen und Befehle
+      gespeicherter Makros, Moderationswörter/-aktionen und zugehörige
+      Erstellungsmetadaten.</li>
+    <li><strong>Sicherheits-/Aktivitätsprotokolle:</strong> Aktion,
+      Zeitpunkt, IP-Adresse der Anfrage, beteiligte Konto-IDs und kurzer
+      Kontext wie Benutzername, Servername oder Benachrichtigungstext.
+      Passwörter, Wiederherstellungscodes und API-Token werden nie ins
+      Audit-Protokoll geschrieben.</li>
+    <li><strong>Rate-Limit-Datensätze:</strong> ein aus Aktion und
+      Anfrage-IP-Adresse abgeleiteter SHA-256-Bucket-Schlüssel, Zeitfenster
+      und Zähler. Allein aus dieser Tabelle lässt sich die Klartext-IP
+      nicht wiederherstellen.</li>
+    <li><strong>Spieler-/Konsolendaten:</strong> Spielernamen und
+      Kennungen, Chat-/Logausgabe, Befehle, Latenz sowie öffentliche
+      Steam-Profil-/Sperrdaten werden verarbeitet, solange die Konsole
+      geöffnet ist. Konsolenzeilen, Befehlsverlauf, geparste Spieler und
+      Steam-Ergebnisse liegen nur im Browserspeicher und werden von NiCon
+      nicht dauerhaft gespeichert.</li>
+    <li><strong>Kontaktanfragen:</strong> Name, E-Mail-Adresse und Nachricht
+      aus dem Kontaktformular werden per E-Mail an den Betreiber
+      übermittelt und nicht in die NiCon-Datenbank geschrieben.</li>
   </ul>
+
+  <h2>3. Browser-Speicher und Cookies</h2>
   <p>
-    Es werden keine Cookies gesetzt, kein Tracking und keine
-    Analyse-/Werbe-Tools Dritter eingebunden.
+    NiCon setzt keine Cookies und nutzt keine Analyse-, Tracking- oder
+    Werbedienste. <code>sessionStorage</code> enthält Anmelde-Token und
+    Benutzername bis zum Schließen des Tabs. In <code>localStorage</code>
+    liegen nicht geheime Einstellungen wie Sprache, Dashboard-Layout,
+    ausgeblendete Benachrichtigungs-IDs und lokale Health-Beobachtungen.
+    Das Löschen der Website-Daten entfernt diese lokalen Werte.
   </p>
 
-  <h2>3. Nitrado-API-Token</h2>
+  <h2>4. Nitrado-Integration</h2>
   <p>
-    Wenn du Server über den "Von Nitrado synchronisieren"-Dialog importierst,
-    wird dein Nitrado-API-Token verschlüsselt gespeichert (AES-256-GCM,
-    dasselbe Verfahren wie bei den RCON-Passwörtern deiner Server), mit
-    einem Schlüssel, der getrennt von der Datenbank verwaltet wird — damit
-    musst du ihn nicht bei jeder zukünftigen Synchronisierung erneut
-    eingeben. Er wird dir nach der Eingabe nie wieder angezeigt und
-    ausschließlich genutzt, um deine Server bei Nitrado abzufragen sowie
-    einen von dir ausdrücklich angeforderten Start, Stopp oder Neustart
-    auszuführen — für nichts anderes verlässt er die Cloud-API. Du kannst
-    ihn jederzeit über den "Von Nitrado synchronisieren"-Dialog wieder
-    entfernen.
+    Bei einer Nitrado-Synchronisierung verwendet die Cloud-API den
+    gespeicherten Token, um Service-, Gameserver-, Ressourcen- und
+    Spielekatalogdaten bei Nitrado abzurufen. Kompatible
+    Verbindungsmetadaten und offizielle Spiel-Icon-URLs werden gespeichert.
+    Derselbe Token wird für von dir ausgelöste Start-, Stopp-, Neustart-
+    und Statusabfragen genutzt. Er wird nie an den Browser zurückgegeben
+    und kann unabhängig vom Konto entfernt werden. Ein angezeigtes
+    Spiel-Icon lädt der Browser direkt von
+    <code>assets.nitrado.net</code>; dabei erhält dieser Host übliche
+    Verbindungsdaten wie IP-Adresse und User-Agent.
   </p>
 
-  <h2>4. Zweck und Rechtsgrundlage der Verarbeitung</h2>
+  <h2>5. Steam-Integration</h2>
   <p>
-    Wir verarbeiten die genannten Daten, um dir ein Nutzerkonto und die
-    RCON-Steuerung deiner Spieleserver bereitzustellen. Rechtsgrundlage ist
-    Art. 6 Abs. 1 lit. b DSGVO (Erfüllung des Nutzungsverhältnisses, das
-    mit deiner Registrierung zustande kommt, bzw. Maßnahmen auf deine
-    Anfrage hin, etwa beim Nitrado-Sync). Für das Sitzungs-Token als
-    technisch notwendige Funktion gilt zusätzlich Art. 6 Abs. 1 lit. f
-    DSGVO (berechtigtes Interesse an einer funktionierenden, sicheren
-    Anmeldung).
+    Hat der Betreiber die Steam-Anreicherung eingerichtet und enthält eine
+    Spielerliste SteamID64-Werte, sendet die Cloud-API neu erkannte IDs an
+    Valves Steam Web API. Zurückgegeben werden öffentlicher Profilname/-URL,
+    Kontoerstellungszeit sowie öffentliche VAC-, Community- und
+    Spiel-Sperrinformationen. Der Steam-API-Schlüssel des Betreibers bleibt
+    serverseitig. NiCon speichert IDs und Ergebnisse nicht dauerhaft; sie
+    bleiben für die aktuelle Konsolensitzung im Browserspeicher. Das Öffnen
+    eines Steam-Profillinks ist ein eigener, vom Nutzer ausgelöster Besuch
+    bei Steam Community.
   </p>
 
-  <h2>5. Speicherdauer</h2>
-  <p>
-    Konto- und Serverdaten bleiben gespeichert, bis du dein Konto selbst
-    löschst (siehe Punkt 7). Sitzungs-Token laufen automatisch nach 7 Tagen
-    ab und werden beim Abmelden sofort ungültig gemacht.
-  </p>
-
-  <h2>6. Weitergabe an Dritte</h2>
-  <p>
-    Deine Kontodaten und gespeicherten Server werden nicht an Dritte
-    weitergegeben. Eine Verbindung zu deinem Spieleserver (RCON) geht
-    direkt vom Relay aus, den du selbst kontrollierst bzw. dem du
-    vertraust; ein Nitrado-Sync geht direkt von der Cloud-API an Nitrados
-    eigene API. Wenn die Steam-Anreicherung aktiviert ist, werden
-    SteamID64-Werte von Spielern an Valves Steam Web API übermittelt, um
-    öffentliche Profil- und Sperrinformationen abzurufen.
-  </p>
-
-  <h2>7. Deine Rechte</h2>
-  <p>Du hast nach der DSGVO insbesondere folgende Rechte:</p>
+  <h2>6. Weitere Empfänger und externe Ressourcen</h2>
   <ul>
-    <li>Auskunft über die zu dir gespeicherten Daten (Art. 15 DSGVO)</li>
-    <li>Berichtigung unrichtiger Daten (Art. 16 DSGVO)</li>
-    <li>Löschung deiner Daten (Art. 17 DSGVO) — dein Konto samt aller
-      gespeicherten Server kannst du jederzeit selbst löschen: über
-      <strong>Einstellungen → Konto löschen</strong> in der App. Das
-      löscht sofort und unwiderruflich alle deine Daten aus der
-      Datenbank.</li>
-    <li>Einschränkung der Verarbeitung (Art. 18 DSGVO)</li>
-    <li>Datenübertragbarkeit (Art. 20 DSGVO)</li>
-    <li>Widerspruch gegen die Verarbeitung (Art. 21 DSGVO)</li>
-    <li>Beschwerde bei einer Datenschutz-Aufsichtsbehörde (Art. 77 DSGVO)</li>
+    <li>Der Relay sendet Befehle an die von dir ausgewählten Spieleserver
+      und empfängt deren Antworten und Spielerdaten.</li>
+    <li>Die Weboberfläche lädt die Schrift Inter von Google Fonts
+      (<code>fonts.googleapis.com</code>/<code>fonts.gstatic.com</code>).
+      Dabei werden übliche Verbindungsdaten wie IP-Adresse und User-Agent
+      an Google übertragen.</li>
+    <li>Inhalte des Kontaktformulars werden über Web-/Mailhosting und den
+      E-Mail-Anbieter des Betreibers an das Support-Postfach übertragen.</li>
+    <li>Frontend, API, Datenbank, Relay, Nitrado, Valve, Google und
+      Spieleserver können bei unterschiedlichen Anbietern oder in
+      unterschiedlichen Ländern betrieben werden; es gelten deren eigene
+      Datenschutzbestimmungen und gesetzlichen Übermittlungsmechanismen.</li>
   </ul>
+
+  <h2>7. Zwecke und Rechtsgrundlagen</h2>
   <p>
-    Für Anfragen, die über die Selbstbedienungsfunktion in der App hinausgehen,
-    wende dich an die im <a href="imprint.de.html">Impressum</a> genannte
-    Kontaktadresse.
+    Konto-, Server-, Konsolen-, Makro-, Moderations-, Nitrado- und optionale
+    Steam-Verarbeitung ist zur Bereitstellung der angeforderten
+    NiCon-Funktionen erforderlich (Art. 6 Abs. 1 lit. b DSGVO). Sitzungen,
+    Rate-Limits, Health-Prüfungen und Audit-Protokolle dienen dem sicheren,
+    zuverlässigen Betrieb und der Missbrauchsaufklärung (Art. 6 Abs. 1
+    lit. f DSGVO). Kontaktdaten werden zur Bearbeitung der Anfrage
+    verarbeitet (je nach Zusammenhang Art. 6 Abs. 1 lit. b oder f DSGVO).
+    Externe Schrift und Spiel-Icons unterstützen eine einheitliche,
+    erkennbare Oberfläche (Art. 6 Abs. 1 lit. f DSGVO). Gegen eine auf
+    berechtigte Interessen gestützte Verarbeitung kannst du nach Abschnitt
+    9 Widerspruch einlegen.
   </p>
 
-  <h2>8. Technische Hinweise</h2>
+  <h2>8. Speicherdauer und Löschung</h2>
+  <ul>
+    <li>Kontodaten, Server, verschlüsselte Zugangsdaten, Makros,
+      Moderationsregeln und Sitzungen werden bei Kontolöschung entfernt;
+      der Nitrado-Token kann zusätzlich separat gelöscht werden. Sitzungen
+      laufen ansonsten nach sieben Tagen ab und werden je nach Vorgang bei
+      Abmeldung/Zurücksetzen ungültig.</li>
+    <li>Konsolen-/Spieler-/Steam-Daten im Browserspeicher verschwinden beim
+      Neuladen oder Schließen des Tabs. Browser-Einstellungen bleiben bis
+      zum Löschen der Website-Daten erhalten.</li>
+    <li>Benachrichtigungen bleiben bestehen, bis ein Administrator sie
+      löscht.</li>
+    <li>Abgelaufene Rate-Limit-Zeitfenster werden bei Gelegenheit
+      bereinigt; Einträge älter als ein Tag können gelöscht werden.</li>
+    <li>Audit-Einträge haben derzeit keine automatische Löschfrist. Bei
+      Kontolöschung wird die Datenbankverknüpfung zum Konto entfernt; für
+      Sicherheits- und Nachweiszwecke können Eintrag, IP-Adresse,
+      Zeitpunkt, Aktion und kurzer Detailtext bestehen bleiben.</li>
+    <li>Kontaktanfragen verbleiben entsprechend den Postfach-/Backupfristen
+      des Betreibers und der beteiligten Anbieter in den E-Mail-Systemen.</li>
+    <li>Hosting-Anbieter können eigene Zugriffs-/Sicherheitsprotokolle nach
+      ihren Richtlinien speichern; diese liegen außerhalb der
+      NiCon-Anwendungsdatenbank.</li>
+  </ul>
+
+  <h2>9. Deine Rechte</h2>
   <p>
-    Der Relay selbst führt kein Zugriffs-Logging mit IP-Adressen. Auch die
-    Cloud-API tut das auf Anwendungsebene nicht, läuft aber typischerweise
-    auf gewöhnlichem Webhosting, dessen Serversoftware (z. B. Apache)
-    standardmäßig oft eigene, kurzlebige Zugriffsprotokolle mit
-    IP-Adressen führt — das ist übliches Webserver-Verhalten außerhalb des
-    NiCon-Codes und unterliegt der eigenen Protokollierungs-Richtlinie des
-    Hosting-Anbieters. Je nach Netzwerkumgebung des Betreibers (z. B.
-    Router, Internetanbieter) können zusätzlich auf dieser Ebene
-    technische Verbindungsdaten anfallen.
+    Unter den gesetzlichen Voraussetzungen bestehen Rechte auf Auskunft
+    (Art. 15), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung
+    (Art. 18), Datenübertragbarkeit (Art. 20) und Widerspruch (Art. 21
+    DSGVO). Außerdem kannst du dich bei einer Aufsichtsbehörde beschweren
+    (Art. 77 DSGVO). <strong>Einstellungen → Konto löschen</strong>
+    entfernt sofort das Konto und die direkt zugeordneten Datensätze,
+    vorbehaltlich der oben beschriebenen Audit-Aufbewahrung. Für
+    weitergehende Anfragen nutze die Kontaktadresse im
+    <a href="imprint.de.html">Impressum</a>.
+  </p>
+
+  <h2>10. Sicherheit</h2>
+  <p>
+    RCON-Passwörter und Nitrado-Token werden mit AES-256-GCM verschlüsselt
+    gespeichert; Passwörter und Wiederherstellungscodes werden mit bcrypt
+    gehasht, Sitzungs-Token in der Datenbank ebenfalls nur als Hash
+    gespeichert. Kontozugriffe werden serverseitig über die Benutzer-ID
+    begrenzt, sensible Endpunkte sind authentifiziert und/oder
+    rate-limitiert, und der Browser wird durch CORS und eine Content
+    Security Policy eingeschränkt. Absolute Sicherheit kann kein System
+    garantieren; halte Wiederherstellungscodes, RCON-Zugangsdaten und
+    API-Token geheim.
   </p>
 </main>
 

@@ -1,22 +1,25 @@
 # NiCon
 
-A web UI to send RCON commands to game servers — including the ones on
-your Nitrado account, and any other Source-RCON server added manually.
+A browser-based command center for game servers. NiCon combines RCON,
+WebRCON, BattlEye RCon, and Palworld's REST API in one interface, imports
+compatible Nitrado services, monitors connectivity, enriches player lists
+with optional Steam data, and provides moderation rules, macros, and
+Nitrado power controls.
 
 The UI is a static page at **https://nikaphalor.github.io/NiCon/** — no
 install needed to view it. Everything behind it is split across two
 pieces, because they have opposite hosting requirements:
 
 - **[Cloud API](#cloud-api-webspace)** (`webspace/`, plain PHP) — accounts,
-  sign-in, and your server list. Runs on ordinary always-on web hosting
-  (shared webspace is enough), so it's reachable whether or not your own
-  computer is on.
+  server storage, Nitrado/Steam integrations, macros, moderation rules,
+  notifications, and audit history. Runs on ordinary always-on web hosting
+  (shared webspace is enough).
 - **[Relay](#relay)** (Go binary, this repo's root) — the actual
   WebSocket↔RCON bridge. This is the one part that genuinely needs a
-  persistent local process (browsers can't open raw TCP or WebRCON sockets
+  persistent process (browsers can't open raw TCP, UDP, or WebRCON sockets
   on their own) and genuinely needs outbound access to arbitrary RCON
   ports (which most shared hosting blocks) — so it has to run somewhere
-  you control, typically your own machine.
+  you control, typically a local machine or cloud VM.
 
 Both read/write the same MariaDB database and share one encryption key;
 see [Cloud API vs. relay](#cloud-api-vs-relay) for exactly how the split
@@ -33,11 +36,15 @@ account itself from Settings, at any time.
 
 ## Status
 
-Early / untested against a real Nitrado account and real game servers —
-built and smoke-tested locally (including an end-to-end test against a mock
-Source RCON server and against a real local MariaDB with multiple test
-accounts), but not yet run against production servers. Treat as a working
-prototype.
+NiCon is an actively developed, self-hosted application. The Nitrado sync,
+game catalog/icons, Rust WebRCON path, and Palworld service discovery have
+been exercised against real services; the automated Go suite covers the
+store, authentication, health checks, and protocol clients with test
+servers. Compatibility still depends on each game's command/output format,
+and the structured parsers other than Rust have not all been validated
+against live public servers. Review the limitations under
+[Not implemented yet](#not-implemented-yet) before treating it as a
+hands-off production control plane.
 
 ## Using it
 
@@ -60,9 +67,9 @@ prototype.
    before connecting), or add one manually. Servers you add belong to your
    account only.
 5. Click **Connect** on a server to open its console — this is the one
-   action that needs the **relay** running. Click **Players** there for a
-   structured player list, for the games NiCon knows how to parse (see
-   [games.js](docs/games.js)). Nitrado servers also expose **Start**,
+   action that needs the **relay** running. For recognized games, the
+   player list is queried automatically and refreshed every 10 seconds
+   (see [games.js](docs/games.js)). Nitrado servers also expose **Start**,
    **Stop**, and **Restart** controls; those go through the always-on Cloud
    API and therefore don't require the RCON relay.
 
@@ -71,9 +78,10 @@ own WebSocket-based "WebRCON" protocol instead. NiCon detects this
 automatically for servers found via Nitrado sync; for a manually-added
 Rust server, pick "Rust WebRCON" in the protocol dropdown when adding it.
 
-You can have several consoles open at once — connecting to another server
-doesn't disconnect the current one, it opens another tab in the console
-view. Dropped connections reconnect automatically with exponential
+You can keep several consoles connected at once — selecting another server
+doesn't disconnect the current one; its socket and console history remain
+alive in the background for the browser session. Dropped connections
+reconnect automatically with exponential
 backoff; clicking **Disconnect** still keeps a console deliberately
 offline. The filter box above the log accepts a regex: matching lines
 stay, everything else is hidden, and the match itself is highlighted.
@@ -82,15 +90,33 @@ bottom or click **Follow output**. For WebRCON (Rust) servers, chat/log
 lines the game pushes on its own (not in response to a command) show up
 live in the console, styled differently from command output.
 
-The command center also includes shell-style command history and
-autocomplete, saved multi-step macros (`@wait 2` inserts a pause),
-right-click player actions, account-wide word filters with optional
-automatic mute/kick, and an adjustable balanced/wide/stacked layout.
-Nitrado servers show their current status data, memory allocation for
-Minecraft/Hytale where Nitrado supplies it, and the official game icon
-returned by Nitrado's games catalog. If a Steam Web API key is
-configured, SteamID64 entries in player lists are enriched with public
-profile, account-age, VAC, community-ban, and game-ban information.
+The command center includes:
+
+- color-classified chat, warning, and error lines plus literal/regex log
+  filtering and pause/resume tail-following;
+- per-console shell-style history and autocomplete for known game commands;
+- account-wide multi-step macros (`@wait 2` inserts a pause) and per-game
+  quick actions;
+- a live player list with inline Kick/Ban and a right-click menu for
+  Kick/Ban/Mute/Whisper where the selected game exposes a documented
+  command (unsupported actions stay disabled rather than being guessed);
+- account-wide word filters that highlight matching pushed chat/log lines
+  and can automatically mute or kick a matched player, with a per-rule/
+  player cooldown;
+- balanced, console-wide, and stacked layouts stored in `localStorage`;
+- Nitrado service status, players, map, version, and memory allocation only
+  for Minecraft/Hytale where Nitrado supplies it; CPU is deliberately not
+  shown because Nitrado does not expose a reliable value here;
+- official per-game icons from Nitrado's games catalog; and
+- optional public Steam profile, account-age, VAC, community-ban, and
+  game-ban data for newly observed SteamID64 players. Steam enrichment is
+  disabled unless the Cloud API has a Steam Web API key configured.
+
+The separate **Health** view combines the relay's automatic five-minute
+RCON checks with connection time, latency, and recent client-side errors.
+Settings contains account/security controls, recent account activity, and
+Nitrado-token removal. Admins additionally get account management,
+instance-wide notifications, and the latest audit entries.
 
 ## Cloud API vs. relay
 
@@ -125,11 +151,9 @@ top comment for the exact byte layout that keeps the two sides compatible
 (PHP's `openssl_encrypt`/AES-256-GCM output has to line up with Go's
 `cipher.AEAD.Seal`, nonce and tag placement included).
 
-If you don't have separate always-on hosting and don't need one, you can
-run just the relay pointed at a local MariaDB — everything worked that
-way for a while (see the commit history) — but there's no PHP fallback in
-that mode; you'd need to also keep the relay running whenever you want to
-sign in or manage servers, which somewhat defeats the point of the split.
+The current frontend always needs both services: the PHP API for sign-in
+and application data, and the relay for live game-server connections.
+Running only the relay is not a supported complete deployment.
 
 ## Cloud API (`webspace/`)
 
@@ -163,10 +187,10 @@ to disclose even without it).
 `config.local.php` is gitignored — it holds your database password and
 the encryption key, never commit it. `schema.sql` covers the same tables
 `internal/store` creates automatically, plus a few PHP-only additions
-(`rate_limits`, `notifications`, `moderation_rules`, and a
-`nitrado_token_enc` column on `users`) that the Go relay's own
-auto-migration doesn't know about and
-never creates. Run it once regardless of which side connects to this
+(`rate_limits`, `notifications`, `command_templates`, `moderation_rules`,
+`audit_log`, and a `nitrado_token_enc` column on `users`) that the Go
+relay's own auto-migration doesn't know about and never creates. Run it
+once regardless of which side connects to this
 database first — every statement in it is safe to run again later,
 including against a `users`/`sessions`/`servers` set the Go relay already
 created (it won't touch existing data, only add what's missing). Skipping
@@ -199,8 +223,10 @@ Either path works:
 Once deployed, it serves the same JSON API the relay used to (except
 `/ws/rcon`, which stays with the relay — see below):
 
-- **Auth** (`POST /login`, `POST /logout`, `POST /register`,
-  `POST /reset-password`, `DELETE /account`): login exchanges a
+- **Auth and account** (`POST /login`, `POST /logout`, `POST /register`,
+  `POST /reset-password`, `GET/DELETE /account`, `PUT
+  /account/password`, `PUT /account/username`, `DELETE
+  /account/nitrado-token`): login exchanges a
   username/password (bcrypt-hashed at rest) for a session token, which the
   frontend then sends as `Authorization: Bearer <token>` on every other
   API request and as the WebSocket's first message to the relay. Tokens
@@ -233,7 +259,8 @@ Once deployed, it serves the same JSON API the relay used to (except
   (`ON DELETE CASCADE`), so there's nothing left to clean up separately.
 - **Per-user server storage** (`GET/POST /servers`,
   `PUT /servers/{id}/password`, `DELETE /servers/{id}`,
-  `POST /servers/{id}/nitrado-power`, `POST /nitrado/sync`): every query
+  `POST /servers/{id}/nitrado-power`, `GET
+  /servers/{id}/nitrado-status`, `POST /nitrado/sync`): every query
   is scoped to the authenticated user's
   `user_id` in SQL — that's the actual access control, not a UI filter.
   Asking for another user's server by ID gets the same "not found"
@@ -260,6 +287,21 @@ Once deployed, it serves the same JSON API the relay used to (except
   `start`, `stop`, or `restart`, is limited to owned Nitrado-backed
   servers, is rate-limited to ten requests per minute per user/server,
   and records successful actions in the audit log.
+- **Command center data** (`GET/POST /command-templates`, `DELETE
+  /command-templates/{id}`, `GET/POST /moderation-rules`, `DELETE
+  /moderation-rules/{id}`): macros and word-filter actions are stored per
+  account. A macro remains a literal, bounded command sequence interpreted
+  by the frontend; it never executes on the PHP host.
+- **Steam enrichment** (`POST /steam/players`): accepts at most 100 valid
+  SteamID64 values, is rate-limited per account, and calls Valve's
+  `GetPlayerSummaries` and `GetPlayerBans` endpoints with the server-side
+  `steam_api_key`. The key is never sent to the browser and returned Steam
+  data is not persisted by NiCon.
+- **Activity and notifications** (`GET /audit-log`, `GET /notifications`):
+  users see their latest relevant security/account actions and active
+  instance notices. Notification dismissal is browser-local. Admin-only
+  endpoints create/delete notices and expose the latest instance-wide
+  audit records, including the recorded request IP address.
 - **Admin** (`GET /admin/users`, `DELETE /admin/users/{id}`,
   `POST /admin/users/{id}/recovery-code`): each checks the authenticated
   caller's own `is_admin` flag before doing anything, on top of the usual
@@ -280,16 +322,19 @@ Once deployed, it serves the same JSON API the relay used to (except
 Only origins in `config.local.php`'s `allowed_origins` get
 `Access-Control-Allow-Origin` back — without that check, any other page
 open in your browser could otherwise talk to this API. On top of that,
-everything except `/healthz`, `/login`, and `/register` requires a valid
-session token, so a stolen/guessed origin alone isn't enough to reach
-anyone's account or servers.
+all account/application endpoints require a valid session token. The
+intentional public exceptions are `/healthz`, `/login`, `/register`,
+`/reset-password`, and `/contact`; the mutating public endpoints are
+rate-limited.
 
 ## Relay
 
-The relay's only remaining job is the WebSocket↔RCON bridge — everything
-else moved to the [Cloud API](#cloud-api-webspace) above. It needs the
-same MariaDB database and encryption key as that API (read-only, in this
-case: it only ever looks up a session or a server row, never writes one).
+The relay's main job is the WebSocket↔game-server bridge — everything else
+moved to the [Cloud API](#cloud-api-webspace) above. It needs the same
+MariaDB database and encryption key as that API. Live WebSocket requests
+only read sessions and server credentials, while the relay's background
+health loop performs a real authenticated connection check every five
+minutes and writes `health_*` results back to the server row.
 
 ```sh
 go build -o nicon-relay .
@@ -472,13 +517,16 @@ users).
 ## Admin panel
 
 One or more accounts can be flagged as admin — visible as an **Admin**
-link next to their username once logged in, leading to a panel (served by
-the Cloud API) listing every account on this NiCon instance (username,
-created date, server count, role), with two actions per row:
+link once logged in, leading to a panel (served by the Cloud API) listing
+every account on this NiCon instance (username, created date, server count,
+role), with two actions per row:
 **regenerate their recovery code** (if they've lost it and can't reach
 you to run `gen-recovery-code` yourself) and **delete their account**
 (same cascading deletion as the self-service path, just triggered by an
-admin instead of the account holder).
+admin instead of the account holder). The same panel can publish/delete
+instance-wide notifications and shows the newest audit entries, including
+request IP addresses. It still cannot expose another user's RCON password
+or connect through another user's server.
 
 There's no HTTP endpoint that can grant admin status — the only way to
 create the first admin (or any other) is from the command line, by
@@ -504,18 +552,21 @@ top — see [Language](#language) below for how the pair is chosen. **Both
 currently contain placeholder data** ("Max Mustermann", `kontakt@example.com`,
 etc.), clearly marked as such in the page text — replace them (in both
 languages) with your own real details before letting anyone but yourself
-register. The privacy policy documents what NiCon actually stores
-(username, bcrypt password hash, RCON server data with the password
-encrypted at rest, a session token in `sessionStorage`) and how to
-exercise the self-service deletion described above; adjust its wording if
-you fork NiCon and change what's collected.
+register. The privacy policy documents the current account/server data,
+encrypted credentials, macros and moderation rules, security audit
+records/IP addresses, contact-form delivery, browser-local preferences,
+Nitrado and Steam API flows, Nitrado-hosted game icons, Google Fonts, and
+self-service deletion behavior. Adjust it if a fork changes any data flow
+or hosting provider. It is project documentation, not a substitute for
+legal review for a specific deployment.
 
 ## Language
 
-The frontend ships in English and German today, switchable from the `EN
-· DE` dropdown in the topbar. There's no build step or server-side
-rendering involved — `docs/i18n.js` holds one flat dictionary per
-language, applied to the DOM at load (and again on switch) via
+The frontend ships in English and German today, switchable from the
+language dropdown in the topbar. There's no build step or server-side
+rendering involved — `docs/i18n.en.js` and `docs/i18n.de.js` contain the
+language dictionaries, while `docs/i18n.js` provides lookup, fallback,
+and DOM application at load (and again on switch) via
 `data-i18n`/`-placeholder`/`-aria-label`/`-title` attributes in
 `index.html`, and the choice is remembered in `localStorage` (falling back
 to the browser's own language on first visit, then English). The legal
@@ -525,10 +576,11 @@ one is a separate file per language (`imprint.html`/`imprint.de.html`,
 in-app links to them pick the file matching the active UI language
 automatically.
 
-Adding a language means adding one object to the `dict` in
-`docs/i18n.js`, one `<option>` to `#lang-select` in `index.html`, and — if
-you want the legal pages translated too — an `imprint.<code>.html` /
-`privacy.<code>.html` pair. Per-game player-list parsing
+Adding a language means adding `docs/i18n.<code>.js`, registering it in
+`I18N.LANGUAGES` in `docs/i18n.js`, loading it from `index.html`, and — if
+you want the legal pages translated too — adding corresponding
+`imprint.<code>.html`, `privacy.<code>.html`, and contact-page variants.
+Per-game player-list parsing
 (`docs/games.js`) and error messages returned by the Cloud API/relay are
 not localized yet; both stay in English regardless of the selected UI
 language.
@@ -540,7 +592,8 @@ language.
   used by the Go relay's build only; `webspace/`'s PHP has its own small
   Nitrado client (`handlers/nitrado_sync.php`) rather than sharing this
   one across languages
-- `internal/store` — MariaDB persistence: schema auto-migration, per-user
+- `internal/store` — MariaDB persistence: core schema auto-migration,
+  per-user
   CRUD for servers, and AES-256-GCM encryption of RCON passwords at rest.
   Still used by the relay's CLI subcommands (`adduser`, `gen-recovery-code`,
   `setadmin`, ...) and by `internal/relay/ws.go`'s two read-only lookups
@@ -549,10 +602,13 @@ language.
 - `internal/auth` — bcrypt password hashing, session-token issuance, and
   recovery-code generation on top of `internal/store`; same scope note as
   above
-- `internal/relay` — now just the WebSocket↔RCON bridge (`/ws/rcon`) plus
-  `/healthz`; see [Cloud API vs. relay](#cloud-api-vs-relay)
+- `internal/relay` — the WebSocket↔RCON/WebRCON/BattlEye/Palworld bridge
+  (`/ws/rcon`) plus `/healthz`; the process also runs periodic authenticated
+  server health checks; see [Cloud API vs. relay](#cloud-api-vs-relay)
 - `webspace/` — the PHP Cloud API: accounts, registration, password
-  reset, per-user server CRUD, Nitrado sync and power controls, admin panel. See
+  reset, per-user server CRUD, Nitrado sync/status/power controls, Steam
+  enrichment, macros, moderation rules, activity, notifications, contact
+  delivery, and the admin panel. See
   [Cloud API (`webspace/`)](#cloud-api-webspace)
 - `docs/` — the static frontend (plain HTML/CSS/vanilla JS, no framework,
   no build step), deployed to GitHub Pages by
@@ -580,11 +636,11 @@ export NICON_TEST_DB_DSN="nicon:<password>@tcp(localhost:3306)/nicon_test?parseT
 go test ./...
 ```
 
-`internal/relay` has only two tests left (`/healthz` + CORS) now that its
-HTTP surface shrank to that plus `/ws/rcon` — see
-[Not implemented yet](#not-implemented-yet) for what still isn't
-automated, including `webspace/`'s PHP, which has no test suite at all;
-exercise it manually with PHP's built-in server against a test database:
+The relay tests cover its HTTP health/CORS surface, metadata-host blocking,
+and the Palworld REST and BattlEye protocol clients with fake servers,
+including BattlEye framing/reassembly. The PHP API currently has no
+automated test suite; lint it and exercise it manually with PHP's built-in
+server against a test database:
 
 ```sh
 cd webspace && php -S localhost:8080 -t .
@@ -597,10 +653,9 @@ CI runs the Go suite against a MariaDB service container
 
 - Windows binary packaging for the relay (`GOOS=windows GOARCH=amd64 go
   build` works today, just not automated/released anywhere yet)
-- Any automated tests for `webspace/`'s PHP API — it mirrors the
-  behavior the old all-in-one relay's Go tests already covered, but
-  nothing exercises the PHP itself yet beyond manual testing (see
-  [Testing](#testing))
+- Any automated tests for `webspace/`'s PHP API or browser-level tests for
+  the Phase 2 command-center interactions; these are currently checked by
+  PHP linting and manual browser/API verification (see [Testing](#testing))
 - Automated tests for the WebSocket/RCON bridge itself — classic RCON and
   broadcast-forwarding have only been exercised manually, including
   `-race` runs, against hand-written mock servers. The Palworld REST and
@@ -619,6 +674,10 @@ CI runs the Go suite against a MariaDB service container
   command/API output formats rather than verified live responses — Rust's
   is the exception, confirmed against a real server; none of the others
   have been — see the file for details
+- Mute and whisper are intentionally available only where a documented
+  base-game/protocol command exists (currently Rust mute, Minecraft and
+  BattlEye whisper). NiCon does not assume optional admin plugins such as
+  uMod/ULX on other games.
 - The [admin panel](#admin-panel) covers account management (list, delete,
   regenerate a recovery code) but nothing about server data — an admin
   can't see, edit, or connect through another account's servers, same as
@@ -632,12 +691,12 @@ CI runs the Go suite against a MariaDB service container
 
 ## Roadmap
 
-Accounts, servers, and RCON credentials now live in a database reachable
-from always-on hosting, with self-service registration, password
-recovery, and a basic admin panel on top — the "nothing is stored,
-anywhere" phase is long over, and so is the "one Go binary does
-everything" phase, now that the account/server API and the RCON bridge
-can scale and fail independently. What's still ahead: player
-profiles/history, notes, shared ban lists, scheduled/triggered commands,
-and Discord webhooks, all of which build on the storage layer that's now
-in place rather than requiring another architecture change.
+Phase 1 (accounts, server storage, connectivity/health, Nitrado power
+controls, notifications, activity, and responsive console basics) and the
+current Phase 2 command-center scope (automatic player lists, contextual
+actions, classified logs, moderation rules, autocomplete/history, macros,
+Nitrado metadata/icons, and optional Steam enrichment) are implemented.
+Server-profile editing remains deliberately outside the completed Phase 1
+scope. Likely next steps are scheduled/triggered commands, durable player
+history/notes, shared ban lists or teams/roles, Discord/webhook delivery,
+and automated browser/PHP integration tests.
