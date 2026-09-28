@@ -12,18 +12,20 @@ const NICON_NITRADO_BASE_URL = 'https://api.nitrado.net';
 // — not guaranteed here.
 const NICON_NITRADO_MAX_RESPONSE_BYTES = 5 * 1024 * 1024; // 5 MiB
 
-// nicon_nitrado_get mirrors internal/nitrado/client.go's get(): calls the
-// Nitrado API with the caller-supplied token and unwraps its
-// {"status":..., "data":...} envelope. Shared hosting can make ordinary
-// outbound HTTPS calls like this one just fine — it's only raw RCON TCP
-// ports that get blocked (see the README's Hetzner section).
-function nicon_nitrado_get(string $token, string $path): array
+// nicon_nitrado_request calls the Nitrado API with the caller-supplied
+// token and unwraps its {"status":..., "data":...} envelope. Shared
+// hosting can make ordinary outbound HTTPS calls like this one just fine
+// — it's only raw RCON TCP ports that get blocked (see the README's
+// Hetzner section). GET powers sync; POST powers the explicit server
+// start/stop/restart actions below.
+function nicon_nitrado_request(string $token, string $method, string $path, array $params = []): array
 {
     $ch = curl_init(NICON_NITRADO_BASE_URL . $path);
     $body = '';
     $tooLarge = false;
-    curl_setopt_array($ch, [
-        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token],
+    $headers = ['Authorization: Bearer ' . $token];
+    $options = [
+        CURLOPT_HTTPHEADER => $headers,
         CURLOPT_TIMEOUT => 15,
         CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$body, &$tooLarge): int {
             if (strlen($body) + strlen($chunk) > NICON_NITRADO_MAX_RESPONSE_BYTES) {
@@ -33,7 +35,14 @@ function nicon_nitrado_get(string $token, string $path): array
             $body .= $chunk;
             return strlen($chunk);
         },
-    ]);
+    ];
+    if (strtoupper($method) === 'POST') {
+        $headers[] = 'Content-Type: application/x-www-form-urlencoded';
+        $options[CURLOPT_HTTPHEADER] = $headers;
+        $options[CURLOPT_POST] = true;
+        $options[CURLOPT_POSTFIELDS] = http_build_query($params);
+    }
+    curl_setopt_array($ch, $options);
     $ok = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
@@ -47,7 +56,7 @@ function nicon_nitrado_get(string $token, string $path): array
     if ($status === 401 || $status === 403) {
         throw new RuntimeException('nitrado API token is invalid or expired');
     }
-    if ($status !== 200) {
+    if ($status < 200 || $status >= 300) {
         throw new RuntimeException("unexpected status $status from $path");
     }
 
@@ -55,7 +64,18 @@ function nicon_nitrado_get(string $token, string $path): array
     if (!is_array($env) || ($env['status'] ?? '') !== 'success') {
         throw new RuntimeException("nitrado reported an error for $path");
     }
-    return $env['data'] ?? [];
+    $data = $env['data'] ?? [];
+    return is_array($data) ? $data : [];
+}
+
+function nicon_nitrado_get(string $token, string $path): array
+{
+    return nicon_nitrado_request($token, 'GET', $path);
+}
+
+function nicon_nitrado_post(string $token, string $path, array $params = []): array
+{
+    return nicon_nitrado_request($token, 'POST', $path, $params);
 }
 
 // nicon_handle_nitrado_sync upserts every RCON-capable service from
@@ -141,4 +161,72 @@ function nicon_handle_nitrado_sync(int $userId): void
     }
 
     nicon_handle_list_servers($userId);
+}
+
+// Starts, stops, or restarts one Nitrado-backed server owned by the
+// authenticated user. Start targets the currently selected game through
+// Nitrado's games/start operation; stop and restart act on the whole
+// gameserver service.
+function nicon_handle_nitrado_power(int $userId, int $serverId): void
+{
+    $req = nicon_json_body();
+    $action = strtolower((string) ($req['action'] ?? ''));
+    if (!in_array($action, ['start', 'stop', 'restart'], true)) {
+        nicon_send_error('action must be start, stop, or restart', 400);
+        return;
+    }
+
+    if (!nicon_rate_limit_allow("nitrado-power:$userId:$serverId", 10, 60)) {
+        header('Retry-After: 60');
+        nicon_send_error('too many Nitrado power requests — try again shortly', 429);
+        return;
+    }
+
+    $pdo = nicon_db();
+    $serverStmt = $pdo->prepare('SELECT name, nitrado_service_id FROM servers WHERE id = ? AND user_id = ? AND source = \'nitrado\'');
+    $serverStmt->execute([$serverId, $userId]);
+    $server = $serverStmt->fetch();
+    if (!$server || (int) ($server['nitrado_service_id'] ?? 0) <= 0) {
+        nicon_send_error('server not found', 404);
+        return;
+    }
+
+    $tokenStmt = $pdo->prepare('SELECT nitrado_token_enc FROM users WHERE id = ?');
+    $tokenStmt->execute([$userId]);
+    $encryptedToken = $tokenStmt->fetchColumn();
+    try {
+        $token = $encryptedToken ? nicon_decrypt_password($encryptedToken) : '';
+    } catch (RuntimeException $e) {
+        nicon_send_error('saved Nitrado token could not be read', 500);
+        return;
+    }
+    if ($token === '') {
+        nicon_send_error('no saved Nitrado token — sync again with a token first', 400);
+        return;
+    }
+
+    $serviceId = (int) $server['nitrado_service_id'];
+    try {
+        if ($action === 'start') {
+            $gameserverData = nicon_nitrado_get($token, "/services/$serviceId/gameservers");
+            $game = (string) ($gameserverData['gameserver']['game'] ?? '');
+            if ($game === '') {
+                throw new RuntimeException('nitrado did not report a current game to start');
+            }
+            nicon_nitrado_post($token, "/services/$serviceId/gameservers/games/start", ['game' => $game]);
+        } else {
+            nicon_nitrado_post($token, "/services/$serviceId/gameservers/$action");
+        }
+    } catch (RuntimeException $e) {
+        nicon_send_error($e->getMessage(), 502);
+        return;
+    }
+
+    $auditActions = [
+        'start' => 'nitrado_server_started',
+        'stop' => 'nitrado_server_stopped',
+        'restart' => 'nitrado_server_restarted',
+    ];
+    nicon_audit_log($userId, $auditActions[$action], null, (string) $server['name']);
+    nicon_send_json(['ok' => true, 'action' => $action]);
 }

@@ -162,6 +162,7 @@
 
         <div id="content-password" class="card password-card" hidden>
           <div class="card-title" id="password-server-name"></div>
+          <div id="password-power-actions" class="password-power-actions" hidden></div>
           <p class="card-body" data-i18n="content.passwordHint">Enter this server's RCON password to connect.</p>
           <form id="password-form" class="stacked-form">
             <input id="password-input" type="password" placeholder="RCON password" required autocomplete="off" aria-label="RCON password" data-i18n-placeholder="common.rconPassword" data-i18n-aria-label="common.rconPassword">
@@ -182,6 +183,7 @@
                   </label>
                 </div>
                 <div class="console-toolbar-actions">
+                  <button type="button" id="console-follow-btn" class="icon-btn small" data-i18n="console.followOutput" data-i18n-title="console.followOutput" title="Follow output" hidden>Follow output</button>
                   <button type="button" id="cmd-templates-btn" class="icon-btn small" data-i18n="templates.button" data-i18n-title="templates.button" title="Templates">Templates</button>
                   <button type="button" id="cmd-history-btn" class="icon-btn small" data-i18n="console.history" data-i18n-title="console.history" title="History">History</button>
                   <button type="button" id="console-copy-btn" class="icon-btn small" data-i18n="console.copy" data-i18n-title="console.copy" title="Copy">Copy</button>

@@ -52,6 +52,7 @@
   // server can be selected in the sidebar without a console entry (not
   // connected yet, or missing a saved password).
   var consoles = {};
+  var nitradoPowerPending = {};
   var selectedServerId = null;
 
   // --- element refs ---
@@ -109,6 +110,7 @@
   var emptyAddBtn = document.getElementById("empty-add-btn");
   var contentPassword = document.getElementById("content-password");
   var passwordServerName = document.getElementById("password-server-name");
+  var passwordPowerActions = document.getElementById("password-power-actions");
   var passwordForm = document.getElementById("password-form");
   var passwordInput = document.getElementById("password-input");
   var contentConsole = document.getElementById("content-console");
@@ -163,6 +165,7 @@
 
   var filterInput = document.getElementById("filter-input");
   var filterRegexToggle = document.getElementById("filter-regex-toggle");
+  var consoleFollowBtn = document.getElementById("console-follow-btn");
   var consoleCopyBtn = document.getElementById("console-copy-btn");
   var consoleClearBtn = document.getElementById("console-clear-btn");
   var cmdHistoryBtn = document.getElementById("cmd-history-btn");
@@ -465,7 +468,7 @@
 
   function disconnectAllConsoles() {
     Object.keys(consoles).forEach(function (id) {
-      if (consoles[id].socket) consoles[id].socket.close();
+      disposeConsole(consoles[id]);
     });
     consoles = {};
     selectedServerId = null;
@@ -802,7 +805,7 @@
         if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.failedToRemoveServer"));
         servers = servers.filter(function (s) { return s.id !== id; });
         if (consoles[id]) {
-          if (consoles[id].socket) consoles[id].socket.close();
+          disposeConsole(consoles[id]);
           delete consoles[id];
         }
         if (selectedServerId === id) {
@@ -1332,6 +1335,9 @@
       case "account_deleted": return I18N.t("auditLog.action_accountDeleted", { actor: actor, detail: detail });
       case "server_added": return I18N.t("auditLog.action_serverAdded", { actor: actor, detail: detail });
       case "server_deleted": return I18N.t("auditLog.action_serverDeleted", { actor: actor, detail: detail });
+      case "nitrado_server_started": return I18N.t("auditLog.action_nitradoServerStarted", { actor: actor, detail: detail });
+      case "nitrado_server_stopped": return I18N.t("auditLog.action_nitradoServerStopped", { actor: actor, detail: detail });
+      case "nitrado_server_restarted": return I18N.t("auditLog.action_nitradoServerRestarted", { actor: actor, detail: detail });
       case "admin_user_deleted": return I18N.t("auditLog.action_adminUserDeleted", { actor: actor, detail: detail });
       case "admin_recovery_code_regenerated": return I18N.t("auditLog.action_adminRecoveryCodeRegenerated", { actor: actor, target: target });
       case "admin_notification_created": return I18N.t("auditLog.action_adminNotificationCreated", { actor: actor, detail: detail });
@@ -1529,8 +1535,8 @@
     return !!(c && c.gameConnected);
   }
 
-  // Three-state status dot: red (nothing to connect with yet), yellow
-  // (ready, but not connected right now), green (a live console).
+  // Three-state status dot: hollow red (credentials still missing), solid
+  // red (offline), green (a live console).
   function serverStatusClass(server) {
     if (!server.has_password) return "status-missing";
     return isConnected(server.id) ? "status-connected" : "status-ready";
@@ -1759,6 +1765,74 @@
 
   // --- content pane rendering ---
 
+  function nitradoActionLabel(action) {
+    if (action === "start") return I18N.t("content.nitradoStart");
+    if (action === "stop") return I18N.t("content.nitradoStop");
+    return I18N.t("content.nitradoRestart");
+  }
+
+  function nitradoActionConfirm(action) {
+    if (action === "start") return I18N.t("content.nitradoStartConfirm");
+    if (action === "stop") return I18N.t("content.nitradoStopConfirm");
+    return I18N.t("content.nitradoRestartConfirm");
+  }
+
+  function appendNitradoPowerButtons(container, server, includeLabel) {
+    if (server.source !== "nitrado") return;
+    if (includeLabel) {
+      var label = document.createElement("span");
+      label.className = "nitrado-power-label";
+      label.textContent = I18N.t("content.nitradoPower");
+      container.appendChild(label);
+    }
+    ["start", "stop", "restart"].forEach(function (action) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn-secondary nitrado-power-btn";
+      button.dataset.nitradoAction = action;
+      button.textContent = nitradoActionLabel(action);
+      button.disabled = !!nitradoPowerPending[server.id];
+      button.addEventListener("click", function () {
+        requestNitradoPower(server, action);
+      });
+      container.appendChild(button);
+    });
+  }
+
+  function requestNitradoPower(server, action) {
+    if (nitradoPowerPending[server.id]) return;
+    showConfirm(nitradoActionConfirm(action)).then(function (confirmed) {
+      if (!confirmed || nitradoPowerPending[server.id]) return;
+      nitradoPowerPending[server.id] = true;
+      renderContent();
+
+      apiFetch("/api/servers/" + server.id + "/nitrado-power", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: action }),
+      })
+        .then(function (r) {
+          if (r.ok) return r.json();
+          return r.text().then(function (body) {
+            throw new Error(apiErrorMessage(body) || ("HTTP " + r.status));
+          });
+        })
+        .then(function () {
+          if (action === "stop" && consoles[server.id]) {
+            disconnectConsole(consoles[server.id]);
+          }
+          showToast(I18N.t("content.nitradoActionSent", { action: nitradoActionLabel(action) }), "success");
+        })
+        .catch(function (err) {
+          showToast(I18N.t("errors.nitradoPowerFailed", { message: err.message || "unknown error" }));
+        })
+        .finally(function () {
+          delete nitradoPowerPending[server.id];
+          if (selectedServerId === server.id) renderContent();
+        });
+    });
+  }
+
   function renderContent() {
     var server = findServer(selectedServerId);
     if (!server) selectedServerId = null;
@@ -1766,6 +1840,8 @@
     contentEmpty.hidden = !!server;
     contentPassword.hidden = true;
     contentConsole.hidden = true;
+    passwordPowerActions.hidden = true;
+    passwordPowerActions.innerHTML = "";
 
     if (!server) {
       contentEmptyText.textContent = servers.length ? I18N.t("content.selectPrompt") : I18N.t("servers.emptyTitle");
@@ -1776,6 +1852,10 @@
     if (!server.has_password) {
       contentPassword.hidden = false;
       passwordServerName.textContent = server.name;
+      if (server.source === "nitrado") {
+        passwordPowerActions.hidden = false;
+        appendNitradoPowerButtons(passwordPowerActions, server, true);
+      }
       return;
     }
 
@@ -1829,8 +1909,7 @@
       toggleBtn.textContent = I18N.t("content.disconnect");
       toggleBtn.addEventListener("click", function () {
         var c = consoles[server.id];
-        if (c && c.socket) c.socket.close();
-        if (c) markDisconnected(c);
+        if (c) disconnectConsole(c);
       });
     } else {
       toggleBtn.textContent = I18N.t("servers.connect");
@@ -1841,6 +1920,8 @@
       });
     }
     actions.appendChild(toggleBtn);
+
+    appendNitradoPowerButtons(actions, server, false);
 
     var removeBtn = document.createElement("button");
     removeBtn.type = "button";
@@ -1865,6 +1946,9 @@
   // log history survives a manual disconnect — reconnecting reuses the
   // same entry and appends to the same log instead of starting fresh.
 
+  var RECONNECT_BASE_DELAY_MS = 1000;
+  var RECONNECT_MAX_DELAY_MS = 30000;
+
   function ensureConsole(server) {
     var c = consoles[server.id];
     if (!c) {
@@ -1877,20 +1961,94 @@
         gameConnected: false,
         gameKey: window.NICON_GUESS_GAME(server.game),
         lastParsed: null,
+        manualDisconnect: false,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+        followTail: true,
+        scrollTop: 0,
       };
       consoles[server.id] = c;
     }
-    c.gameConnected = false; // a fresh WebSocket means a fresh handshake either way
-    appendConsoleLine(c, "system", I18N.t("console.connecting"));
+    c.server = server;
+    c.manualDisconnect = false;
+    c.reconnectAttempts = 0;
+    clearConsoleReconnect(c);
+    openConsoleSocket(c);
+  }
 
-    var socket = new WebSocket(relayWsUrl() + "/ws/rcon");
+  function clearConsoleReconnect(c) {
+    if (!c.reconnectTimer) return;
+    clearTimeout(c.reconnectTimer);
+    c.reconnectTimer = null;
+  }
+
+  function disposeConsole(c) {
+    c.manualDisconnect = true;
+    clearConsoleReconnect(c);
+    var socket = c.socket;
+    c.socket = null;
+    c.authenticated = false;
+    c.gameConnected = false;
+    c.pendingPlayersRequest = false;
+    if (socket) socket.close();
+  }
+
+  function disconnectConsole(c) {
+    var wasActive = !!(c.socket || c.reconnectTimer || c.gameConnected);
+    disposeConsole(c);
+    if (wasActive) appendConsoleLine(c, "system", I18N.t("console.disconnected"));
+    markDisconnected(c);
+    refreshIfActive(c);
+  }
+
+  function isFatalConsoleError(message) {
+    return /unauthorized|must authenticate|server not found|no RCON password|invalid password|authentication failed/i.test(message || "");
+  }
+
+  function scheduleConsoleReconnect(c) {
+    if (c.manualDisconnect || c.reconnectTimer || !authToken || consoles[c.server.id] !== c) return;
+    var delay = Math.min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * Math.pow(2, c.reconnectAttempts));
+    c.reconnectAttempts += 1;
+    appendConsoleLine(c, "system", I18N.t("console.reconnectingIn", { seconds: Math.ceil(delay / 1000) }));
+    refreshIfActive(c);
+    c.reconnectTimer = setTimeout(function () {
+      c.reconnectTimer = null;
+      if (c.manualDisconnect || !authToken || consoles[c.server.id] !== c) return;
+      openConsoleSocket(c);
+    }, delay);
+  }
+
+  function openConsoleSocket(c) {
+    if (c.manualDisconnect || !authToken || consoles[c.server.id] !== c) return;
+    clearConsoleReconnect(c);
+
+    var previousSocket = c.socket;
+    c.socket = null;
+    if (previousSocket) previousSocket.close();
+    c.authenticated = false;
+    c.gameConnected = false;
+    c.pendingPlayersRequest = false;
+    appendConsoleLine(c, "system", I18N.t("console.connecting"));
+    refreshIfActive(c);
+
+    var socket;
+    try {
+      socket = new WebSocket(relayWsUrl() + "/ws/rcon");
+    } catch (err) {
+      appendConsoleLine(c, "error", I18N.t("console.relayConnectionFailed", { url: relayHttpUrl() }));
+      recordHealthError(c.server.id, err.message || I18N.t("console.relayConnectionFailed", { url: relayHttpUrl() }));
+      scheduleConsoleReconnect(c);
+      return;
+    }
     c.socket = socket;
 
     socket.addEventListener("open", function () {
+      if (c.socket !== socket) return;
       socket.send(JSON.stringify({ type: "auth", token: authToken }));
     });
 
     socket.addEventListener("message", function (event) {
+      if (c.socket !== socket) return;
       var msg;
       try {
         msg = JSON.parse(event.data);
@@ -1902,49 +2060,62 @@
 
       if (msg.type === "authenticated") {
         c.authenticated = true;
-        socket.send(JSON.stringify({ type: "connect", server_id: server.id }));
+        socket.send(JSON.stringify({ type: "connect", server_id: c.server.id }));
       } else if (msg.type === "connected") {
         c.gameConnected = true;
+        c.reconnectAttempts = 0;
         appendConsoleLine(c, "system", I18N.t("console.connected"));
-        recordConnected(server.id);
+        recordConnected(c.server.id);
         renderServers();
-        if (selectedServerId === server.id) startPlayersAutoRefresh(c);
+        if (selectedServerId === c.server.id) startPlayersAutoRefresh(c);
       } else if (msg.type === "response") {
         appendConsoleLine(c, "response", msg.output && msg.output.length ? msg.output : I18N.t("console.noOutput"));
         if (c.pendingPlayersRequest) {
           c.pendingPlayersRequest = false;
-          if (c.playersRequestSentAt) recordLatency(server.id, Date.now() - c.playersRequestSentAt);
+          if (c.playersRequestSentAt) recordLatency(c.server.id, Date.now() - c.playersRequestSentAt);
           var game = window.NICON_GAMES[c.gameKey];
           var parsed = game.parse(msg.output || "");
           c.lastParsed = parsed
             ? { ok: true, summary: parsed.summary, columns: parsed.columns, players: parsed.players }
             : { ok: false };
-          if (selectedServerId === server.id) renderPlayersPanel(c);
+          if (selectedServerId === c.server.id) renderPlayersPanel(c);
         }
       } else if (msg.type === "broadcast") {
         // WebRCON servers (Rust) push chat/log lines unsolicited.
         appendConsoleLine(c, "broadcast", msg.output || "");
       } else if (msg.type === "error") {
-        appendConsoleLine(c, "error", msg.message);
+        var message = msg.message || "unknown relay error";
+        appendConsoleLine(c, "error", message);
         c.pendingPlayersRequest = false;
-        recordHealthError(server.id, msg.message);
+        recordHealthError(c.server.id, message);
         // The relay tears down the game connection on any command error
         // (not just connect-time failures), so this always means "no
         // longer connected" — see the isConnected()/markDisconnected()
         // comment above.
+        if (message === "unauthorized") {
+          sessionExpired();
+          return;
+        }
+        if (isFatalConsoleError(message)) c.manualDisconnect = true;
         markDisconnected(c);
+        socket.close(); // close event schedules a retry for recoverable failures
       }
       refreshIfActive(c);
     });
 
     socket.addEventListener("close", function () {
+      if (c.socket !== socket) return;
+      c.socket = null;
+      c.authenticated = false;
       appendConsoleLine(c, "system", I18N.t("console.disconnected"));
       markDisconnected(c);
+      scheduleConsoleReconnect(c);
     });
 
     socket.addEventListener("error", function () {
+      if (c.socket !== socket) return;
       appendConsoleLine(c, "error", I18N.t("console.relayConnectionFailed", { url: relayHttpUrl() }));
-      recordHealthError(server.id, I18N.t("console.relayConnectionFailed", { url: relayHttpUrl() }));
+      recordHealthError(c.server.id, I18N.t("console.relayConnectionFailed", { url: relayHttpUrl() }));
       refreshIfActive(c);
     });
   }
@@ -1991,6 +2162,12 @@
 
   // --- console log: filtering + highlighting ---
 
+  var renderingConsoleLog = false;
+
+  function updateConsoleFollowButton(c) {
+    consoleFollowBtn.hidden = !c || c.followTail !== false;
+  }
+
   function activeFilterRegex() {
     var text = filterInput.value.trim();
     if (!text) return null;
@@ -2006,8 +2183,14 @@
   }
 
   function renderLog(c) {
+    var previousScrollTop = c ? c.scrollTop : 0;
+    renderingConsoleLog = true;
     log.innerHTML = "";
-    if (!c) return;
+    if (!c) {
+      renderingConsoleLog = false;
+      updateConsoleFollowButton(null);
+      return;
+    }
     var regex = activeFilterRegex();
 
     c.lines.forEach(function (line) {
@@ -2017,7 +2200,14 @@
       appendHighlighted(div, line.text, regex);
       log.appendChild(div);
     });
-    log.scrollTop = log.scrollHeight;
+    if (c.followTail !== false) {
+      log.scrollTop = log.scrollHeight;
+    } else {
+      log.scrollTop = previousScrollTop;
+    }
+    c.scrollTop = log.scrollTop;
+    renderingConsoleLog = false;
+    updateConsoleFollowButton(c);
   }
 
   // Appends text to container as plain text, except for regex matches,
@@ -2052,6 +2242,22 @@
 
   filterRegexToggle.addEventListener("change", function () {
     renderLog(consoles[selectedServerId]);
+  });
+
+  log.addEventListener("scroll", function () {
+    if (renderingConsoleLog) return;
+    var c = consoles[selectedServerId];
+    if (!c) return;
+    c.scrollTop = log.scrollTop;
+    c.followTail = log.scrollHeight - log.scrollTop - log.clientHeight <= 24;
+    updateConsoleFollowButton(c);
+  });
+
+  consoleFollowBtn.addEventListener("click", function () {
+    var c = consoles[selectedServerId];
+    if (!c) return;
+    c.followTail = true;
+    renderLog(c);
   });
 
   consoleCopyBtn.addEventListener("click", function () {

@@ -62,7 +62,9 @@ prototype.
 5. Click **Connect** on a server to open its console — this is the one
    action that needs the **relay** running. Click **Players** there for a
    structured player list, for the games NiCon knows how to parse (see
-   [games.js](docs/games.js)).
+   [games.js](docs/games.js)). Nitrado servers also expose **Start**,
+   **Stop**, and **Restart** controls; those go through the always-on Cloud
+   API and therefore don't require the RCON relay.
 
 Most games speak classic Source RCON, but **Rust doesn't** — it uses its
 own WebSocket-based "WebRCON" protocol instead. NiCon detects this
@@ -71,11 +73,14 @@ Rust server, pick "Rust WebRCON" in the protocol dropdown when adding it.
 
 You can have several consoles open at once — connecting to another server
 doesn't disconnect the current one, it opens another tab in the console
-view. The filter box above the log accepts a regex: matching lines stay,
-everything else is hidden, and the match itself is highlighted. For
-WebRCON (Rust) servers, chat/log lines the game pushes on its own (not in
-response to a command) show up live in the console, styled differently
-from command output.
+view. Dropped connections reconnect automatically with exponential
+backoff; clicking **Disconnect** still keeps a console deliberately
+offline. The filter box above the log accepts a regex: matching lines
+stay, everything else is hidden, and the match itself is highlighted.
+Scrolling upward pauses automatic tail-following until you return to the
+bottom or click **Follow output**. For WebRCON (Rust) servers, chat/log
+lines the game pushes on its own (not in response to a command) show up
+live in the console, styled differently from command output.
 
 ## Cloud API vs. relay
 
@@ -216,7 +221,8 @@ Once deployed, it serves the same JSON API the relay used to (except
   (`ON DELETE CASCADE`), so there's nothing left to clean up separately.
 - **Per-user server storage** (`GET/POST /servers`,
   `PUT /servers/{id}/password`, `DELETE /servers/{id}`,
-  `POST /nitrado/sync`): every query is scoped to the authenticated user's
+  `POST /servers/{id}/nitrado-power`, `POST /nitrado/sync`): every query
+  is scoped to the authenticated user's
   `user_id` in SQL — that's the actual access control, not a UI filter.
   Asking for another user's server by ID gets the same "not found"
   response as asking for one that doesn't exist at all, so the API
@@ -224,7 +230,8 @@ Once deployed, it serves the same JSON API the relay used to (except
   AES-256-GCM before being written to the `servers` table and are never
   sent back to the browser once set (`has_password: true/false` only) —
   the frontend only ever supplies a new one to overwrite the old one.
-- **Nitrado API proxy**, as part of `/nitrado/sync`: takes
+- **Nitrado API proxy**, used by `/nitrado/sync` and the power endpoint:
+  sync takes
   `{"token": "..."}`, calls the Nitrado API server-side over HTTPS (an
   ordinary outbound web request, which shared hosting handles fine — see
   [Cloud API vs. relay](#cloud-api-vs-relay) above for what it *can't*
@@ -237,7 +244,10 @@ Once deployed, it serves the same JSON API the relay used to (except
   encrypted (overwriting whatever was saved before) and reused on any
   later sync that omits one — see [User accounts](#user-accounts) and
   `DELETE /account/nitrado-token` for removing a saved token without
-  deleting the account.
+  deleting the account. `POST /servers/{id}/nitrado-power` accepts
+  `start`, `stop`, or `restart`, is limited to owned Nitrado-backed
+  servers, is rate-limited to ten requests per minute per user/server,
+  and records successful actions in the audit log.
 - **Admin** (`GET /admin/users`, `DELETE /admin/users/{id}`,
   `POST /admin/users/{id}/recovery-code`): each checks the authenticated
   caller's own `is_admin` flag before doing anything, on top of the usual
@@ -530,7 +540,7 @@ language.
 - `internal/relay` — now just the WebSocket↔RCON bridge (`/ws/rcon`) plus
   `/healthz`; see [Cloud API vs. relay](#cloud-api-vs-relay)
 - `webspace/` — the PHP Cloud API: accounts, registration, password
-  reset, per-user server CRUD, Nitrado sync, admin panel. See
+  reset, per-user server CRUD, Nitrado sync and power controls, admin panel. See
   [Cloud API (`webspace/`)](#cloud-api-webspace)
 - `docs/` — the static frontend (plain HTML/CSS/vanilla JS, no framework,
   no build step), deployed to GitHub Pages by
