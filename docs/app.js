@@ -1915,11 +1915,10 @@
       var items = [
         [I18N.t("phase2.status"), data.status || "—"],
         [I18N.t("console.players"), (data.players || 0) + " / " + (data.players_max || 0)],
-        [I18N.t("phase2.memory"), data.memory_mb ? data.memory_mb + " MB" : "—"],
-        ["CPU", data.cpu_percent != null ? Math.round(data.cpu_percent) + "%" : "—"],
         [I18N.t("phase2.map"), data.map || "—"],
         [I18N.t("phase2.version"), data.version || "—"],
       ];
+      if (data.memory_mb != null) items.splice(2, 0, [I18N.t("phase2.memory"), data.memory_mb ? data.memory_mb + " MB" : "—"]);
       items.forEach(function (item) {
         var box = document.createElement("div"); box.className = "resource-item";
         var label = document.createElement("span"); label.textContent = item[0];

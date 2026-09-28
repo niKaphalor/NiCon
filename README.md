@@ -86,8 +86,9 @@ The command center also includes shell-style command history and
 autocomplete, saved multi-step macros (`@wait 2` inserts a pause),
 right-click player actions, account-wide word filters with optional
 automatic mute/kick, and an adjustable balanced/wide/stacked layout.
-Nitrado servers show their current resource/status data and the official
-game icon returned by Nitrado's games catalog. If a Steam Web API key is
+Nitrado servers show their current status data, memory allocation for
+Minecraft/Hytale where Nitrado supplies it, and the official game icon
+returned by Nitrado's games catalog. If a Steam Web API key is
 configured, SteamID64 entries in player lists are enriched with public
 profile, account-age, VAC, community-ban, and game-ban information.
 

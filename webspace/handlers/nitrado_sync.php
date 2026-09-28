@@ -92,9 +92,18 @@ function nicon_nitrado_icon_url(array $data, string $gameCode): ?string
                 if ($found !== null) return;
             }
         }
-        $code = strtolower((string) ($node['game'] ?? $node['game_code'] ?? $node['id'] ?? $node['short'] ?? $node['folder_short'] ?? ''));
+        $code = strtolower((string) ($node['game'] ?? $node['game_code'] ?? $node['portlist_short'] ?? $node['short'] ?? $node['folder_short'] ?? $node['id'] ?? ''));
         if ($code !== '' && $code === strtolower($gameCode)) {
+            if (!empty($node['icons']) && is_array($node['icons'])) {
+                foreach (['x64', 'x120', 'x32', 'x256', 'x16'] as $size) {
+                    if (!empty($node['icons'][$size]) && is_string($node['icons'][$size])) {
+                        $found = $node['icons'][$size];
+                        break;
+                    }
+                }
+            }
             foreach (['icon_url', 'icon', 'image_url', 'image', 'logo'] as $key) {
+                if ($found !== null) break;
                 $candidate = $node[$key] ?? null;
                 if (is_array($candidate)) $candidate = $candidate['url'] ?? $candidate['src'] ?? null;
                 if (!empty($candidate) && is_string($candidate)) { $found = $candidate; break; }
@@ -284,9 +293,10 @@ function nicon_handle_nitrado_power(int $userId, int $serverId): void
 function nicon_handle_nitrado_status(int $userId, int $serverId): void
 {
     $pdo = nicon_db();
-    $stmt = $pdo->prepare('SELECT nitrado_service_id FROM servers WHERE id = ? AND user_id = ? AND source = \'nitrado\'');
+    $stmt = $pdo->prepare('SELECT nitrado_service_id, game, nitrado_game_code FROM servers WHERE id = ? AND user_id = ? AND source = \'nitrado\'');
     $stmt->execute([$serverId, $userId]);
-    $serviceId = (int) $stmt->fetchColumn();
+    $server = $stmt->fetch();
+    $serviceId = (int) ($server['nitrado_service_id'] ?? 0);
     if ($serviceId <= 0) { nicon_send_error('server not found', 404); return; }
     try {
         $token = nicon_nitrado_saved_token($pdo, $userId);
@@ -296,22 +306,15 @@ function nicon_handle_nitrado_status(int $userId, int $serverId): void
         $query = $gs['query'] ?? [];
         $result = [
             'status' => (string) ($gs['status'] ?? 'unknown'),
-            'memory_mb' => (int) ($gs['memory_mb'] ?? $gs['memory'] ?? 0),
             'players' => (int) ($query['player_current'] ?? 0),
             'players_max' => (int) ($query['player_max'] ?? $gs['slots'] ?? 0),
             'map' => (string) ($query['map'] ?? ''),
             'version' => (string) ($query['version'] ?? ''),
         ];
-        try {
-            $stats = nicon_nitrado_get($token, "/services/$serviceId/gameservers/stats?hours=1");
-            foreach (['cpuUsage' => 'cpu_percent', 'memoryUsage' => 'memory_percent'] as $source => $target) {
-                $values = $stats[$source] ?? [];
-                if (is_array($values) && $values) {
-                    $last = end($values);
-                    $result[$target] = is_array($last) ? (float) end($last) : (float) $last;
-                }
-            }
-        } catch (RuntimeException $e) { /* detail response remains useful */ }
+        $resourceGame = strtolower((string) ($server['game'] ?? '') . ' ' . (string) ($server['nitrado_game_code'] ?? ''));
+        if (str_contains($resourceGame, 'minecraft') || str_contains($resourceGame, 'hytale') || preg_match('/\bmc[a-z0-9_-]*/', $resourceGame)) {
+            $result['memory_mb'] = (int) ($gs['memory_mb'] ?? $gs['memory'] ?? 0);
+        }
         nicon_send_json($result);
     } catch (RuntimeException $e) {
         nicon_send_error($e->getMessage(), 502);
