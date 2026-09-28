@@ -175,6 +175,25 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   await login(page);
   await expect(page.locator("#supported-games-list .supported-game-header")).toHaveCount(28);
   await expect(page.locator('#supported-games-list li[aria-label="Rust"] img')).toHaveAttribute("src", /apps\/252490\/header\.jpg/);
+  const overviewLayout = await page.evaluate(() => {
+    const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
+    const panel = document.querySelector(".supported-games").getBoundingClientRect();
+    const footer = document.querySelector(".site-footer").getBoundingClientRect();
+    const cards = Array.from(document.querySelectorAll("#supported-games-list li"));
+    const columns = new Set(cards.map((card) => Math.round(card.getBoundingClientRect().left)));
+    return {
+      sidebarWidth: sidebar.width,
+      panelRight: panel.right,
+      panelBottom: panel.bottom,
+      footerTop: footer.top,
+      columns: columns.size,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  expect(overviewLayout.sidebarWidth).toBe(286);
+  expect(overviewLayout.columns).toBeGreaterThanOrEqual(6);
+  expect(overviewLayout.panelRight).toBeLessThanOrEqual(overviewLayout.viewportWidth);
+  expect(overviewLayout.panelBottom).toBeLessThanOrEqual(overviewLayout.footerTop);
 
   await page.locator("#add-server-btn").click();
   await page.locator('[data-tab="manual"]').click();

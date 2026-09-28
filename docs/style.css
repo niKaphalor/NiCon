@@ -246,13 +246,13 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .content::before { position: absolute; inset: 0; z-index: 0; background-image: linear-gradient(180deg, rgba(16, 20, 24, .68), rgba(16, 20, 24, .94) 64%, #101418), var(--game-background-image); background-position: center top; background-repeat: no-repeat; background-size: cover; content: ""; opacity: 0; pointer-events: none; transition: opacity 180ms ease; }
 .content.has-game-background::before { opacity: 1; }
 .content > * { position: relative; z-index: 1; }
-.content-empty { display: flex; max-width: 980px; flex-direction: column; align-items: flex-start; gap: 12px; padding-top: 36px; }
+.content-empty { display: flex; width: 100%; min-width: 0; flex-direction: column; align-items: flex-start; gap: 12px; padding-top: clamp(14px, 4vh, 36px); }
 .content-empty h1 { font-size: 1.7rem; }
-.supported-games { display: flex; flex-direction: column; gap: 9px; margin-top: 12px; padding: 18px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
-.supported-games-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
-.supported-games-list li { position: relative; min-height: 90px; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-sunken); color: var(--color-text-soft); }
+.supported-games { display: flex; width: 100%; max-height: calc(100vh - 250px); max-height: calc(100dvh - 250px); min-height: 0; flex-direction: column; gap: 9px; margin-top: 12px; padding: 18px; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
+.supported-games-list { display: grid; min-height: 0; grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr)); gap: 10px; margin: 0; overflow-y: auto; padding: 0 4px 0 0; list-style: none; scrollbar-gutter: stable; }
+.supported-games-list li { position: relative; min-height: 64px; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-sunken); color: var(--color-text-soft); }
 .supported-game-header { display: block; width: 100%; aspect-ratio: 460 / 215; object-fit: cover; }
-.supported-game-fallback { display: flex; min-height: 90px; align-items: center; justify-content: center; padding: 12px; font-weight: 650; text-align: center; }
+.supported-game-fallback { display: flex; min-height: 64px; align-items: center; justify-content: center; padding: 12px; font-weight: 650; text-align: center; }
 .supported-games-list .tag { position: absolute; right: 6px; bottom: 6px; box-shadow: 0 2px 8px rgba(0, 0, 0, .5); }
 #content-console { display: flex; flex-direction: column; gap: 20px; }
 .head { display: flex; flex-wrap: wrap; align-items: center; min-height: 48px; gap: 10px; padding-bottom: 18px; border-bottom: 1px solid var(--color-border); }
@@ -494,7 +494,6 @@ dialog::backdrop { background: rgba(7, 10, 12, 0.76); backdrop-filter: blur(3px)
   .login-box { max-width: none; }
   .app-shell { grid-template-columns: 230px minmax(0, 1fr); }
   .content { padding-inline: 20px; }
-  .supported-games-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .work, .work.layout-wide, .work.layout-stacked { grid-template-columns: 1fr; }
   .resources-card { grid-column: 1; }
   .players-card { min-width: 0; }
@@ -516,7 +515,8 @@ dialog::backdrop { background: rgba(7, 10, 12, 0.76); backdrop-filter: blur(3px)
   .search { padding: 6px 14px 10px; }
   .server-list { padding-inline: 8px; padding-bottom: 12px; }
   .content { padding: 20px 14px 72px; overflow: visible; }
-  .supported-games-list { grid-template-columns: 1fr; }
+  .supported-games { max-height: none; overflow: visible; }
+  .supported-games-list { grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr)); overflow: visible; padding-right: 0; }
   .admin-notification-row { align-items: flex-start; flex-direction: column; }
   .audit-command-result { width: 100%; }
   .head { align-items: flex-start; }
