@@ -35,6 +35,8 @@ function nicon_config(): array
         // Test-only override used by the HTTP integration suite. Production
         // deployments leave this unset and always use api.nitrado.net.
         'nitrado_api_base_url' => getenv('NICON_NITRADO_API_BASE_URL') ?: 'https://api.nitrado.net',
+        'nitrado_cache_ttl_seconds' => (int) (getenv('NICON_NITRADO_CACHE_TTL_SECONDS') ?: 45),
+        'audit_retention_days' => (int) (getenv('NICON_AUDIT_RETENTION_DAYS') ?: 180),
         'allowed_origins' => $origins ? array_map('trim', explode(',', $origins)) : [],
     ];
     return $config;

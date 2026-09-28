@@ -90,6 +90,12 @@ func websocketRoundTrip(t *testing.T, st *store.Store, token string, serverID in
 	if response.Type != "response" || response.Output != wantOutput {
 		t.Fatalf("command response = %+v, want output %q", response, wantOutput)
 	}
+	if response.UpstreamMs == nil || response.RelayOverheadMs == nil {
+		t.Fatalf("command response omitted timing instrumentation: %+v", response)
+	}
+	if *response.UpstreamMs < 0 || *response.RelayOverheadMs < 0 {
+		t.Fatalf("command response contained negative timings: %+v", response)
+	}
 }
 
 func hostPort(t *testing.T, rawURL string) (string, int) {

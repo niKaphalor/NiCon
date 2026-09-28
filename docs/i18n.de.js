@@ -17,6 +17,11 @@ window.NICON_I18N_STRINGS.de = {
     apiUnreachable: "NiCon kann die Cloud-API gerade nicht erreichen — Anmeldung, Serverliste und Kontoverwaltung funktionieren erst wieder, wenn sie erreichbar ist. Versuch es gleich noch einmal.",
     unreachable: "NiCon kann den Relay gerade nicht erreichen — Anmeldung und Serverliste funktionieren trotzdem, aber für eine Verbindung zur Server-Konsole wird er gebraucht. Versuch es gleich noch einmal.",
   },
+  pwa: {
+    install: "App installieren",
+    updateAvailable: "Eine neue NiCon-Version ist bereit.",
+    updateNow: "Jetzt aktualisieren",
+  },
   auth: {
     signIn: "Anmelden",
     noAccountYet: "Noch kein Konto?",
@@ -114,7 +119,7 @@ window.NICON_I18N_STRINGS.de = {
   health: {
     navLabel: "Zustand",
     title: "Serverzustand",
-    subhead: "Verbindungsstatus je Server in diesem Browser: wann er zuletzt online war, die Latenz der letzten Spielerlisten-Abfrage und der letzte Fehler, falls vorhanden — dazu ein automatischer Check, den der Relay selbst alle 5 Minuten durchführt (ein echter RCON-Connect), der auch dann aktuell bleibt, wenn du nie eine Konsole öffnest.",
+    subhead: "Verbindungsstatus je Server: wann er zuletzt online war, der Browser-Roundtrip der letzten Spielerlisten-Abfrage und der letzte Fehler — dazu alle 5 Minuten ein echter automatischer RCON-Connect. Relay-Overhead wird getrennt von Spiel-/Protokollzeit und Internetlatenz ausgewiesen.",
     colServer: "Server",
     colStatus: "Status",
     colLastConnected: "Zuletzt verbunden",
@@ -123,7 +128,7 @@ window.NICON_I18N_STRINGS.de = {
     colAutoCheck: "Automatischer Check",
     never: "Nie",
     noError: "Keine Fehler",
-    latencyHint: "gemessen, während die Konsole geöffnet ist",
+    latencyHint: "Browser-Roundtrip · Relay {{relay}} ms (Ziel ≤50 ms) · Spiel/Protokoll {{upstream}} ms",
     autoCheckNeverRun: "Noch nicht geprüft",
     autoCheckOk: "OK",
     autoCheckFailed: "Fehlgeschlagen",

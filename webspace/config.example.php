@@ -25,6 +25,14 @@ return [
     // the browser. Create one in Steam's Web API key administration.
     'steam_api_key' => '',
 
+    // Shared database-backed cache for Nitrado GET responses. Values are
+    // clamped to 30-60 seconds; 45 seconds balances freshness and API load.
+    'nitrado_cache_ttl_seconds' => 45,
+
+    // Security audit entries older than this are deleted when the audit log
+    // is written or viewed. The default policy is six months.
+    'audit_retention_days' => 180,
+
     // Origins allowed to call this API — the GitHub Pages URL, plus
     // localhost for local frontend development.
     'allowed_origins' => [

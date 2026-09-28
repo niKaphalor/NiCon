@@ -10,6 +10,7 @@ declare(strict_types=1);
 // to hand that to them.
 function nicon_handle_list_audit_log(int $userId): void
 {
+    nicon_audit_cleanup();
     $stmt = nicon_db()->prepare('
         SELECT a.action, a.detail, a.created_at, actor.username AS actor_username, target.username AS target_username
         FROM audit_log a
@@ -38,6 +39,7 @@ function nicon_handle_list_audit_log(int $userId): void
 // enough for that to matter in practice).
 function nicon_handle_admin_list_audit_log(int $adminId): void
 {
+    nicon_audit_cleanup();
     $stmt = nicon_db()->query('
         SELECT a.action, a.detail, a.ip_address, a.created_at, actor.username AS actor_username, target.username AS target_username
         FROM audit_log a

@@ -65,6 +65,7 @@
 
   var usernameLabel = document.getElementById("username-label");
   var logoutBtn = document.getElementById("logout-btn");
+  var pwaInstallBtn = document.getElementById("pwa-install-btn");
   var langWidget = document.getElementById("lang-widget");
   var langCurrentBtn = document.getElementById("lang-current");
   var langCurrentFlag = document.getElementById("lang-current-flag");
@@ -412,7 +413,7 @@
 
   var toastContainer = document.getElementById("toast-container");
 
-  function showToast(message, type) {
+  function showToast(message, type, action) {
     if (typeof toastContainer.showPopover === "function" && !toastContainer.matches(":popover-open")) {
       try { toastContainer.showPopover(); } catch (e) { /* already showing, or unsupported */ }
     }
@@ -424,6 +425,18 @@
     messageEl.className = "toast-message";
     messageEl.textContent = message;
     toast.appendChild(messageEl);
+
+    if (action && action.label) {
+      var actionBtn = document.createElement("button");
+      actionBtn.type = "button";
+      actionBtn.className = "toast-action";
+      actionBtn.textContent = action.label;
+      actionBtn.addEventListener("click", function () {
+        action.onClick();
+        dismiss();
+      });
+      toast.appendChild(actionBtn);
+    }
 
     var closeBtn = document.createElement("button");
     closeBtn.type = "button";
@@ -443,8 +456,73 @@
     toast.appendChild(closeBtn);
 
     toastContainer.appendChild(toast);
-    setTimeout(dismiss, 6000);
+    if (!action || !action.persistent) setTimeout(dismiss, 6000);
     return toast;
+  }
+
+  // --- PWA install and controlled updates ---
+  // The browser owns install eligibility. We only reveal the button after
+  // beforeinstallprompt, so unsupported/already-installed clients never see
+  // a dead control. A new service worker waits until the user accepts the
+  // update toast; controllerchange then reloads exactly once.
+  var deferredInstallPrompt = null;
+  window.addEventListener("beforeinstallprompt", function (event) {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    pwaInstallBtn.hidden = false;
+  });
+  window.addEventListener("appinstalled", function () {
+    deferredInstallPrompt = null;
+    pwaInstallBtn.hidden = true;
+  });
+  pwaInstallBtn.addEventListener("click", function () {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    Promise.resolve(deferredInstallPrompt.userChoice).finally(function () {
+      deferredInstallPrompt = null;
+      pwaInstallBtn.hidden = true;
+    });
+  });
+
+  var offeredPwaWorker = null;
+  var activatingPwaUpdate = false;
+  function offerPwaUpdate(worker) {
+    if (!worker || offeredPwaWorker === worker) return;
+    offeredPwaWorker = worker;
+    showToast(I18N.t("pwa.updateAvailable"), "info", {
+      label: I18N.t("pwa.updateNow"),
+      persistent: true,
+      onClick: function () {
+        activatingPwaUpdate = true;
+        worker.postMessage({ type: "SKIP_WAITING" });
+      },
+    });
+  }
+
+  function registerServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+    var reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      // clients.claim() also fires controllerchange after the very first
+      // install. Reload only when this page explicitly activated an update.
+      if (!activatingPwaUpdate || reloading) return;
+      reloading = true;
+      window.location.reload();
+    });
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(function (registration) {
+      if (registration.waiting) offerPwaUpdate(registration.waiting);
+      registration.addEventListener("updatefound", function () {
+        var worker = registration.installing;
+        if (!worker) return;
+        worker.addEventListener("statechange", function () {
+          if (worker.state === "installed" && navigator.serviceWorker.controller) offerPwaUpdate(worker);
+        });
+      });
+      setInterval(function () { registration.update(); }, 60 * 60 * 1000);
+    }).catch(function () {
+      // The app remains fully usable as a normal website if registration is
+      // unavailable (private browsing policy, old browser, or local file URL).
+    });
   }
 
   // Promise-based stand-in for window.confirm(): resolves true/false
@@ -1014,15 +1092,22 @@
       row.className = "server-row";
       row.setAttribute("aria-current", String(server.id === selectedServerId));
 
+      var content = document.createElement("span");
+      content.className = "server-row-content";
+
       var nameLine = document.createElement("span");
       nameLine.className = "name";
       if (server.game_icon_url) {
+        row.classList.add("has-game-icon");
         var gameIcon = document.createElement("img");
         gameIcon.className = "server-game-icon";
         gameIcon.src = server.game_icon_url;
         gameIcon.alt = "";
-        gameIcon.addEventListener("error", function () { gameIcon.remove(); });
-        nameLine.appendChild(gameIcon);
+        gameIcon.addEventListener("error", function () {
+          gameIcon.remove();
+          row.classList.remove("has-game-icon");
+        });
+        row.appendChild(gameIcon);
       }
       var dot = document.createElement("span");
       dot.className = "dot " + serverStatusClass(server);
@@ -1031,12 +1116,13 @@
       dot.setAttribute("aria-label", serverStatusTooltip(server));
       nameLine.appendChild(dot);
       nameLine.appendChild(document.createTextNode(server.name));
-      row.appendChild(nameLine);
+      content.appendChild(nameLine);
 
       var meta = document.createElement("span");
       meta.className = "meta";
       meta.textContent = serverMeta(server);
-      row.appendChild(meta);
+      content.appendChild(meta);
+      row.appendChild(content);
 
       row.addEventListener("click", function () { selectServer(server.id); });
       serverList.appendChild(row);
@@ -1693,8 +1779,11 @@
   // --- server health dashboard: data ---
   // Per-server connection telemetry for the Health view: the last time
   // its game connection came up, the last error seen (from the relay or
-  // the WebSocket itself), and the round-trip latency of its most recent
-  // player-list poll — the console's existing 10s auto-refresh
+  // the WebSocket itself), and the browser round-trip of its most recent
+  // player-list poll. Command responses split that total into game/protocol
+  // time and relay-local overhead, so the relay's <=50 ms objective is not
+  // confused with Internet distance or a slow game server. The console's
+  // existing 10s auto-refresh
   // (startPlayersAutoRefresh above), re-used rather than adding a new
   // relay message type just to measure this. That poll only runs for
   // whichever server's console is currently open, so latency is only
@@ -1708,7 +1797,7 @@
   // survive a page reload, though, which a plain in-memory variable
   // wouldn't.
   var HEALTH_STORAGE_KEY = "nicon_health";
-  var serverHealth = {}; // { [serverId]: { lastConnectedAt, lastError, lastErrorAt, latencyMs } }
+  var serverHealth = {}; // { [serverId]: { lastConnectedAt, lastError, lastErrorAt, latencyMs, relayOverheadMs, upstreamMs } }
 
   (function loadServerHealth() {
     try {
@@ -1750,9 +1839,11 @@
     if (!viewHealth.hidden) renderHealth();
   }
 
-  function recordLatency(serverId, ms) {
+  function recordLatency(serverId, ms, relayOverheadMs, upstreamMs) {
     var h = healthFor(serverId);
     h.latencyMs = ms;
+    h.relayOverheadMs = typeof relayOverheadMs === "number" ? relayOverheadMs : null;
+    h.upstreamMs = typeof upstreamMs === "number" ? upstreamMs : null;
     saveServerHealth();
     if (!viewHealth.hidden) renderHealth();
   }
@@ -1830,7 +1921,10 @@
         latencyTd.textContent = h.latencyMs + " ms";
         var latencyHint = document.createElement("span");
         latencyHint.className = "health-timestamp";
-        latencyHint.textContent = I18N.t("health.latencyHint");
+        latencyHint.textContent = I18N.t("health.latencyHint", {
+          relay: h.relayOverheadMs == null ? "—" : h.relayOverheadMs.toFixed(1),
+          upstream: h.upstreamMs == null ? "—" : h.upstreamMs.toFixed(1),
+        });
         latencyTd.appendChild(latencyHint);
       } else {
         latencyTd.className = "health-muted";
@@ -2290,7 +2384,7 @@
         appendConsoleLine(c, "response", msg.output && msg.output.length ? msg.output : I18N.t("console.noOutput"));
         if (c.pendingPlayersRequest) {
           c.pendingPlayersRequest = false;
-          if (c.playersRequestSentAt) recordLatency(c.server.id, Date.now() - c.playersRequestSentAt);
+          if (c.playersRequestSentAt) recordLatency(c.server.id, Date.now() - c.playersRequestSentAt, msg.relay_overhead_ms, msg.upstream_ms);
           var game = window.NICON_GAMES[c.gameKey];
           var parsed = game.parse(msg.output || "");
           c.lastParsed = parsed
@@ -3218,6 +3312,7 @@
   // --- boot ---
 
   I18N.applyStatic(document);
+  registerServiceWorker();
   renderSupportedGamesList();
   checkApi();
   checkRelay();

@@ -103,9 +103,13 @@ $logs = [];
 
 try {
     $nitradoPort = free_port();
-    [$mockProcess, $mockLog] = start_php_server($root . '/tests/php/nitrado_router.php', $nitradoPort);
+    $counterFile = tempnam(sys_get_temp_dir(), 'nicon-nitrado-count-');
+    [$mockProcess, $mockLog] = start_php_server($root . '/tests/php/nitrado_router.php', $nitradoPort, [
+        'NICON_NITRADO_MOCK_COUNTER_FILE' => $counterFile,
+    ]);
     $processes[] = $mockProcess;
     $logs[] = $mockLog;
+    $logs[] = $counterFile;
 
     $apiPort = free_port();
     $key = base64_encode(str_repeat("\x2a", 32));
@@ -196,9 +200,16 @@ try {
     [$status, $nitradoStatus] = request_json($base, 'GET', '/api/servers/' . $nitradoServer['id'] . '/nitrado-status', null, $aliceToken);
     assert_test($status === 200 && ($nitradoStatus['players'] ?? null) === 3, 'Nitrado status lookup failed');
     assert_test(!array_key_exists('memory_mb', $nitradoStatus) && !array_key_exists('cpu', $nitradoStatus), 'Rust status must not expose memory or CPU');
+    $counts = json_decode((string) file_get_contents($counterFile), true);
+    assert_test(($counts['GET /services/9001/gameservers'] ?? 0) === 1, 'Nitrado GET responses were not shared through the backend cache');
 
     [$status] = request_json($base, 'POST', '/api/servers/' . $nitradoServer['id'] . '/nitrado-power', ['action' => 'restart'], $aliceToken);
     assert_test($status === 200, 'Nitrado restart failed');
+
+    [$status] = request_json($base, 'GET', '/api/servers/' . $nitradoServer['id'] . '/nitrado-status', null, $aliceToken);
+    assert_test($status === 200, 'Nitrado status lookup after restart failed');
+    $counts = json_decode((string) file_get_contents($counterFile), true);
+    assert_test(($counts['GET /services/9001/gameservers'] ?? 0) === 2, 'Nitrado mutation did not invalidate the backend cache');
 
     [$status, $editedNitrado] = request_json($base, 'PUT', '/api/servers/' . $nitradoServer['id'], [
         'name' => 'Temporarily edited Nitrado server',
@@ -210,11 +221,20 @@ try {
     assert_test($status === 200 && ($editedNitrado['source'] ?? '') === 'nitrado', 'Nitrado profile update failed');
     assert_test(($editedNitrado['game_icon_url'] ?? null) === null, 'changing a Nitrado game must clear its now-stale icon');
 
+    assert_test((int) $pdo->query('SELECT COUNT(*) FROM nitrado_cache')->fetchColumn() > 0, 'expected a cached Nitrado response before credential deletion');
+    [$status] = request_json($base, 'DELETE', '/api/account/nitrado-token', null, $aliceToken);
+    assert_test($status === 204, 'Nitrado token deletion failed');
+    assert_test((int) $pdo->query('SELECT COUNT(*) FROM nitrado_cache')->fetchColumn() === 0, 'deleting a Nitrado token did not invalidate its cache');
+
+    $pdo->prepare("INSERT INTO audit_log (user_id, action, detail, created_at) VALUES (?, 'expired_test_entry', 'old', DATE_SUB(UTC_TIMESTAMP(), INTERVAL 181 DAY))")
+        ->execute([$createdUsers[0]]);
     [$status, $audit] = request_json($base, 'GET', '/api/audit-log', null, $aliceToken);
     $actions = array_column($audit ?? [], 'action');
     assert_test($status === 200 && in_array('server_updated', $actions, true), 'server update audit entry missing');
     assert_test(in_array('server_password_changed', $actions, true), 'password update audit entry missing');
     assert_test(in_array('nitrado_server_restarted', $actions, true), 'Nitrado power audit entry missing');
+    assert_test(!in_array('expired_test_entry', $actions, true), 'expired audit entry was not removed');
+    assert_test((int) $pdo->query("SELECT COUNT(*) FROM audit_log WHERE action = 'expired_test_entry'")->fetchColumn() === 0, 'expired audit entry remained in the database');
 
     fwrite(STDOUT, "PASS: PHP API integration suite\n");
 } finally {

@@ -140,7 +140,7 @@ async function installBackend(page, initialServers = []) {
         } else if (message.command === "list") {
           output = "There are 1 of a max of 20 players online: Steve";
         }
-        socket.send(JSON.stringify({ type: "response", output }));
+        socket.send(JSON.stringify({ type: "response", output, upstream_ms: 5.2, relay_overhead_ms: 0.8 }));
       }
     });
   });
@@ -188,6 +188,9 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   const nitradoRow = page.locator(".server-row", { hasText: "Nitrado Rust" });
   await expect(nitradoRow).toBeVisible();
   await expect(nitradoRow.locator(".server-game-icon")).toHaveAttribute("src", "https://assets.nitrado.net/rust-64.png");
+  const rowBox = await nitradoRow.boundingBox();
+  const iconBox = await nitradoRow.locator(".server-game-icon").boundingBox();
+  expect(iconBox.height).toBeGreaterThanOrEqual(rowBox.height - 12);
 });
 
 test("two consoles stay connected and player actions reach the selected server", async ({ page }) => {
@@ -211,6 +214,8 @@ test("two consoles stay connected and player actions reach the selected server",
   await page.locator("#cmd-input").fill("status");
   await page.locator("#cmd-form button[type=submit]").click();
   await expect.poll(() => state.commands).toContainEqual({ serverId: 1, command: "status" });
+  await page.locator("#nav-health-btn").click();
+  await expect(page.locator("#health-body tr", { hasText: "Rust Alpha" })).toContainText("relay 0.8 ms");
 });
 
 test("macros and moderation rules execute through the live console", async ({ page }) => {
@@ -239,4 +244,54 @@ test("macros and moderation rules execute through the live console", async ({ pa
   const rustSocket = state.sockets.find((connection) => connection.serverId === 1);
   rustSocket.socket.send(JSON.stringify({ type: "broadcast", output: "Alice: badword" }));
   await expect.poll(() => state.commands).toContainEqual({ serverId: 1, command: "kick 76561198000112233" });
+});
+
+test("PWA is installable and its app shell works offline", async ({ page, context }) => {
+  const googleFontRequests = [];
+  page.on("request", (request) => {
+    if (/fonts\.(googleapis|gstatic)\.com/.test(request.url())) googleFontRequests.push(request.url());
+  });
+  await installBackend(page, []);
+  await page.goto("/index.html");
+  expect(googleFontRequests).toEqual([]);
+
+  const manifest = await page.evaluate(async () => fetch("site.webmanifest").then((response) => response.json()));
+  expect(manifest).toMatchObject({
+    name: "NiCon",
+    short_name: "NiCon",
+    id: "./",
+    start_url: "./index.html",
+    scope: "./",
+    display: "standalone",
+    prefer_related_applications: false,
+  });
+  expect(manifest.icons).toEqual(expect.arrayContaining([
+    expect.objectContaining({ sizes: "192x192" }),
+    expect.objectContaining({ sizes: "512x512" }),
+  ]));
+
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller.scriptURL)).toContain("/sw.js");
+  await expect.poll(() => page.evaluate(() => document.fonts.check('16px "Inter"'))).toBe(true);
+  const devtools = await context.newCDPSession(page);
+  const installability = await devtools.send("Page.getInstallabilityErrors");
+  expect(installability.installabilityErrors).toEqual([]);
+  await devtools.detach();
+
+  await page.evaluate(() => {
+    const event = new Event("beforeinstallprompt");
+    Object.defineProperty(event, "prompt", { value: () => { window.__niconInstallPrompted = true; } });
+    Object.defineProperty(event, "userChoice", { value: Promise.resolve({ outcome: "accepted" }) });
+    window.dispatchEvent(event);
+  });
+  await expect(page.locator("#pwa-install-btn")).toBeVisible();
+  await page.locator("#pwa-install-btn").click();
+  await expect.poll(() => page.evaluate(() => window.__niconInstallPrompted)).toBe(true);
+
+  await context.setOffline(true);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page).toHaveTitle("NiCon");
+  await expect(page.locator("#view-login")).toBeVisible();
+  await context.setOffline(false);
 });

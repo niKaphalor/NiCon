@@ -51,6 +51,13 @@ type wsMessage struct {
 	Password string `json:"password,omitempty"`
 	Protocol string `json:"protocol,omitempty"`
 	OK       bool   `json:"ok,omitempty"`
+
+	// Command responses expose two separate timings. UpstreamMs is time
+	// blocked inside the game protocol's Execute call. RelayOverheadMs is
+	// local relay work around that call, measured from decoded command to
+	// the response hand-off and excluding browser/network RTT.
+	UpstreamMs      *float64 `json:"upstream_ms,omitempty"`
+	RelayOverheadMs *float64 `json:"relay_overhead_ms,omitempty"`
 }
 
 // gameConn abstracts over the RCON transports NiCon speaks: classic
@@ -219,6 +226,8 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	var gc gameConn
+	var connectedServerID int64
+	var connectedProtocol string
 	var stopBroadcast func()
 	disconnect := func() {
 		if stopBroadcast != nil {
@@ -229,6 +238,8 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 			gc.Close()
 			gc = nil
 		}
+		connectedServerID = 0
+		connectedProtocol = ""
 	}
 	defer disconnect()
 
@@ -288,6 +299,8 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			gc = newConn
+			connectedServerID = srv.ID
+			connectedProtocol = srv.Protocol
 			_ = writeJSON(wsMessage{Type: "connected"})
 
 			// WebRCON (Rust) and BattlEye (Arma 3, DayZ) both push
@@ -333,6 +346,7 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 			_ = writeJSON(wsMessage{Type: "test_result", OK: true})
 
 		case "command":
+			commandStarted := time.Now()
 			if gc == nil {
 				_ = writeJSON(wsMessage{Type: "error", Message: "not connected"})
 				continue
@@ -341,13 +355,22 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 				_ = writeJSON(wsMessage{Type: "error", Message: fmt.Sprintf("command too long (max %d characters)", maxCommandLength)})
 				continue
 			}
+			upstreamStarted := time.Now()
 			output, execErr := gc.Execute(msg.Command)
+			upstreamDuration := time.Since(upstreamStarted)
+			relayOverhead := time.Since(commandStarted) - upstreamDuration
+			upstreamMs := float64(upstreamDuration.Microseconds()) / 1000
+			relayOverheadMs := float64(relayOverhead.Microseconds()) / 1000
+			rel.log.Printf(
+				"command timing server_id=%d protocol=%s relay_overhead_ms=%.3f upstream_ms=%.3f ok=%t",
+				connectedServerID, connectedProtocol, relayOverheadMs, upstreamMs, execErr == nil,
+			)
 			if execErr != nil {
-				_ = writeJSON(wsMessage{Type: "error", Message: execErr.Error()})
+				_ = writeJSON(wsMessage{Type: "error", Message: execErr.Error(), UpstreamMs: &upstreamMs, RelayOverheadMs: &relayOverheadMs})
 				disconnect()
 				continue
 			}
-			_ = writeJSON(wsMessage{Type: "response", Output: output})
+			_ = writeJSON(wsMessage{Type: "response", Output: output, UpstreamMs: &upstreamMs, RelayOverheadMs: &relayOverheadMs})
 
 		default:
 			_ = writeJSON(wsMessage{Type: "error", Message: "unknown message type: " + msg.Type})

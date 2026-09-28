@@ -135,7 +135,8 @@ CREATE TABLE IF NOT EXISTS moderation_rules (
 -- account should not erase the record that it (or an admin, on its
 -- behalf) did something — that's the opposite of what an audit log is
 -- for. detail is kept short and deliberately never holds a password,
--- token, or recovery code.
+-- token, or recovery code. lib/audit.php applies the configured retention
+-- policy (180 days by default) whenever this log is written or viewed.
 CREATE TABLE IF NOT EXISTS audit_log (
 	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 	user_id INT UNSIGNED NULL,
@@ -147,4 +148,18 @@ CREATE TABLE IF NOT EXISTS audit_log (
 	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
 	FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL,
 	INDEX idx_audit_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Short-lived, process-independent Nitrado GET cache. The token itself is
+-- never stored here: token_hash is an HMAC scoped with the installation's
+-- encryption key, while request_key identifies only the base URL + path.
+-- Responses expire after 30-60 seconds (45 by default) and expired rows are
+-- deleted whenever a new value is written.
+CREATE TABLE IF NOT EXISTS nitrado_cache (
+	token_hash CHAR(64) NOT NULL,
+	request_key CHAR(64) NOT NULL,
+	response_json MEDIUMTEXT NOT NULL,
+	expires_at DATETIME NOT NULL,
+	PRIMARY KEY (token_hash, request_key),
+	INDEX idx_nitrado_cache_expires (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -122,6 +122,12 @@ Settings contains account/security controls, recent account activity, and
 Nitrado-token removal. Admins additionally get account management,
 instance-wide notifications, and the latest audit entries.
 
+On browsers that expose PWA installation, **Install app** appears in the
+topbar. The service worker caches only the versioned static app shell for an
+offline startup; API responses and console traffic are never cached. A newly
+deployed worker waits until NiCon offers **Update now**, then activates and
+reloads once, so code is not swapped underneath an active console session.
+
 ## Cloud API vs. relay
 
 NiCon used to be one Go binary doing everything. It's now split in two,
@@ -192,7 +198,8 @@ to disclose even without it).
 the encryption key, never commit it. `schema.sql` covers the same tables
 `internal/store` creates automatically, plus a few PHP-only additions
 (`rate_limits`, `notifications`, `command_templates`, `moderation_rules`,
-`audit_log`, and a `nitrado_token_enc` column on `users`) that the Go
+`audit_log`, the short-lived shared `nitrado_cache`, and a
+`nitrado_token_enc` column on `users`) that the Go
 relay's own auto-migration doesn't know about and never creates. Run it
 once regardless of which side connects to this
 database first — every statement in it is safe to run again later,
@@ -291,6 +298,13 @@ Once deployed, it serves the same JSON API the relay used to (except
   `start`, `stop`, or `restart`, is limited to owned Nitrado-backed
   servers, is rate-limited to ten requests per minute per user/server,
   and records successful actions in the audit log.
+  Nitrado GET responses use a database-backed cache shared by every PHP
+  worker. It is scoped by a keyed token hash plus request path, defaults to
+  45 seconds, is clamped to 30-60 seconds, and is invalidated immediately
+  after a successful start/stop/restart, token replacement/removal, or
+  account deletion. Set
+  `nitrado_cache_ttl_seconds` in `config.local.php` to select another value
+  in that range.
 - **Command center data** (`GET/POST /command-templates`, `DELETE
   /command-templates/{id}`, `GET/POST /moderation-rules`, `DELETE
   /moderation-rules/{id}`): macros and word-filter actions are stored per
@@ -305,7 +319,10 @@ Once deployed, it serves the same JSON API the relay used to (except
   users see their latest relevant security/account actions and active
   instance notices. Notification dismissal is browser-local. Admin-only
   endpoints create/delete notices and expose the latest instance-wide
-  audit records, including the recorded request IP address.
+  audit records, including the recorded request IP address. Entries are
+  retained for 180 days by default and deleted on the next audit write/read
+  after expiry; `audit_retention_days` can set a policy between 30 and 3650
+  days.
 - **Admin** (`GET /admin/users`, `DELETE /admin/users/{id}`,
   `POST /admin/users/{id}/recovery-code`): each checks the authenticated
   caller's own `is_admin` flag before doing anything, on top of the usual
@@ -358,7 +375,8 @@ host/port/password/protocol itself (and confirms it belongs to the
 authenticated user) rather than trusting the client, so a compromised
 browser tab can't be pointed at an arbitrary host or reach another user's
 stored credentials by supplying a different ID. Responses come back as
-JSON (`{"type":"response", output}` / `{"type":"error", message}` /
+JSON (`{"type":"response", output, upstream_ms, relay_overhead_ms}` /
+`{"type":"error", message}` /
 `{"type":"broadcast", output}` for a WebRCON/BattlEye server's own
 unsolicited push messages). Servers can be `"source"` (classic Source
 RCON via [gorcon/rcon](https://github.com/gorcon/rcon) — this is what
@@ -370,6 +388,15 @@ below), or `"battleye"` (Arma 3 and DayZ's BattlEye RCon — see below).
 The WebRCON connection also sends itself a WebSocket ping every 25s —
 Rust closes WebRCON connections it considers idle, and this keeps it
 alive without sending a bogus command to the game.
+
+Every executed command is logged with `upstream_ms` and
+`relay_overhead_ms`, and both values are returned to the browser. The
+former is time spent waiting inside the selected game protocol; the latter
+is relay-local processing from decoded command to response hand-off,
+excluding that upstream wait and excluding browser/Internet transit. The
+performance objective is **p95 relay overhead ≤50 ms** at the intended
+deployment load — not a 50 ms total Internet round trip. The Health view
+shows the browser round trip and both available components separately.
 
 **`"palworld_rest"`** exists because Pocketpair deprecated Palworld's RCON
 support in favor of a REST API (plain HTTP + JSON, HTTP Basic auth with
@@ -559,10 +586,11 @@ languages) with your own real details before letting anyone but yourself
 register. The privacy policy documents the current account/server data,
 encrypted credentials, macros and moderation rules, security audit
 records/IP addresses, contact-form delivery, browser-local preferences,
-Nitrado and Steam API flows, Nitrado-hosted game icons, Google Fonts, and
-self-service deletion behavior. Adjust it if a fork changes any data flow
-or hosting provider. It is project documentation, not a substitute for
-legal review for a specific deployment.
+Nitrado and Steam API flows, the short-lived Nitrado cache, Nitrado-hosted
+game icons, locally served Inter fonts, PWA app-shell caching, audit
+retention, and self-service deletion behavior. Adjust it if a fork changes
+any data flow or hosting provider. It is project documentation, not a
+substitute for legal review for a specific deployment.
 
 ## Language
 
@@ -615,7 +643,8 @@ language.
   delivery, and the admin panel. See
   [Cloud API (`webspace/`)](#cloud-api-webspace)
 - `docs/` — the static frontend (plain HTML/CSS/vanilla JS, no framework,
-  no build step), deployed to GitHub Pages by
+  no build step), including a versioned service worker and installable PWA
+  manifest, deployed to GitHub Pages by
   `.github/workflows/pages.yml`
 
 ## Testing
@@ -663,10 +692,11 @@ php tests/php/api_integration.php
 The Playwright suite serves the unchanged static `docs/` frontend and replaces
 the Cloud API and relay only at the browser network boundary. It covers login,
 manual creation/profile editing, Nitrado sync/icons, multi-console behavior,
-player actions, macros, and moderation rules. CI runs Go and PHP against a
-MariaDB service container and runs the Chromium suite in a separate job.
-See [the compatibility matrix](docs/compatibility.md) for the distinction
-between mock coverage and real-server verification.
+player actions, macros, moderation rules, manifest/install UI,
+service-worker registration, local fonts, and offline app-shell startup. CI
+runs Go and PHP against a MariaDB service container and runs the Chromium
+suite in a separate job. See [the compatibility matrix](docs/compatibility.md)
+for the distinction between mock coverage and real-server verification.
 
 ## Not implemented yet
 

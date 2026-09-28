@@ -5,6 +5,24 @@ header('Content-Type: application/json');
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
+$counterFile = getenv('NICON_NITRADO_MOCK_COUNTER_FILE') ?: '';
+if ($counterFile !== '') {
+    $handle = fopen($counterFile, 'c+');
+    if ($handle !== false && flock($handle, LOCK_EX)) {
+        $raw = stream_get_contents($handle);
+        $counts = $raw ? json_decode($raw, true) : [];
+        if (!is_array($counts)) $counts = [];
+        $key = "$method $path";
+        $counts[$key] = (int) ($counts[$key] ?? 0) + 1;
+        ftruncate($handle, 0);
+        rewind($handle);
+        fwrite($handle, json_encode($counts));
+        fflush($handle);
+        flock($handle, LOCK_UN);
+    }
+    if (is_resource($handle)) fclose($handle);
+}
+
 if (($_SERVER['HTTP_AUTHORIZATION'] ?? '') !== 'Bearer integration-token') {
     http_response_code(401);
     echo json_encode(['status' => 'error']);

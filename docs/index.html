@@ -14,16 +14,15 @@
      frontend at your own deployment"), so there's no reason for this to
      stay open to arbitrary hosts. Update this list alongside those two
      constants if you point this frontend at a different deployment. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://nitrado.net https://*.nitrado.net; connect-src 'self' https://nicon.mylss.de https://relay.130.61.8.150.sslip.io wss://relay.130.61.8.150.sslip.io; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: https://nitrado.net https://*.nitrado.net; connect-src 'self' https://nicon.mylss.de https://relay.130.61.8.150.sslip.io wss://relay.130.61.8.150.sslip.io; base-uri 'self'; form-action 'self'">
 <title>NiCon</title>
+<meta name="theme-color" content="#101418">
 <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="shortcut icon" href="favicon.ico">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="NiCon">
 <link rel="manifest" href="site.webmanifest">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -37,6 +36,7 @@
     <button type="button" id="admin-nav-btn" class="navlink" data-i18n="admin.navLabel" hidden>Admin</button>
   </nav>
   <div class="topbar-right">
+    <button type="button" id="pwa-install-btn" class="link-button" data-i18n="pwa.install" hidden>Install app</button>
     <span id="username-label" class="hint" hidden></span>
     <button type="button" id="logout-btn" class="link-button" data-i18n="nav.signOut" hidden>Sign out</button>
     <div class="lang-widget" id="lang-widget">
@@ -335,7 +335,7 @@
       <div class="view-header">
         <h1 data-i18n="health.title">Server health</h1>
       </div>
-      <p class="hint view-subhead" data-i18n="health.subhead">Connection status per server: when it last came online, the latency of its most recent player-list check, and its last error, if any, in this browser — plus an automated check the relay itself runs every 5 minutes, a real RCON connect attempt, so this stays accurate even if you never open a console.</p>
+      <p class="hint view-subhead" data-i18n="health.subhead">Connection status per server: browser round trip, relay overhead, game/protocol time, and recent errors, plus a real automatic RCON connect every five minutes.</p>
       <table class="health-table">
         <thead>
           <tr>

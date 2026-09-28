@@ -1,21 +1,27 @@
 {
   "name": "NiCon",
   "short_name": "NiCon",
+  "description": "Universal browser command center for game servers",
+  "id": "./",
+  "start_url": "./index.html",
+  "scope": "./",
+  "lang": "en",
   "icons": [
     {
       "src": "web-app-manifest-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     },
     {
       "src": "web-app-manifest-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ],
   "theme_color": "#101418",
   "background_color": "#101418",
-  "display": "standalone"
+  "display": "standalone",
+  "prefer_related_applications": false
 }

@@ -10,8 +10,6 @@
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="NiCon">
 <link rel="manifest" href="site.webmanifest">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -89,7 +87,11 @@
     Benutzername bis zum Schließen des Tabs. In <code>localStorage</code>
     liegen nicht geheime Einstellungen wie Sprache, Dashboard-Layout,
     ausgeblendete Benachrichtigungs-IDs und lokale Health-Beobachtungen.
-    Das Löschen der Website-Daten entfernt diese lokalen Werte.
+    Das Löschen der Website-Daten entfernt diese lokalen Werte. Der
+    PWA-Service-Worker speichert ausschließlich die statische NiCon-App-Shell
+    (HTML, CSS, JavaScript, Icons und lokale Schriften) für den Offline-Start
+    im Browser-Cache; API-Antworten, Zugangsdaten und Konsolendaten werden
+    dort nicht abgelegt.
   </p>
 
   <h2>4. Nitrado-Integration</h2>
@@ -100,7 +102,11 @@
     Verbindungsmetadaten und offizielle Spiel-Icon-URLs werden gespeichert.
     Derselbe Token wird für von dir ausgelöste Start-, Stopp-, Neustart-
     und Statusabfragen genutzt. Er wird nie an den Browser zurückgegeben
-    und kann unabhängig vom Konto entfernt werden. Ein angezeigtes
+    und kann unabhängig vom Konto entfernt werden. Zur Vermeidung doppelter
+    Abrufe hält das Backend Nitrado-GET-Antworten 30 bis 60 Sekunden lang
+    vor (standardmäßig 45 Sekunden), getrennt nach einem mit dem
+    Installationsschlüssel erzeugten Token-HMAC und Anfragepfad; der Token
+    selbst liegt nicht im Cache. Ein angezeigtes
     Spiel-Icon lädt der Browser direkt von
     <code>assets.nitrado.net</code>; dabei erhält dieser Host übliche
     Verbindungsdaten wie IP-Adresse und User-Agent.
@@ -123,13 +129,9 @@
   <ul>
     <li>Der Relay sendet Befehle an die von dir ausgewählten Spieleserver
       und empfängt deren Antworten und Spielerdaten.</li>
-    <li>Die Weboberfläche lädt die Schrift Inter von Google Fonts
-      (<code>fonts.googleapis.com</code>/<code>fonts.gstatic.com</code>).
-      Dabei werden übliche Verbindungsdaten wie IP-Adresse und User-Agent
-      an Google übertragen.</li>
     <li>Inhalte des Kontaktformulars werden über Web-/Mailhosting und den
       E-Mail-Anbieter des Betreibers an das Support-Postfach übertragen.</li>
-    <li>Frontend, API, Datenbank, Relay, Nitrado, Valve, Google und
+    <li>Frontend, API, Datenbank, Relay, Nitrado, Valve und
       Spieleserver können bei unterschiedlichen Anbietern oder in
       unterschiedlichen Ländern betrieben werden; es gelten deren eigene
       Datenschutzbestimmungen und gesetzlichen Übermittlungsmechanismen.</li>
@@ -144,8 +146,9 @@
     zuverlässigen Betrieb und der Missbrauchsaufklärung (Art. 6 Abs. 1
     lit. f DSGVO). Kontaktdaten werden zur Bearbeitung der Anfrage
     verarbeitet (je nach Zusammenhang Art. 6 Abs. 1 lit. b oder f DSGVO).
-    Externe Schrift und Spiel-Icons unterstützen eine einheitliche,
-    erkennbare Oberfläche (Art. 6 Abs. 1 lit. f DSGVO). Gegen eine auf
+    Spiel-Icons unterstützen eine einheitliche, erkennbare Oberfläche
+    (Art. 6 Abs. 1 lit. f DSGVO). Inter wird lokal durch NiCon ausgeliefert
+    und stellt keine Verbindung zu Google her. Gegen eine auf
     berechtigte Interessen gestützte Verarbeitung kannst du nach Abschnitt
     9 Widerspruch einlegen.
   </p>
@@ -164,10 +167,15 @@
       löscht.</li>
     <li>Abgelaufene Rate-Limit-Zeitfenster werden bei Gelegenheit
       bereinigt; Einträge älter als ein Tag können gelöscht werden.</li>
-    <li>Audit-Einträge haben derzeit keine automatische Löschfrist. Bei
-      Kontolöschung wird die Datenbankverknüpfung zum Konto entfernt; für
-      Sicherheits- und Nachweiszwecke können Eintrag, IP-Adresse,
-      Zeitpunkt, Aktion und kurzer Detailtext bestehen bleiben.</li>
+    <li>Zwischengespeicherte Nitrado-GET-Antworten laufen nach 30 bis 60
+      Sekunden ab und werden beim Schreiben des Caches bereinigt;
+      Power-Aktionen sowie Tokenwechsel, Token- und Kontolöschung leeren den
+      betroffenen Token-Cache sofort.</li>
+    <li>Audit-Einträge werden standardmäßig 180 Tage aufbewahrt (vom
+      Betreiber zwischen 30 Tagen und 10 Jahren konfigurierbar) und beim
+      Schreiben oder Anzeigen des Audit-Protokolls bereinigt. Bei
+      Kontolöschung wird die Datenbankverknüpfung entfernt; die übrigen
+      Audit-Felder bestehen nur bis zum Ende dieser Frist.</li>
     <li>Kontaktanfragen verbleiben entsprechend den Postfach-/Backupfristen
       des Betreibers und der beteiligten Anbieter in den E-Mail-Systemen.</li>
     <li>Hosting-Anbieter können eigene Zugriffs-/Sicherheitsprotokolle nach

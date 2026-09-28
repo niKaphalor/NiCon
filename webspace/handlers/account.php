@@ -16,7 +16,15 @@ function nicon_handle_get_account(int $userId): void
 // GDPR applies to this stored credential same as to an RCON password.
 function nicon_handle_delete_nitrado_token(int $userId): void
 {
-    nicon_db()->prepare('UPDATE users SET nitrado_token_enc = NULL WHERE id = ?')->execute([$userId]);
+    $pdo = nicon_db();
+    try {
+        $token = nicon_nitrado_saved_token($pdo, $userId);
+        if ($token !== '') nicon_nitrado_cache_invalidate($token);
+    } catch (RuntimeException $e) {
+        // A damaged legacy credential must not prevent the user from
+        // erasing it. Its cache entries expire after at most 60 seconds.
+    }
+    $pdo->prepare('UPDATE users SET nitrado_token_enc = NULL WHERE id = ?')->execute([$userId]);
     http_response_code(204);
 }
 
@@ -29,6 +37,14 @@ function nicon_handle_delete_account(int $userId): void
     $stmt = $pdo->prepare('SELECT username FROM users WHERE id = ?');
     $stmt->execute([$userId]);
     $username = $stmt->fetchColumn();
+
+    try {
+        $token = nicon_nitrado_saved_token($pdo, $userId);
+        if ($token !== '') nicon_nitrado_cache_invalidate($token);
+    } catch (RuntimeException $e) {
+        // Account deletion remains possible even if an old encrypted token
+        // can no longer be decrypted; any orphaned cache expires quickly.
+    }
 
     // Logged before, not after, deleting the row: audit_log.user_id has a
     // foreign key on users.id, so inserting a row pointing at $userId

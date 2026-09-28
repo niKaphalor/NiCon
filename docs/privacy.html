@@ -10,8 +10,6 @@
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="NiCon">
 <link rel="manifest" href="site.webmanifest">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -83,7 +81,10 @@
     and username until the tab is closed. <code>localStorage</code> holds
     non-secret preferences such as language, dashboard layout, dismissed
     notification IDs, and client-side health observations. Clearing site
-    data removes these browser-local values.
+    data removes these browser-local values. The PWA service worker stores
+    only NiCon's static app shell (HTML, CSS, JavaScript, icons, and local
+    fonts) in browser Cache Storage for offline startup; API responses,
+    credentials, and console data are not cached there.
   </p>
 
   <h2>4. Nitrado integration</h2>
@@ -93,7 +94,11 @@
     from Nitrado. It stores compatible connection metadata and official
     game-icon URLs. The same token is used for start, stop, restart, and
     status requests you initiate. It is never returned to the browser and
-    can be removed independently in the sync/account interface. The browser
+    can be removed independently in the sync/account interface. To reduce
+    duplicate requests, the backend caches Nitrado GET responses for 30-60
+    seconds (45 seconds by default), scoped by an installation-keyed token
+    HMAC and request path; the token itself is not stored in the cache.
+    The browser
     loads a displayed game icon directly from
     <code>assets.nitrado.net</code>, which exposes ordinary request data
     such as the browser's IP address and user agent to that host.
@@ -115,13 +120,9 @@
   <ul>
     <li>The relay sends commands to, and receives responses/player data
       from, the game servers you choose to connect to.</li>
-    <li>The frontend downloads the Inter font from Google Fonts
-      (<code>fonts.googleapis.com</code>/<code>fonts.gstatic.com</code>),
-      which transmits ordinary connection data such as IP address and user
-      agent to Google.</li>
     <li>Contact-form content is transmitted through the operator's web/mail
       hosting and email provider to the mailbox used for support.</li>
-    <li>The frontend, API, database, relay, Nitrado, Valve, Google, and game
+    <li>The frontend, API, database, relay, Nitrado, Valve, and game
       server may be hosted by different providers or in different countries;
       their own privacy terms and legal transfer mechanisms apply.</li>
   </ul>
@@ -134,8 +135,9 @@
     records support secure and reliable operation and the investigation of
     misuse (Art. 6(1)(f) GDPR). Contact data is processed to answer your
     request (Art. 6(1)(b) or (f) GDPR, depending on its context). External
-    fonts and game icons support a consistent, recognizable interface
-    (Art. 6(1)(f) GDPR). You may object to processing based on legitimate
+    game icons support a consistent, recognizable interface (Art. 6(1)(f)
+    GDPR). Inter is delivered locally by NiCon and does not contact Google.
+    You may object to processing based on legitimate
     interests as described in section 9.
   </p>
 
@@ -152,10 +154,15 @@
     <li>Notifications remain until an administrator deletes them.</li>
     <li>Expired rate-limit windows are deleted opportunistically; entries
       older than one day are eligible for cleanup.</li>
-    <li>Audit records currently have no automatic expiry. When an account
-      is deleted, its database link is removed, but the audit entry, IP
-      address, timestamp, action, and short detail may remain for security
-      and accountability purposes.</li>
+    <li>Cached Nitrado GET responses expire after 30-60 seconds and are
+      deleted opportunistically when the cache is written; power operations
+      as well as token replacement/removal and account deletion invalidate
+      the affected token cache immediately.</li>
+    <li>Audit records are retained for 180 days by default (operator-
+      configurable from 30 days to 10 years) and are cleaned when the audit
+      log is written or viewed. When an account is deleted, its database link
+      is removed, but the remaining audit fields persist only until that
+      retention period ends.</li>
     <li>Contact messages remain in the involved mail systems according to
       the operator's and providers' mailbox/backup retention settings.</li>
     <li>Hosting providers may keep their own access/security logs for the

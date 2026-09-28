@@ -19,6 +19,66 @@ function nicon_nitrado_base_url(): string
 // — not guaranteed here.
 const NICON_NITRADO_MAX_RESPONSE_BYTES = 5 * 1024 * 1024; // 5 MiB
 
+function nicon_nitrado_cache_ttl(): int
+{
+    $configured = (int) (nicon_config()['nitrado_cache_ttl_seconds'] ?? 45);
+    return max(30, min(60, $configured));
+}
+
+function nicon_nitrado_cache_token_hash(string $token): string
+{
+    // HMAC prevents the cache table from containing a reusable plain hash of
+    // the credential. The configured encryption key is installation-specific.
+    $key = (string) (nicon_config()['encryption_key_base64'] ?? '');
+    return hash_hmac('sha256', $token, $key);
+}
+
+function nicon_nitrado_cache_request_key(string $path): string
+{
+    return hash('sha256', nicon_nitrado_base_url() . $path);
+}
+
+function nicon_nitrado_cache_get(string $token, string $path): ?array
+{
+    $stmt = nicon_db()->prepare('
+        SELECT response_json
+        FROM nitrado_cache
+        WHERE token_hash = ? AND request_key = ? AND expires_at > UTC_TIMESTAMP()
+    ');
+    $stmt->execute([
+        nicon_nitrado_cache_token_hash($token),
+        nicon_nitrado_cache_request_key($path),
+    ]);
+    $json = $stmt->fetchColumn();
+    if ($json === false) return null;
+    $decoded = json_decode((string) $json, true);
+    return is_array($decoded) ? $decoded : null;
+}
+
+function nicon_nitrado_cache_put(string $token, string $path, array $data): void
+{
+    $pdo = nicon_db();
+    $pdo->prepare('DELETE FROM nitrado_cache WHERE expires_at <= UTC_TIMESTAMP()')->execute();
+    $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    $expiresAt = gmdate('Y-m-d H:i:s', time() + nicon_nitrado_cache_ttl());
+    $pdo->prepare('
+        INSERT INTO nitrado_cache (token_hash, request_key, response_json, expires_at)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE response_json = VALUES(response_json), expires_at = VALUES(expires_at)
+    ')->execute([
+        nicon_nitrado_cache_token_hash($token),
+        nicon_nitrado_cache_request_key($path),
+        $json,
+        $expiresAt,
+    ]);
+}
+
+function nicon_nitrado_cache_invalidate(string $token): void
+{
+    nicon_db()->prepare('DELETE FROM nitrado_cache WHERE token_hash = ?')
+        ->execute([nicon_nitrado_cache_token_hash($token)]);
+}
+
 // nicon_nitrado_request calls the Nitrado API with the caller-supplied
 // token and unwraps its {"status":..., "data":...} envelope. Shared
 // hosting can make ordinary outbound HTTPS calls like this one just fine
@@ -77,12 +137,18 @@ function nicon_nitrado_request(string $token, string $method, string $path, arra
 
 function nicon_nitrado_get(string $token, string $path): array
 {
-    return nicon_nitrado_request($token, 'GET', $path);
+    $cached = nicon_nitrado_cache_get($token, $path);
+    if ($cached !== null) return $cached;
+    $data = nicon_nitrado_request($token, 'GET', $path);
+    nicon_nitrado_cache_put($token, $path, $data);
+    return $data;
 }
 
 function nicon_nitrado_post(string $token, string $path, array $params = []): array
 {
-    return nicon_nitrado_request($token, 'POST', $path, $params);
+    $data = nicon_nitrado_request($token, 'POST', $path, $params);
+    nicon_nitrado_cache_invalidate($token);
+    return $data;
 }
 
 // Nitrado's games catalog varies slightly between products. Walk it for
@@ -146,6 +212,15 @@ function nicon_handle_nitrado_sync(int $userId): void
     $pdo = nicon_db();
 
     if ($token !== '') {
+        try {
+            $previousToken = nicon_nitrado_saved_token($pdo, $userId);
+            if ($previousToken !== '' && !hash_equals($previousToken, $token)) {
+                nicon_nitrado_cache_invalidate($previousToken);
+            }
+        } catch (RuntimeException $e) {
+            // Replacing an unreadable old credential must remain possible.
+            // Its cache entries have a hard maximum lifetime of 60 seconds.
+        }
         $pdo->prepare('UPDATE users SET nitrado_token_enc = ? WHERE id = ?')
             ->execute([nicon_encrypt_password($token), $userId]);
     } else {
