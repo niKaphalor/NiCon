@@ -29,6 +29,7 @@ async function installBackend(page, initialServers = []) {
     templates: [],
     rules: [],
     commands: [],
+    commandAudits: [],
     connectedServerIds: [],
     sockets: [],
     nextServerId: 100,
@@ -40,6 +41,12 @@ async function installBackend(page, initialServers = []) {
     await route.fulfill({
       contentType: "image/png",
       body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"),
+    });
+  });
+  await page.route(/https:\/\/(shared|store)\.fastly\.steamstatic\.com\/.*/, async (route) => {
+    await route.fulfill({
+      contentType: "image/jpeg",
+      body: Buffer.from("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABAf/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPxB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPxB//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxB//9k=", "base64"),
     });
   });
 
@@ -133,6 +140,13 @@ async function installBackend(page, initialServers = []) {
         socket.send(JSON.stringify({ type: "test_result", ok: true }));
       } else if (message.type === "command") {
         state.commands.push({ serverId: connection.serverId, command: message.command });
+        state.commandAudits.push({
+          serverId: connection.serverId,
+          command: message.command,
+          origin: message.audit_origin,
+          action: message.audit_action,
+          targetPlayer: message.target_player,
+        });
         let output = `ok: ${message.command}`;
         if (message.command === "status") {
           output = '# 2 "Alice" STEAM_0:1:12345678 05:23 24 0 active';
@@ -159,6 +173,8 @@ async function login(page) {
 test("login, manual game selection, profile editing, and Nitrado sync", async ({ page }) => {
   const state = await installBackend(page, []);
   await login(page);
+  await expect(page.locator("#supported-games-list .supported-game-header")).toHaveCount(28);
+  await expect(page.locator('#supported-games-list li[aria-label="Rust"] img')).toHaveAttribute("src", /apps\/252490\/header\.jpg/);
 
   await page.locator("#add-server-btn").click();
   await page.locator('[data-tab="manual"]').click();
@@ -180,6 +196,7 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   expect(state.servers.find((item) => item.name === "Manual 7DTD")).toMatchObject({ game: "7 Days to Die", protocol: "telnet" });
 
   await page.locator(".server-row", { hasText: "Manual 7DTD" }).click();
+  await expect(page.locator("#content")).toHaveAttribute("style", /apps\/251570\/page_bg_generated_v6b\.jpg/);
   await page.locator("#head .head-actions button", { hasText: "Edit" }).click();
   await page.locator("#edit-server-name").fill("Edited Reforger");
   await page.locator("#edit-server-game").selectOption("Arma Reforger");
@@ -215,6 +232,7 @@ test("two consoles stay connected and player actions reach the selected server",
   await expect(page.locator("#confirm-dialog")).toBeVisible();
   await page.locator("#confirm-dialog-ok").click();
   await expect.poll(() => state.commands).toContainEqual({ serverId: 2, command: "kickid 2" });
+  await expect.poll(() => state.commandAudits).toContainEqual({ serverId: 2, command: "kickid 2", origin: "player_action", action: "kick", targetPlayer: "Alice" });
 
   await page.locator(".server-row", { hasText: "GMod Alpha" }).click();
   await page.locator("#cmd-input").fill("status");
@@ -240,6 +258,10 @@ test("macros and moderation rules execute through the live console", async ({ pa
     { serverId: 1, command: "server.save" },
     { serverId: 1, command: "say maintenance soon" },
   ]));
+  await expect.poll(() => state.commandAudits).toEqual(expect.arrayContaining([
+    expect.objectContaining({ command: "server.save", origin: "macro", action: "macro" }),
+    expect.objectContaining({ command: "say maintenance soon", origin: "macro", action: "macro" }),
+  ]));
 
   await page.locator("#moderation-rules-btn").click();
   await page.locator("#moderation-pattern-input").fill("badword");
@@ -250,6 +272,7 @@ test("macros and moderation rules execute through the live console", async ({ pa
   const gameSocket = state.sockets.find((connection) => connection.serverId === 1);
   gameSocket.socket.send(JSON.stringify({ type: "broadcast", output: "Alice: badword" }));
   await expect.poll(() => state.commands).toContainEqual({ serverId: 1, command: "kickid 2" });
+  await expect.poll(() => state.commandAudits).toContainEqual({ serverId: 1, command: "kickid 2", origin: "automatic_moderation", action: "kick", targetPlayer: "Alice" });
 });
 
 test("PWA is installable and its app shell works offline", async ({ page, context }) => {

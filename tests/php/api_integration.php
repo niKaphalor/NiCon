@@ -238,13 +238,27 @@ try {
 
     $pdo->prepare("INSERT INTO audit_log (user_id, action, detail, created_at) VALUES (?, 'expired_test_entry', 'old', DATE_SUB(UTC_TIMESTAMP(), INTERVAL 181 DAY))")
         ->execute([$createdUsers[0]]);
+    $aliceIdStmt = $pdo->prepare('SELECT id FROM users WHERE username = ?');
+    $aliceIdStmt->execute([$alice]);
+    $aliceId = (int) $aliceIdStmt->fetchColumn();
+    $pdo->prepare("INSERT INTO rcon_audit_log
+        (user_id, server_id, username, server_name, command, action, target_player, origin, result, success, upstream_ms, relay_overhead_ms)
+        VALUES (?, ?, ?, 'Edited GMod', 'kickid 7', 'kick', 'Alice', 'player_action', 'ok', 1, 4.2, 0.8)")
+        ->execute([$aliceId, $serverId, $alice]);
+    $pdo->prepare("INSERT INTO rcon_audit_log
+        (user_id, server_id, username, server_name, command, action, origin, success, created_at)
+        VALUES (?, ?, ?, 'Edited GMod', 'old', 'command', 'manual', 1, DATE_SUB(UTC_TIMESTAMP(), INTERVAL 181 DAY))")
+        ->execute([$aliceId, $serverId, $alice]);
     [$status, $audit] = request_json($base, 'GET', '/api/audit-log', null, $aliceToken);
     $actions = array_column($audit ?? [], 'action');
     assert_test($status === 200 && in_array('server_updated', $actions, true), 'server update audit entry missing');
     assert_test(in_array('server_password_changed', $actions, true), 'password update audit entry missing');
     assert_test(in_array('nitrado_server_restarted', $actions, true), 'Nitrado power audit entry missing');
+    $rconRows = array_values(array_filter($audit ?? [], static fn(array $row): bool => ($row['kind'] ?? '') === 'rcon'));
+    assert_test(count($rconRows) === 1 && ($rconRows[0]['target_player'] ?? '') === 'Alice' && ($rconRows[0]['success'] ?? false), 'structured RCON audit entry missing');
     assert_test(!in_array('expired_test_entry', $actions, true), 'expired audit entry was not removed');
     assert_test((int) $pdo->query("SELECT COUNT(*) FROM audit_log WHERE action = 'expired_test_entry'")->fetchColumn() === 0, 'expired audit entry remained in the database');
+    assert_test((int) $pdo->query("SELECT COUNT(*) FROM rcon_audit_log WHERE command = 'old'")->fetchColumn() === 0, 'expired RCON audit entry remained in the database');
 
     fwrite(STDOUT, "PASS: PHP API integration suite\n");
 } finally {

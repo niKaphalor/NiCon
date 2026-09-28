@@ -125,7 +125,11 @@
     serverseitig. NiCon speichert IDs und Ergebnisse nicht dauerhaft; sie
     bleiben für die aktuelle Konsolensitzung im Browserspeicher. Das Öffnen
     eines Steam-Profillinks ist ein eigener, vom Nutzer ausgelöster Besuch
-    bei Steam Community.
+    bei Steam Community. Die Spieleübersicht und der Hintergrund eines
+    ausgewählten Servers laden offizielle Header- und Hintergrundbilder
+    direkt von <code>*.steamstatic.com</code>. Dabei erhält der CDN-Betreiber
+    übliche Verbindungsdaten wie IP-Adresse und User-Agent; NiCon übermittelt
+    keinen Referrer.
   </p>
 
   <h2>6. Weitere Empfänger und externe Ressourcen</h2>
@@ -149,7 +153,7 @@
     zuverlässigen Betrieb und der Missbrauchsaufklärung (Art. 6 Abs. 1
     lit. f DSGVO). Kontaktdaten werden zur Bearbeitung der Anfrage
     verarbeitet (je nach Zusammenhang Art. 6 Abs. 1 lit. b oder f DSGVO).
-    Spiel-Icons unterstützen eine einheitliche, erkennbare Oberfläche
+    Spiel-Icons sowie Header- und Hintergrundbilder unterstützen eine einheitliche, erkennbare Oberfläche
     (Art. 6 Abs. 1 lit. f DSGVO). Inter wird lokal durch NiCon ausgeliefert
     und stellt keine Verbindung zu Google her. Gegen eine auf
     berechtigte Interessen gestützte Verarbeitung kannst du nach Abschnitt
@@ -178,7 +182,8 @@
       Sekunden ab und werden beim Schreiben des Caches bereinigt;
       Power-Aktionen sowie Tokenwechsel, Token- und Kontolöschung leeren den
       betroffenen Token-Cache sofort.</li>
-    <li>Audit-Einträge werden standardmäßig 180 Tage aufbewahrt (vom
+    <li>Audit-Einträge, einschließlich ausgeführter RCON-Befehle, Zielspieler,
+      Ergebnisstatus, gekürzter Serverantwort und Latenz, werden standardmäßig 180 Tage aufbewahrt (vom
       Betreiber zwischen 30 Tagen und 10 Jahren konfigurierbar) und beim
       Schreiben oder Anzeigen des Audit-Protokolls bereinigt. Bei
       Kontolöschung wird die Datenbankverknüpfung entfernt; die übrigen

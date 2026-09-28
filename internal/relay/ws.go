@@ -52,6 +52,13 @@ type wsMessage struct {
 	Protocol string `json:"protocol,omitempty"`
 	OK       bool   `json:"ok,omitempty"`
 
+	// Audit metadata describes the UI path that emitted a command. The relay
+	// validates and persists it together with the authenticated user/server;
+	// identity is never accepted from the browser.
+	AuditAction  string `json:"audit_action,omitempty"`
+	AuditOrigin  string `json:"audit_origin,omitempty"`
+	TargetPlayer string `json:"target_player,omitempty"`
+
 	// Command responses expose two separate timings. UpstreamMs is time
 	// blocked inside the game protocol's Execute call. RelayOverheadMs is
 	// local relay work around that call, measured from decoded command to
@@ -232,6 +239,7 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 	var gc gameConn
 	var connectedServerID int64
 	var connectedProtocol string
+	var connectedServerName string
 	var stopBroadcast func()
 	disconnect := func() {
 		if stopBroadcast != nil {
@@ -244,6 +252,7 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 		connectedServerID = 0
 		connectedProtocol = ""
+		connectedServerName = ""
 	}
 	defer disconnect()
 
@@ -305,6 +314,7 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 			gc = newConn
 			connectedServerID = srv.ID
 			connectedProtocol = srv.Protocol
+			connectedServerName = srv.Name
 			_ = writeJSON(wsMessage{Type: "connected"})
 
 			// WebRCON (Rust) and BattlEye (Arma 3, DayZ) both push
@@ -366,6 +376,23 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 			upstreamDuration := time.Since(upstreamStarted)
 			relayOverhead := time.Since(commandStarted) - upstreamDuration
 			upstreamMs := float64(upstreamDuration.Microseconds()) / 1000
+			preAuditRelayOverheadMs := float64(relayOverhead.Microseconds()) / 1000
+			auditAction, auditOrigin, targetPlayer, shouldAudit := commandAuditMetadata(msg)
+			if shouldAudit {
+				result := output
+				if execErr != nil {
+					result = execErr.Error()
+				}
+				if err := rel.store.RecordRCONAudit(r.Context(), store.RCONAuditRecord{
+					UserID: userID, ServerID: connectedServerID, ServerName: connectedServerName,
+					Command: msg.Command, Action: auditAction, TargetPlayer: targetPlayer,
+					Origin: auditOrigin, Result: result, Success: execErr == nil,
+					UpstreamMs: upstreamMs, RelayOverheadMs: preAuditRelayOverheadMs,
+				}); err != nil {
+					rel.log.Printf("rcon audit server_id=%d: %v", connectedServerID, err)
+				}
+			}
+			relayOverhead = time.Since(commandStarted) - upstreamDuration
 			relayOverheadMs := float64(relayOverhead.Microseconds()) / 1000
 			rel.log.Printf(
 				"command timing server_id=%d protocol=%s relay_overhead_ms=%.3f upstream_ms=%.3f ok=%t",
@@ -381,5 +408,66 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 		default:
 			_ = writeJSON(wsMessage{Type: "error", Message: "unknown message type: " + msg.Type})
 		}
+	}
+}
+
+var allowedAuditOrigins = map[string]bool{
+	"manual": true, "player_action": true, "macro": true, "quick_action": true,
+	"automatic_moderation": true, "system": true,
+}
+
+var allowedAuditActions = map[string]bool{
+	"command": true, "kick": true, "ban": true, "mute": true, "whisper": true,
+	"macro": true, "broadcast": true, "save": true, "restart": true,
+	"shutdown": true, "stop": true, "player_poll": true,
+}
+
+func commandAuditMetadata(msg wsMessage) (action, origin, target string, shouldAudit bool) {
+	origin = strings.ToLower(strings.TrimSpace(msg.AuditOrigin))
+	if !allowedAuditOrigins[origin] {
+		origin = "manual"
+	}
+	action = strings.ToLower(strings.TrimSpace(msg.AuditAction))
+	if !allowedAuditActions[action] {
+		action = inferCommandAction(msg.Command)
+	}
+	target = strings.TrimSpace(msg.TargetPlayer)
+	if len([]rune(target)) > 255 {
+		target = string([]rune(target)[:255])
+	}
+	// The ten-second player refresh is operational telemetry, not an
+	// administrative action. Every other command is persisted, including
+	// manual input when the browser sends no metadata at all.
+	shouldAudit = !(origin == "system" && action == "player_poll")
+	return
+}
+
+func inferCommandAction(command string) string {
+	fields := strings.Fields(strings.ToLower(command))
+	if len(fields) == 0 {
+		return "command"
+	}
+	verb := strings.Trim(fields[0], "/")
+	switch {
+	case strings.Contains(verb, "kick"):
+		return "kick"
+	case strings.Contains(verb, "unban"):
+		return "command"
+	case strings.Contains(verb, "ban"):
+		return "ban"
+	case strings.Contains(verb, "mute"):
+		return "mute"
+	case verb == "tell" || verb == "whisper" || verb == "pm":
+		return "whisper"
+	case verb == "say" || strings.Contains(verb, "broadcast") || verb == "announce":
+		return "broadcast"
+	case strings.Contains(verb, "save"):
+		return "save"
+	case strings.Contains(verb, "restart"):
+		return "restart"
+	case verb == "quit" || verb == "shutdown" || verb == "doexit":
+		return "shutdown"
+	default:
+		return "command"
 	}
 }

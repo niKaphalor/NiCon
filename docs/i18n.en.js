@@ -272,6 +272,10 @@ window.NICON_I18N_STRINGS.en = {
     action_adminRecoveryCodeRegenerated: "{{actor}} regenerated {{target}}'s recovery code",
     action_adminNotificationCreated: "{{actor}} sent a notification: \"{{detail}}\"",
     action_adminNotificationDeleted: "{{actor}} deleted a notification: \"{{detail}}\"",
+    action_rconCommand: "{{actor}} · {{server}} · {{action}}{{target}} · {{command}}",
+    rconSucceeded: "Succeeded · {{latency}} ms",
+    rconFailed: "Failed · {{latency}} ms",
+    rconResult: "Result",
   },
   settings: {
     navLabel: "Settings",

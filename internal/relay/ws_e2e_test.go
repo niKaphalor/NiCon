@@ -9,8 +9,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -185,6 +187,130 @@ func TestWebSocketEndToEndWithMockGameServers(t *testing.T) {
 		}
 		websocketRoundTrip(t, st, token, serverID, "players", "battleye:players")
 	})
+
+	audit, err := st.ListRCONAudit(ctx, userID, 20)
+	if err != nil {
+		t.Fatalf("list RCON audit: %v", err)
+	}
+	if len(audit) != 4 {
+		t.Fatalf("RCON audit rows = %d, want 4", len(audit))
+	}
+	for _, record := range audit {
+		if record.Username == "" || record.ServerName == "" || record.Command == "" || !record.Success {
+			t.Errorf("incomplete RCON audit record: %+v", record)
+		}
+	}
+}
+
+func TestCommandAuditMetadata(t *testing.T) {
+	action, origin, target, audit := commandAuditMetadata(wsMessage{
+		Command: "kick 42", AuditAction: "kick", AuditOrigin: "player_action", TargetPlayer: "Alice",
+	})
+	if action != "kick" || origin != "player_action" || target != "Alice" || !audit {
+		t.Fatalf("metadata = %q %q %q %t", action, origin, target, audit)
+	}
+	_, _, _, audit = commandAuditMetadata(wsMessage{
+		Command: "status", AuditAction: "player_poll", AuditOrigin: "system",
+	})
+	if audit {
+		t.Fatal("automatic player polling must not create an audit row")
+	}
+	action, origin, _, audit = commandAuditMetadata(wsMessage{Command: "banid 0 42"})
+	if action != "ban" || origin != "manual" || !audit {
+		t.Fatalf("inferred metadata = %q %q %t", action, origin, audit)
+	}
+}
+
+func TestRelayOverheadP95UnderParallelLoad(t *testing.T) {
+	st := relayE2EStore(t)
+	userID, token := relayE2EAccount(t, st)
+	ctx := context.Background()
+	mock := rcontest.NewServer(
+		rcontest.SetSettings(rcontest.Settings{Password: "secret"}),
+		rcontest.SetCommandHandler(func(c *rcontest.Context) {
+			_, _ = rcon.NewPacket(rcon.SERVERDATA_RESPONSE_VALUE, c.Request().ID, "ok").WriteTo(c.Conn())
+		}),
+	)
+	defer mock.Close()
+	host, portText, _ := net.SplitHostPort(mock.Addr())
+	port, _ := strconv.Atoi(portText)
+	serverID, err := st.CreateServer(ctx, store.Server{UserID: userID, Name: "Load", Host: host, Port: port, Password: "secret", Protocol: "source", Game: "Counter-Strike 2", Source: "manual"})
+	if err != nil {
+		t.Fatalf("create load-test server: %v", err)
+	}
+	rel := New(log.New(io.Discard, "", 0), []string{testOrigin}, st, auth.New(st))
+	httpServer := httptest.NewServer(rel.Routes())
+	defer httpServer.Close()
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http") + "/ws/rcon"
+
+	const clients = 8
+	const commandsPerClient = 20
+	overheads := make(chan float64, clients*commandsPerClient)
+	errors := make(chan error, clients)
+	var wg sync.WaitGroup
+	for client := 0; client < clients; client++ {
+		wg.Add(1)
+		go func(client int) {
+			defer wg.Done()
+			conn, _, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": []string{testOrigin}})
+			if err != nil {
+				errors <- err
+				return
+			}
+			defer conn.Close()
+			_ = conn.SetReadDeadline(time.Now().Add(20 * time.Second))
+			if err = conn.WriteJSON(wsMessage{Type: "auth", Token: token}); err != nil {
+				errors <- err
+				return
+			}
+			var response wsMessage
+			if err = conn.ReadJSON(&response); err != nil || response.Type != "authenticated" {
+				errors <- fmt.Errorf("auth: %+v: %w", response, err)
+				return
+			}
+			if err = conn.WriteJSON(wsMessage{Type: "connect", ServerID: serverID}); err != nil {
+				errors <- err
+				return
+			}
+			if err = conn.ReadJSON(&response); err != nil || response.Type != "connected" {
+				errors <- fmt.Errorf("connect: %+v: %w", response, err)
+				return
+			}
+			for command := 0; command < commandsPerClient; command++ {
+				if err = conn.WriteJSON(wsMessage{Type: "command", Command: fmt.Sprintf("status %d %d", client, command)}); err != nil {
+					errors <- err
+					return
+				}
+				response = wsMessage{}
+				if err = conn.ReadJSON(&response); err != nil || response.Type != "response" || response.RelayOverheadMs == nil {
+					errors <- fmt.Errorf("command: %+v: %w", response, err)
+					return
+				}
+				overheads <- *response.RelayOverheadMs
+			}
+		}(client)
+	}
+	wg.Wait()
+	close(errors)
+	for err := range errors {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	close(overheads)
+	values := make([]float64, 0, clients*commandsPerClient)
+	for value := range overheads {
+		values = append(values, value)
+	}
+	if len(values) != clients*commandsPerClient {
+		t.Fatalf("timing samples = %d, want %d", len(values), clients*commandsPerClient)
+	}
+	sort.Float64s(values)
+	p95 := values[(len(values)*95+99)/100-1]
+	t.Logf("relay overhead: clients=%d commands/client=%d samples=%d p50=%.3fms p95=%.3fms max=%.3fms", clients, commandsPerClient, len(values), values[len(values)/2], p95, values[len(values)-1])
+	if p95 > 50 {
+		t.Fatalf("p95 relay overhead %.3fms exceeds 50ms target", p95)
+	}
 }
 
 func TestWebSocketRejectsAnotherUsersServer(t *testing.T) {

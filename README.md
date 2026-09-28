@@ -112,7 +112,9 @@ The command center includes:
 - Nitrado service status, players, map, version, and memory allocation only
   for Minecraft/Hytale where Nitrado supplies it; CPU is deliberately not
   shown because Nitrado does not expose a reliable value here;
-- official per-game icons from Nitrado's games catalog; and
+- official per-game icons from Nitrado's games catalog;
+- official Steam header art in the supported-games overview plus a game
+  backdrop for the selected server; and
 - optional public Steam profile, account-age, VAC, community-ban, and
   game-ban data for newly observed SteamID64 players. Steam enrichment is
   disabled unless the Cloud API has a Steam Web API key configured.
@@ -124,7 +126,14 @@ For uninterrupted Nitrado player history, schedule
 `php webspace/cron/sample_nitrado.php` every five minutes in the hosting
 control panel; the command reuses the shared 30–60-second Nitrado cache and
 removes samples older than 90 days.
-Settings contains account/security controls, recent account activity, and
+On Hetzner Webhosting, open **Settings → Cron Job Manager → Advanced view**
+for the hosting account and add (with the actual FTP login/path):
+
+```cron
+*/5 * * * * /usr/bin/php /usr/www/users/<FTP_LOGIN>/<DEPLOY_PATH>/webspace/cron/sample_nitrado.php
+```
+Settings contains account/security controls, recent account activity including
+cross-server RCON command outcomes, and
 Nitrado-token removal. Admins additionally get account management,
 instance-wide notifications, and the latest audit entries.
 
@@ -325,7 +334,10 @@ Once deployed, it serves the same JSON API the relay used to (except
   users see their latest relevant security/account actions and active
   instance notices. Notification dismissal is browser-local. Admin-only
   endpoints create/delete notices and expose the latest instance-wide
-  audit records, including the recorded request IP address. Entries are
+  audit records, including the recorded request IP address, cross-server RCON
+  commands, player targets, outcomes, and latency. Automatic player-list
+  polling is excluded; manual commands, quick actions, macro steps, player
+  actions, and automatic moderation are retained. Entries are
   retained for 180 days by default and deleted on the next audit write/read
   after expiry; `audit_retention_days` can set a policy between 30 and 3650
   days.
@@ -401,6 +413,8 @@ excluding that upstream wait and excluding browser/Internet transit. The
 performance objective is **p95 relay overhead ≤50 ms** at the intended
 deployment load — not a 50 ms total Internet round trip. The Health view
 shows the browser round trip and both available components separately.
+The normative definition and controlled parallel-load acceptance test are in
+[docs/requirements.md](docs/requirements.md).
 
 **`"palworld_rest"`** exists because Pocketpair deprecated Palworld's RCON
 support in favor of a REST API (plain HTTP + JSON, HTTP Basic auth with

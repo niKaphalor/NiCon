@@ -1,6 +1,46 @@
 <?php
 declare(strict_types=1);
 
+function nicon_rcon_audit_rows(?int $userId, int $limit): array
+{
+    $where = $userId === null ? '' : 'WHERE user_id = ?';
+    $stmt = nicon_db()->prepare("
+        SELECT username, server_name, command, action, target_player, origin,
+               result, success, upstream_ms, relay_overhead_ms, created_at
+        FROM rcon_audit_log
+        $where
+        ORDER BY created_at DESC, id DESC
+        LIMIT $limit
+    ");
+    $stmt->execute($userId === null ? [] : [$userId]);
+    return array_map(static function (array $row): array {
+        return [
+            'kind' => 'rcon',
+            'action' => 'rcon_command',
+            'rcon_action' => $row['action'],
+            'origin' => $row['origin'],
+            'command' => $row['command'],
+            'target_player' => $row['target_player'],
+            'result' => $row['result'],
+            'success' => (bool) $row['success'],
+            'upstream_ms' => $row['upstream_ms'] !== null ? (float) $row['upstream_ms'] : null,
+            'relay_overhead_ms' => $row['relay_overhead_ms'] !== null ? (float) $row['relay_overhead_ms'] : null,
+            'actor_username' => $row['username'],
+            'server_name' => $row['server_name'],
+            'target_username' => null,
+            'detail' => null,
+            'created_at' => gmdate('Y-m-d\TH:i:s\Z', strtotime($row['created_at'])),
+        ];
+    }, $stmt->fetchAll());
+}
+
+function nicon_merge_audit_rows(array $accountRows, array $rconRows, int $limit): array
+{
+    $rows = array_merge($accountRows, $rconRows);
+    usort($rows, static fn(array $a, array $b): int => strcmp($b['created_at'], $a['created_at']));
+    return array_slice($rows, 0, $limit);
+}
+
 // nicon_handle_list_audit_log: the authenticated user's own activity —
 // actions they took (user_id = them) and admin actions that targeted
 // their account (target_user_id = them, e.g. an admin regenerating their
@@ -21,15 +61,17 @@ function nicon_handle_list_audit_log(int $userId): void
         LIMIT 100
     ');
     $stmt->execute([$userId, $userId]);
-    nicon_send_json(array_map(static function (array $row): array {
+    $accountRows = array_map(static function (array $row): array {
         return [
+            'kind' => 'account',
             'action' => $row['action'],
             'detail' => $row['detail'],
             'actor_username' => $row['actor_username'],
             'target_username' => $row['target_username'],
             'created_at' => gmdate('Y-m-d\TH:i:s\Z', strtotime($row['created_at'])),
         ];
-    }, $stmt->fetchAll()));
+    }, $stmt->fetchAll());
+    nicon_send_json(nicon_merge_audit_rows($accountRows, nicon_rcon_audit_rows($userId, 100), 100));
 }
 
 // nicon_handle_admin_list_audit_log: everything, for review — the whole
@@ -48,8 +90,9 @@ function nicon_handle_admin_list_audit_log(int $adminId): void
         ORDER BY a.created_at DESC
         LIMIT 200
     ');
-    nicon_send_json(array_map(static function (array $row): array {
+    $accountRows = array_map(static function (array $row): array {
         return [
+            'kind' => 'account',
             'action' => $row['action'],
             'detail' => $row['detail'],
             'ip_address' => $row['ip_address'],
@@ -57,5 +100,6 @@ function nicon_handle_admin_list_audit_log(int $adminId): void
             'target_username' => $row['target_username'],
             'created_at' => gmdate('Y-m-d\TH:i:s\Z', strtotime($row['created_at'])),
         ];
-    }, $stmt->fetchAll()));
+    }, $stmt->fetchAll());
+    nicon_send_json(nicon_merge_audit_rows($accountRows, nicon_rcon_audit_rows(null, 200), 200));
 }

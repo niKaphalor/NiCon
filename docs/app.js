@@ -104,6 +104,7 @@
   var viewApp = document.getElementById("view-app");
   var serverSearch = document.getElementById("server-search");
   var serverList = document.getElementById("server-list");
+  var contentPane = document.getElementById("content");
 
   var contentEmpty = document.getElementById("content-empty");
   var contentEmptyText = document.getElementById("content-empty-text");
@@ -1558,6 +1559,15 @@
     var actor = entry.actor_username || "?";
     var target = entry.target_username || "?";
     var detail = entry.detail || "";
+    if (entry.kind === "rcon") {
+      return I18N.t("auditLog.action_rconCommand", {
+        actor: actor,
+        server: entry.server_name || "?",
+        action: entry.rcon_action || "command",
+        target: entry.target_player ? " → " + entry.target_player : "",
+        command: entry.command || "",
+      });
+    }
     switch (entry.action) {
       case "login_success": return I18N.t("auditLog.action_loginSuccess", { actor: actor });
       case "login_failed":
@@ -1598,6 +1608,20 @@
       var msg = document.createElement("p");
       msg.textContent = auditLogEntryText(entry);
       row.appendChild(msg);
+
+      if (entry.kind === "rcon") {
+        var latency = Number(entry.upstream_ms || 0) + Number(entry.relay_overhead_ms || 0);
+        var result = document.createElement("details");
+        result.className = "audit-command-result";
+        var resultSummary = document.createElement("summary");
+        resultSummary.textContent = I18N.t(entry.success ? "auditLog.rconSucceeded" : "auditLog.rconFailed", { latency: latency.toFixed(2) });
+        result.appendChild(resultSummary);
+        var resultText = document.createElement("pre");
+        resultText.setAttribute("aria-label", I18N.t("auditLog.rconResult"));
+        resultText.textContent = entry.result || "—";
+        result.appendChild(resultText);
+        row.appendChild(result);
+      }
 
       var when = document.createElement("span");
       when.className = "hint";
@@ -2154,6 +2178,7 @@
   function renderContent() {
     var server = findServer(selectedServerId);
     if (!server) selectedServerId = null;
+    setServerBackground(server);
 
     contentEmpty.hidden = !!server;
     contentPassword.hidden = true;
@@ -2188,6 +2213,18 @@
     renderPlayersPanel(consoles[server.id]);
     renderNitradoResources(server);
     updateCmdBarState();
+  }
+
+  function setServerBackground(server) {
+    var key = server ? window.NICON_GUESS_GAME(server.game) : "";
+    var game = key ? window.NICON_GAMES[key] : null;
+    var image = game && game.backgroundImage ? game.backgroundImage : "";
+    contentPane.classList.toggle("has-game-background", !!image);
+    if (image) {
+      contentPane.style.setProperty("--game-background-image", 'url("' + image + '")');
+    } else {
+      contentPane.style.removeProperty("--game-background-image");
+    }
   }
 
   function setDashboardLayout(layout) {
@@ -2573,7 +2610,11 @@
         return;
       }
       c.moderationCooldowns[cooldownKey] = Date.now() + 60000;
-      sendConsoleCommand(c, command);
+      sendConsoleCommand(c, command, {
+        origin: "automatic_moderation",
+        action: rule.action,
+        targetPlayer: player.cells[0] || player.id,
+      });
       appendConsoleLine(c, "system", "Moderation: " + rule.action + " → " + (player.cells[0] || player.id));
     });
   }
@@ -2752,11 +2793,17 @@
   // console if it's the one on screen, and does the actual send. Returns
   // false (and sends nothing) if there's no live game connection right
   // now, so every caller shares the same "not connected" guard.
-  function sendConsoleCommand(c, command) {
+  function sendConsoleCommand(c, command, audit) {
     if (!c || !command || !c.gameConnected || !c.socket || c.socket.readyState !== WebSocket.OPEN) return false;
     appendConsoleLine(c, "sent", "> " + command);
     refreshIfActive(c);
-    c.socket.send(JSON.stringify({ type: "command", command: command }));
+    var message = { type: "command", command: command };
+    if (audit) {
+      message.audit_origin = audit.origin || "manual";
+      message.audit_action = audit.action || "command";
+      if (audit.targetPlayer) message.target_player = String(audit.targetPlayer);
+    }
+    c.socket.send(JSON.stringify(message));
     return true;
   }
 
@@ -2769,7 +2816,7 @@
     var game = window.NICON_GAMES[c.gameKey];
     c.pendingPlayersRequest = true;
     c.playersRequestSentAt = Date.now();
-    sendConsoleCommand(c, game.command);
+    sendConsoleCommand(c, game.command, { origin: "system", action: "player_poll" });
   }
 
   // Column identifiers from games.js are canonical lowercase keys (e.g.
@@ -2851,10 +2898,10 @@
           actions.className = "player-actions-row";
           var label = player.cells[0] || player.id;
           if (kickCmd) actions.appendChild(playerActionButton(I18N.t("players.kick"), false, function () {
-            sendPlayerAction(c, kickCmd, I18N.t("players.kickConfirm", { name: label }));
+            sendPlayerAction(c, kickCmd, I18N.t("players.kickConfirm", { name: label }), "kick", label);
           }));
           if (banCmd) actions.appendChild(playerActionButton(I18N.t("players.ban"), true, function () {
-            sendPlayerAction(c, banCmd, I18N.t("players.banConfirm", { name: label }));
+            sendPlayerAction(c, banCmd, I18N.t("players.banConfirm", { name: label }), "ban", label);
           }));
           main.appendChild(actions);
         }
@@ -2945,13 +2992,20 @@
       playerMessageInput.value = ""; playerMessageModal.showModal(); playerMessageInput.focus(); return;
     }
     var command = target.game[action](target.player);
-    if (command) sendPlayerAction(target.c, command, action + " " + (target.player.cells[0] || target.player.id) + "?");
+    if (command) {
+      var targetLabel = target.player.cells[0] || target.player.id;
+      sendPlayerAction(target.c, command, action + " " + targetLabel + "?", action, targetLabel);
+    }
   });
   playerMessageClose.addEventListener("click", function () { playerMessageModal.close(); });
   playerMessageForm.addEventListener("submit", function (event) {
     event.preventDefault();
     var target = contextPlayerAction;
-    if (target && target.game.whisper) sendConsoleCommand(target.c, target.game.whisper(target.player, playerMessageInput.value.trim()));
+    if (target && target.game.whisper) sendConsoleCommand(
+      target.c,
+      target.game.whisper(target.player, playerMessageInput.value.trim()),
+      { origin: "player_action", action: "whisper", targetPlayer: target.player.cells[0] || target.player.id }
+    );
     playerMessageModal.close();
   });
 
@@ -2964,10 +3018,10 @@
     return btn;
   }
 
-  function sendPlayerAction(c, command, confirmMessage) {
+  function sendPlayerAction(c, command, confirmMessage, action, targetPlayer) {
     showConfirm(confirmMessage).then(function (ok) {
       if (!ok) return;
-      if (!sendConsoleCommand(c, command)) return;
+      if (!sendConsoleCommand(c, command, { origin: "player_action", action: action, targetPlayer: targetPlayer })) return;
       setTimeout(function () { requestPlayers(c); }, 1200);
     });
   }
@@ -3114,7 +3168,7 @@
       var step = steps[index++];
       var wait = step.match(/^@wait\s+([0-9]+(?:\.[0-9]+)?)$/i);
       if (wait) { setTimeout(next, Math.min(10, Number(wait[1])) * 1000); return; }
-      if (!sendConsoleCommand(c, step)) return;
+      if (!sendConsoleCommand(c, step, { origin: "macro", action: "macro" })) return;
       setTimeout(next, 750);
     }
     next();
@@ -3319,7 +3373,7 @@
   function runQuickCommand(c, def) {
     if (!c.gameConnected || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
     if (def.risk === "low") {
-      sendConsoleCommand(c, def.build());
+      sendConsoleCommand(c, def.build(), { origin: "quick_action", action: def.id });
       return;
     }
     openQuickCommandModal(c, def);
@@ -3373,7 +3427,7 @@
 
     var command = needsMessage ? def.build(message) : def.build();
     quickCmdModal.close();
-    if (command) sendConsoleCommand(c, command);
+    if (command) sendConsoleCommand(c, command, { origin: "quick_action", action: def.id });
   });
 
   // --- welcome screen: supported games list ---
@@ -3389,14 +3443,32 @@
     supportedGamesList.innerHTML = "";
     Object.keys(window.NICON_GAMES).forEach(function (key) {
       var tested = TESTED_GAMES.indexOf(key) !== -1;
+      var game = window.NICON_GAMES[key];
       var li = document.createElement("li");
+      li.setAttribute("aria-label", game.label);
+      li.title = game.label;
+
+      var image = document.createElement("img");
+      image.className = "supported-game-header";
+      image.src = game.headerImage || "";
+      image.alt = game.label;
+      image.loading = "lazy";
+      image.referrerPolicy = "no-referrer";
+      var fallback = document.createElement("span");
+      fallback.className = "supported-game-fallback";
+      fallback.textContent = game.label;
+      fallback.hidden = true;
+      image.addEventListener("error", function () {
+        image.hidden = true;
+        fallback.hidden = false;
+      });
+      li.appendChild(image);
+      li.appendChild(fallback);
 
       var tag = document.createElement("span");
       tag.className = "tag " + (tested ? "tag-tested" : "tag-untested");
       tag.textContent = I18N.t(tested ? "welcome.tested" : "welcome.untested");
       li.appendChild(tag);
-
-      li.appendChild(document.createTextNode(window.NICON_GAMES[key].label));
       supportedGamesList.appendChild(li);
     });
   }

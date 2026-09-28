@@ -17,6 +17,7 @@ function nicon_audit_cleanup(): void
     $done = true;
     $days = nicon_audit_retention_days();
     nicon_db()->exec("DELETE FROM audit_log WHERE created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL $days DAY)");
+    nicon_db()->exec("DELETE FROM rcon_audit_log WHERE created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL $days DAY)");
 }
 
 // nicon_audit_log records an admin action or a security-relevant account

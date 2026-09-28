@@ -73,6 +73,28 @@ CREATE TABLE IF NOT EXISTS server_health_samples (
 	FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
 	INDEX idx_health_server_time (server_id, sampled_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS rcon_audit_log (
+	id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	user_id INT UNSIGNED NULL,
+	server_id INT UNSIGNED NULL,
+	username VARCHAR(64) NOT NULL,
+	server_name VARCHAR(255) NOT NULL,
+	command TEXT NOT NULL,
+	action VARCHAR(64) NOT NULL DEFAULT 'command',
+	target_player VARCHAR(255) NULL,
+	origin VARCHAR(32) NOT NULL DEFAULT 'manual',
+	result TEXT NULL,
+	success BOOLEAN NOT NULL,
+	upstream_ms DECIMAL(12,3) NULL,
+	relay_overhead_ms DECIMAL(12,3) NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+	FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE SET NULL,
+	INDEX idx_rcon_audit_user_time (user_id, created_at),
+	INDEX idx_rcon_audit_server_time (server_id, created_at),
+	INDEX idx_rcon_audit_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 `
 
 // migrations covers columns added after a table's initial CREATE TABLE IF
@@ -101,6 +123,26 @@ var migrations = []string{
 type Store struct {
 	db  *sql.DB
 	enc *encryptor
+}
+
+// RCONAuditRecord is the durable, cross-server record of an operator command.
+// Username and ServerName are snapshots so the audit trail remains readable
+// after the associated account or server profile is deleted.
+type RCONAuditRecord struct {
+	ID              int64
+	UserID          int64
+	ServerID        int64
+	Username        string
+	ServerName      string
+	Command         string
+	Action          string
+	TargetPlayer    string
+	Origin          string
+	Result          string
+	Success         bool
+	UpstreamMs      float64
+	RelayOverheadMs float64
+	CreatedAt       time.Time
 }
 
 // Open connects to MariaDB/MySQL at dsn and ensures the schema exists.
@@ -544,6 +586,68 @@ func (s *Store) ListServersForHealthCheck(ctx context.Context) ([]Server, error)
 		out = append(out, srv)
 	}
 	return out, rows.Err()
+}
+
+// RecordRCONAudit persists an operator-visible command outcome. Output is
+// bounded before insertion so a game server cannot turn one response into an
+// unbounded audit row. The command itself is already capped by the relay.
+func (s *Store) RecordRCONAudit(ctx context.Context, record RCONAuditRecord) error {
+	record.Action = truncateRunes(record.Action, 64)
+	record.TargetPlayer = truncateRunes(record.TargetPlayer, 255)
+	record.Origin = truncateRunes(record.Origin, 32)
+	record.Result = truncateRunes(record.Result, 4000)
+	if record.Action == "" {
+		record.Action = "command"
+	}
+	if record.Origin == "" {
+		record.Origin = "manual"
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO rcon_audit_log
+			(user_id, server_id, username, server_name, command, action, target_player, origin, result, success, upstream_ms, relay_overhead_ms)
+		SELECT ?, ?, username, ?, ?, ?, NULLIF(?, ''), ?, NULLIF(?, ''), ?, ?, ?
+		FROM users WHERE id = ?`,
+		record.UserID, record.ServerID, truncateRunes(record.ServerName, 255), record.Command,
+		record.Action, record.TargetPlayer, record.Origin, record.Result, record.Success,
+		record.UpstreamMs, record.RelayOverheadMs, record.UserID)
+	return err
+}
+
+// ListRCONAudit is used by integration tests and administrative tooling. The
+// browser-facing API reads the same table from PHP so it can merge account and
+// command events into one timeline.
+func (s *Store) ListRCONAudit(ctx context.Context, userID int64, limit int) ([]RCONAuditRecord, error) {
+	if limit < 1 || limit > 500 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, COALESCE(user_id, 0), COALESCE(server_id, 0), username, server_name,
+		       command, action, COALESCE(target_player, ''), origin, COALESCE(result, ''),
+		       success, COALESCE(upstream_ms, 0), COALESCE(relay_overhead_ms, 0), created_at
+		FROM rcon_audit_log WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var records []RCONAuditRecord
+	for rows.Next() {
+		var record RCONAuditRecord
+		if err := rows.Scan(&record.ID, &record.UserID, &record.ServerID, &record.Username, &record.ServerName,
+			&record.Command, &record.Action, &record.TargetPlayer, &record.Origin, &record.Result,
+			&record.Success, &record.UpstreamMs, &record.RelayOverheadMs, &record.CreatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+func truncateRunes(value string, max int) string {
+	runes := []rune(value)
+	if len(runes) <= max {
+		return value
+	}
+	return string(runes[:max])
 }
 
 // UpdateServerHealth records the outcome of one periodic health check (a

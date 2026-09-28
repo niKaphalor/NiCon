@@ -29,20 +29,21 @@ foreach ($stmt as $row) {
         $gs = $data['gameserver'] ?? [];
         $query = is_array($gs['query'] ?? null) ? $gs['query'] : [];
         $online = in_array(strtolower((string) ($gs['status'] ?? '')), ['started', 'running', 'online'], true);
-        $pdo->prepare('
+        $insert = $pdo->prepare('
             INSERT INTO server_health_samples (server_id, online, player_current, player_max, source)
             SELECT ?, ?, ?, ?, \'nitrado\'
             WHERE NOT EXISTS (
                 SELECT 1 FROM server_health_samples
                 WHERE server_id = ? AND source = \'nitrado\' AND sampled_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 4 MINUTE)
             )
-        ')->execute([
+        ');
+        $insert->execute([
             (int) $row['id'], $online,
             isset($query['player_current']) ? (int) $query['player_current'] : null,
             isset($query['player_max']) ? (int) $query['player_max'] : (isset($gs['slots']) ? (int) $gs['slots'] : null),
             (int) $row['id'],
         ]);
-        $inserted++;
+        $inserted += $insert->rowCount();
     } catch (Throwable $e) {
         fwrite(STDERR, 'server ' . (int) $row['id'] . ': ' . $e->getMessage() . PHP_EOL);
     }

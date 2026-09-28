@@ -163,6 +163,33 @@ CREATE TABLE IF NOT EXISTS audit_log (
 	INDEX idx_audit_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Commands executed through the relay. Actor and server names are retained as
+-- snapshots so the record remains useful after an account or profile is
+-- deleted; the nullable foreign keys still provide referential integrity while
+-- those objects exist. Automatic player-list polling is intentionally excluded
+-- by the relay because it is telemetry, not an administrative action.
+CREATE TABLE IF NOT EXISTS rcon_audit_log (
+	id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	user_id INT UNSIGNED NULL,
+	server_id INT UNSIGNED NULL,
+	username VARCHAR(64) NOT NULL,
+	server_name VARCHAR(255) NOT NULL,
+	command TEXT NOT NULL,
+	action VARCHAR(64) NOT NULL DEFAULT 'command',
+	target_player VARCHAR(255) NULL,
+	origin VARCHAR(32) NOT NULL DEFAULT 'manual',
+	result TEXT NULL,
+	success BOOLEAN NOT NULL,
+	upstream_ms DECIMAL(12,3) NULL,
+	relay_overhead_ms DECIMAL(12,3) NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+	FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE SET NULL,
+	INDEX idx_rcon_audit_user_time (user_id, created_at),
+	INDEX idx_rcon_audit_server_time (server_id, created_at),
+	INDEX idx_rcon_audit_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Short-lived, process-independent Nitrado GET cache. The token itself is
 -- never stored here: token_hash is an HMAC scoped with the installation's
 -- encryption key, while request_key identifies only the base URL + path.

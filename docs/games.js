@@ -373,6 +373,56 @@ Object.assign(window.NICON_GAMES, {
   delete window.NICON_GAMES[key];
 });
 
+// Steam artwork used by the supported-games overview and the selected-server
+// backdrop. Most titles use Steam's stable app-scoped paths; newer titles use
+// the hash-qualified URLs returned by Steam's own app-details API.
+var steamAssets = {
+  sevendaystodie: { appId: 251570 },
+  eightythree: { appId: 1059220, header: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1059220/b7ccd7a2b80ef91a8aa93d8cef2755b01aebe8a6/header.jpg" },
+  arksurvivalascended: { appId: 2399830 },
+  arksurvivalevolved: { appId: 346110 },
+  arma2: { appId: 33900 },
+  arma3: { appId: 107410 },
+  armareforger: { appId: 1874880 },
+  atlas: { appId: 834910 },
+  battlebit: { appId: 671860 },
+  beyondthewire: { appId: 1058650 },
+  conanexiles: { appId: 440900 },
+  counterstrike2: { appId: 730 },
+  darkandlight: { appId: 529180 },
+  dayz: { appId: 221100 },
+  gmod: { appId: 4000 },
+  hellletloose: { appId: 686810 },
+  hellletloosevietnam: {
+    appId: 3079210,
+    header: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/3079210/2e52f99e70e827b57a2205469dc5d529e8e0490a/header.jpg",
+    background: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/3079210/11f2f56dd8945194aed2ee44376b54b1bee6c122/page_bg_raw.jpg",
+  },
+  insurgency: { appId: 222880 },
+  mordhau: { appId: 629760 },
+  palworld: { appId: 1623730 },
+  projectzomboid: { appId: 108600 },
+  risingstorm2: { appId: 418460 },
+  rust: { appId: 252490 },
+  squad: { appId: 393380 },
+  squad44: { appId: 736220 },
+  soulmask: { appId: 2646460 },
+  vrising: { appId: 1604030 },
+  wardogs: {
+    appId: 1867240,
+    header: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1867240/59d4daf753bd5d982e6675f7eee363bc817c574e/header.jpg",
+    background: "https://store.fastly.steamstatic.com/images/storepagebackground/app/1867240",
+  },
+};
+Object.keys(steamAssets).forEach(function (key) {
+  var game = window.NICON_GAMES[key];
+  var asset = steamAssets[key];
+  if (!game || !asset) return;
+  game.steamAppId = asset.appId;
+  game.headerImage = asset.header || "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/" + asset.appId + "/header.jpg";
+  game.backgroundImage = asset.background || "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/" + asset.appId + "/page_bg_generated_v6b.jpg";
+});
+
 // Best-effort mapping from a Nitrado "game" string (e.g. "Minecraft
 // Vanilla") to one of the keys above, for auto-selecting the parser. Most
 // keys already are the substring to look for; a few games' key names

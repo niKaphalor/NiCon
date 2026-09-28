@@ -115,7 +115,11 @@
     operator's Steam API key remains server-side. NiCon does not persist
     the IDs or returned Steam profiles; they remain in browser memory for
     the current console session. Opening a Steam profile link is a separate,
-    user-initiated visit to Steam Community.
+    user-initiated visit to Steam Community. The supported-games overview
+    and the selected server's backdrop load official header/background art
+    directly from <code>*.steamstatic.com</code>. Its CDN operator receives
+    ordinary connection data such as IP address and user agent; NiCon sends
+    no referrer.
   </p>
 
   <h2>6. Other recipients and external resources</h2>
@@ -137,7 +141,7 @@
     records support secure and reliable operation and the investigation of
     misuse (Art. 6(1)(f) GDPR). Contact data is processed to answer your
     request (Art. 6(1)(b) or (f) GDPR, depending on its context). External
-    game icons support a consistent, recognizable interface (Art. 6(1)(f)
+    game icons and header/background art support a consistent, recognizable interface (Art. 6(1)(f)
     GDPR). Inter is delivered locally by NiCon and does not contact Google.
     You may object to processing based on legitimate
     interests as described in section 9.
@@ -163,7 +167,8 @@
       deleted opportunistically when the cache is written; power operations
       as well as token replacement/removal and account deletion invalidate
       the affected token cache immediately.</li>
-    <li>Audit records are retained for 180 days by default (operator-
+    <li>Audit records, including executed RCON commands, target players,
+      outcome status, truncated server output, and latency, are retained for 180 days by default (operator-
       configurable from 30 days to 10 years) and are cleaned when the audit
       log is written or viewed. When an account is deleted, its database link
       is removed, but the remaining audit fields persist only until that

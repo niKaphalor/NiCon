@@ -273,6 +273,10 @@ window.NICON_I18N_STRINGS.de = {
     action_adminRecoveryCodeRegenerated: "{{actor}} hat den Wiederherstellungscode von {{target}} neu generiert",
     action_adminNotificationCreated: "{{actor}} hat eine Benachrichtigung gesendet: „{{detail}}“",
     action_adminNotificationDeleted: "{{actor}} hat eine Benachrichtigung gelöscht: „{{detail}}“",
+    action_rconCommand: "{{actor}} · {{server}} · {{action}}{{target}} · {{command}}",
+    rconSucceeded: "Erfolgreich · {{latency}} ms",
+    rconFailed: "Fehlgeschlagen · {{latency}} ms",
+    rconResult: "Ergebnis",
   },
   settings: {
     navLabel: "Einstellungen",
