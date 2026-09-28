@@ -23,6 +23,7 @@ function nicon_config(): array
         'db_user' => getenv('NICON_DB_USER') ?: '',
         'db_pass' => getenv('NICON_DB_PASS') ?: '',
         'encryption_key_base64' => getenv('NICON_ENCRYPTION_KEY') ?: '',
+        'steam_api_key' => getenv('NICON_STEAM_API_KEY') ?: '',
         'allowed_origins' => $origins ? array_map('trim', explode(',', $origins)) : [],
     ];
     return $config;

@@ -177,9 +177,16 @@
   var cmdTemplateNameInput = document.getElementById("cmd-template-name-input");
   var cmdTemplateCommandInput = document.getElementById("cmd-template-command-input");
   var cmdTemplateError = document.getElementById("cmd-template-error");
+  var moderationRulesBtn = document.getElementById("moderation-rules-btn");
+  var moderationRulesPanel = document.getElementById("moderation-rules-panel");
+  var moderationRulesList = document.getElementById("moderation-rules-list");
+  var moderationRuleForm = document.getElementById("moderation-rule-form");
+  var moderationPatternInput = document.getElementById("moderation-pattern-input");
+  var moderationActionSelect = document.getElementById("moderation-action-select");
   var log = document.getElementById("log");
   var cmdForm = document.getElementById("cmd-form");
   var cmdInput = document.getElementById("cmd-input");
+  var cmdSuggestions = document.getElementById("cmd-suggestions");
   var cmdSendBtn = cmdForm.querySelector("button[type=submit]");
 
   var quickCmdBar = document.getElementById("quick-cmd-bar");
@@ -193,6 +200,13 @@
   var quickCmdModalConfirm = document.getElementById("quick-command-modal-confirm");
 
   var playersPanel = document.getElementById("players-panel");
+  var playerContextMenu = document.getElementById("player-context-menu");
+  var playerMessageModal = document.getElementById("player-message-modal");
+  var playerMessageClose = document.getElementById("player-message-close");
+  var playerMessageForm = document.getElementById("player-message-form");
+  var playerMessageInput = document.getElementById("player-message-input");
+  var nitradoResourcesCard = document.getElementById("nitrado-resources-card");
+  var nitradoResources = document.getElementById("nitrado-resources");
 
   // --- cloud API + relay addresses ---
   // Both fixed to this instance's own infrastructure — not user-
@@ -311,6 +325,7 @@
     renderLangCurrent();
     renderServers();
     renderContent();
+    renderModerationRules();
     renderSupportedGamesList();
     if (authToken) accountUsernameLine.textContent = I18N.t("settings.accountUsernameLine", { username: currentUsername });
   });
@@ -885,6 +900,14 @@
 
       var nameLine = document.createElement("span");
       nameLine.className = "name";
+      if (server.game_icon_url) {
+        var gameIcon = document.createElement("img");
+        gameIcon.className = "server-game-icon";
+        gameIcon.src = server.game_icon_url;
+        gameIcon.alt = "";
+        gameIcon.addEventListener("error", function () { gameIcon.remove(); });
+        nameLine.appendChild(gameIcon);
+      }
       var dot = document.createElement("span");
       dot.className = "dot " + serverStatusClass(server);
       dot.title = serverStatusTooltip(server);
@@ -1112,6 +1135,7 @@
     loadAccountInfo();
     loadActivity();
     loadCommandTemplates();
+    loadModerationRules();
     setActiveNav(navServersBtn);
     renderServers();
     renderContent();
@@ -1840,6 +1864,7 @@
     contentEmpty.hidden = !!server;
     contentPassword.hidden = true;
     contentConsole.hidden = true;
+    nitradoResourcesCard.hidden = true;
     passwordPowerActions.hidden = true;
     passwordPowerActions.innerHTML = "";
 
@@ -1865,14 +1890,65 @@
     renderQuickCommands(consoles[server.id]);
     cmdHistoryPanel.hidden = true; // a switch to a different server's console starts closed, not showing the old one's history
     cmdTemplatesPanel.hidden = true;
+    moderationRulesPanel.hidden = true;
     renderPlayersPanel(consoles[server.id]);
+    renderNitradoResources(server);
     updateCmdBarState();
+  }
+
+  function setDashboardLayout(layout) {
+    if (["balanced", "wide", "stacked"].indexOf(layout) === -1) layout = "balanced";
+    localStorage.setItem("nicon_dashboard_layout", layout);
+    var work = document.querySelector(".work");
+    work.classList.toggle("layout-wide", layout === "wide");
+    work.classList.toggle("layout-stacked", layout === "stacked");
+  }
+
+  function renderNitradoResources(server) {
+    setDashboardLayout(localStorage.getItem("nicon_dashboard_layout") || "balanced");
+    nitradoResourcesCard.hidden = server.source !== "nitrado";
+    if (server.source !== "nitrado") return;
+    nitradoResources.innerHTML = "";
+    var cached = server.nitrado_resources;
+    function draw(data) {
+      nitradoResources.innerHTML = "";
+      var items = [
+        [I18N.t("phase2.status"), data.status || "—"],
+        [I18N.t("console.players"), (data.players || 0) + " / " + (data.players_max || 0)],
+        [I18N.t("phase2.memory"), data.memory_mb ? data.memory_mb + " MB" : "—"],
+        ["CPU", data.cpu_percent != null ? Math.round(data.cpu_percent) + "%" : "—"],
+        [I18N.t("phase2.map"), data.map || "—"],
+        [I18N.t("phase2.version"), data.version || "—"],
+      ];
+      items.forEach(function (item) {
+        var box = document.createElement("div"); box.className = "resource-item";
+        var label = document.createElement("span"); label.textContent = item[0];
+        var value = document.createElement("strong"); value.textContent = item[1];
+        box.appendChild(label); box.appendChild(value); nitradoResources.appendChild(box);
+      });
+    }
+    if (cached) draw(cached); else nitradoResources.textContent = "Loading…";
+    if (server.nitradoResourcesLoading || (server.nitradoResourcesFetchedAt && Date.now() - server.nitradoResourcesFetchedAt < 60000)) return;
+    server.nitradoResourcesLoading = true;
+    apiFetch("/api/servers/" + server.id + "/nitrado-status")
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error("status unavailable")); })
+      .then(function (data) { server.nitrado_resources = data; server.nitradoResourcesFetchedAt = Date.now(); if (selectedServerId === server.id) draw(data); })
+      .catch(function () { if (!cached && selectedServerId === server.id) nitradoResources.textContent = "Unavailable"; })
+      .finally(function () { server.nitradoResourcesLoading = false; });
   }
 
   function renderHead(server) {
     head.innerHTML = "";
 
     var h1 = document.createElement("h1");
+    if (server.game_icon_url) {
+      var gameIcon = document.createElement("img");
+      gameIcon.className = "server-game-icon";
+      gameIcon.src = server.game_icon_url;
+      gameIcon.alt = "";
+      gameIcon.addEventListener("error", function () { gameIcon.remove(); });
+      h1.appendChild(gameIcon);
+    }
     var dot = document.createElement("span");
     dot.className = "dot " + serverStatusClass(server);
     dot.title = serverStatusTooltip(server);
@@ -1898,6 +1974,20 @@
     hostTag.className = "tag tag-neutral mono";
     hostTag.textContent = server.host + ":" + server.port;
     head.appendChild(hostTag);
+
+    var layout = localStorage.getItem("nicon_dashboard_layout") || "balanced";
+    var layoutGroup = document.createElement("div");
+    layoutGroup.className = "dashboard-layout";
+    [["balanced", "1:1"], ["wide", I18N.t("phase2.wide")], ["stacked", I18N.t("phase2.stack")]].forEach(function (item) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn-xs";
+      button.textContent = item[1];
+      button.setAttribute("aria-pressed", String(layout === item[0]));
+      button.addEventListener("click", function () { setDashboardLayout(item[0]); renderContent(); });
+      layoutGroup.appendChild(button);
+    });
+    head.appendChild(layoutGroup);
 
     var actions = document.createElement("div");
     actions.className = "head-actions";
@@ -1966,6 +2056,9 @@
         reconnectAttempts: 0,
         followTail: true,
         scrollTop: 0,
+        steamProfiles: {},
+        steamRequested: {},
+        moderationCooldowns: {},
       };
       consoles[server.id] = c;
     }
@@ -2078,11 +2171,12 @@
           c.lastParsed = parsed
             ? { ok: true, summary: parsed.summary, columns: parsed.columns, players: parsed.players }
             : { ok: false };
+          if (parsed) requestSteamProfiles(c, parsed.columns, parsed.players);
           if (selectedServerId === c.server.id) renderPlayersPanel(c);
         }
       } else if (msg.type === "broadcast") {
         // WebRCON servers (Rust) push chat/log lines unsolicited.
-        appendConsoleLine(c, "broadcast", msg.output || "");
+        handleBroadcastLine(c, msg.output || "");
       } else if (msg.type === "error") {
         var message = msg.message || "unknown relay error";
         appendConsoleLine(c, "error", message);
@@ -2129,10 +2223,48 @@
   var MAX_CONSOLE_LOG_LINES = 2000;
 
   function appendConsoleLine(c, kind, text) {
+    if (kind === "broadcast") kind = "chat";
+    if (kind === "response" && /\b(warn(?:ing)?|caution)\b/i.test(text)) kind = "warning";
+    if (kind === "response" && /\b(error|exception|fatal|failed)\b/i.test(text)) kind = "error";
     c.lines.push({ kind: kind, text: text });
     if (c.lines.length > MAX_CONSOLE_LOG_LINES) {
       c.lines.splice(0, c.lines.length - MAX_CONSOLE_LOG_LINES);
     }
+  }
+
+  function playerForLogLine(c, text) {
+    if (!c.lastParsed || !c.lastParsed.ok) return null;
+    var best = null;
+    c.lastParsed.players.forEach(function (player) {
+      var name = String(player.cells[0] || "");
+      if (name && text.toLowerCase().indexOf(name.toLowerCase()) !== -1 && (!best || name.length > String(best.cells[0]).length)) best = player;
+    });
+    return best;
+  }
+
+  function handleBroadcastLine(c, text) {
+    var matched = moderationRules.filter(function (rule) {
+      return rule.enabled && text.toLowerCase().indexOf(rule.pattern.toLowerCase()) !== -1;
+    });
+    appendConsoleLine(c, matched.length ? "warning" : "chat", text);
+    if (!matched.length) return;
+    var player = playerForLogLine(c, text);
+    var game = window.NICON_GAMES[c.gameKey];
+    matched.forEach(function (rule) {
+      if (rule.action === "highlight" || !player || !game) return;
+      var build = rule.action === "kick" ? game.kick : game.mute;
+      var command = build ? build(player) : null;
+      var cooldownKey = rule.id + ":" + player.id;
+      if ((c.moderationCooldowns[cooldownKey] || 0) > Date.now()) return;
+      if (!command) {
+        c.moderationCooldowns[cooldownKey] = Date.now() + 60000;
+        appendConsoleLine(c, "system", "Moderation: " + rule.action + " is not supported for " + (game.label || c.gameKey));
+        return;
+      }
+      c.moderationCooldowns[cooldownKey] = Date.now() + 60000;
+      sendConsoleCommand(c, command);
+      appendConsoleLine(c, "system", "Moderation: " + rule.action + " → " + (player.cells[0] || player.id));
+    });
   }
 
   // renderLog does a full rebuild (log.innerHTML = "" + re-append every
@@ -2382,6 +2514,10 @@
     players.forEach(function (player) {
       var row = document.createElement("div");
       row.className = "player-row";
+      row.addEventListener("contextmenu", function (event) {
+        event.preventDefault();
+        openPlayerContextMenu(event.clientX, event.clientY, c, game, player);
+      });
 
       var main = document.createElement("div");
       main.className = "player-row-main";
@@ -2431,6 +2567,8 @@
           dl.appendChild(dd);
         }
         details.appendChild(dl);
+        var steamIndex = columns.indexOf("steamid");
+        if (steamIndex !== -1) appendSteamProfile(details, c.steamProfiles[String(player.cells[steamIndex] || "")]);
         row.appendChild(details);
       }
 
@@ -2438,6 +2576,73 @@
     });
     playersPanel.appendChild(list);
   }
+
+  function requestSteamProfiles(c, columns, players) {
+    var index = columns.indexOf("steamid");
+    if (index === -1) return;
+    var ids = players.map(function (player) { return String(player.cells[index] || ""); })
+      .filter(function (id) { return /^7656119\d{10}$/.test(id) && !c.steamRequested[id]; });
+    if (!ids.length) return;
+    ids.forEach(function (id) { c.steamRequested[id] = true; });
+    apiFetch("/api/steam/players", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ steamids: ids.slice(0, 100) }),
+    }).then(function (r) { return r.ok ? r.json() : Promise.reject(new Error("Steam unavailable")); })
+      .then(function (data) {
+        (data.players || []).forEach(function (profile) { c.steamProfiles[profile.steamid] = profile; });
+        if (selectedServerId === c.server.id) renderPlayersPanel(c);
+      }).catch(function () { /* optional integration */ });
+  }
+
+  function appendSteamProfile(container, profile) {
+    if (!profile) return;
+    var line = document.createElement("div"); line.className = "steam-profile";
+    if (profile.profile_url) {
+      var link = document.createElement("a"); link.href = profile.profile_url; link.target = "_blank"; link.rel = "noopener";
+      link.textContent = profile.name || "Steam profile"; line.appendChild(link);
+    }
+    if (profile.vac_banned || profile.community_banned || profile.game_bans > 0) {
+      var risk = document.createElement("span"); risk.className = "steam-risk";
+      risk.textContent = "VAC " + (profile.vac_bans || 0) + " · Game bans " + (profile.game_bans || 0); line.appendChild(risk);
+    }
+    if (profile.created_at && Date.now() / 1000 - profile.created_at < 30 * 86400) {
+      var fresh = document.createElement("span"); fresh.className = "steam-fresh"; fresh.textContent = "New account"; line.appendChild(fresh);
+    }
+    container.appendChild(line);
+  }
+
+  var contextPlayerAction = null;
+  function openPlayerContextMenu(x, y, c, game, player) {
+    contextPlayerAction = { c: c, game: game, player: player };
+    ["kick", "ban", "mute", "whisper"].forEach(function (action) {
+      var button = playerContextMenu.querySelector('[data-player-action="' + action + '"]');
+      button.disabled = !game[action] || player.isAdmin;
+    });
+    playerContextMenu.hidden = false;
+    playerContextMenu.style.left = Math.min(x, window.innerWidth - 170) + "px";
+    playerContextMenu.style.top = Math.min(y, window.innerHeight - 170) + "px";
+  }
+
+  document.addEventListener("click", function (event) {
+    if (!playerContextMenu.contains(event.target)) playerContextMenu.hidden = true;
+  });
+  playerContextMenu.addEventListener("click", function (event) {
+    var action = event.target.dataset.playerAction;
+    var target = contextPlayerAction;
+    playerContextMenu.hidden = true;
+    if (!action || !target || !target.game[action]) return;
+    if (action === "whisper") {
+      playerMessageInput.value = ""; playerMessageModal.showModal(); playerMessageInput.focus(); return;
+    }
+    var command = target.game[action](target.player);
+    if (command) sendPlayerAction(target.c, command, action + " " + (target.player.cells[0] || target.player.id) + "?");
+  });
+  playerMessageClose.addEventListener("click", function () { playerMessageModal.close(); });
+  playerMessageForm.addEventListener("submit", function (event) {
+    event.preventDefault();
+    var target = contextPlayerAction;
+    if (target && target.game.whisper) sendConsoleCommand(target.c, target.game.whisper(target.player, playerMessageInput.value.trim()));
+    playerMessageModal.close();
+  });
 
   function playerActionButton(text, danger, onClick) {
     var btn = document.createElement("button");
@@ -2512,6 +2717,7 @@
   cmdHistoryBtn.addEventListener("click", function () {
     var wasHidden = cmdHistoryPanel.hidden;
     cmdTemplatesPanel.hidden = true; // only one of History/Templates open at a time
+    moderationRulesPanel.hidden = true;
     cmdHistoryPanel.hidden = !wasHidden;
     if (wasHidden) renderCommandHistory(consoles[selectedServerId]);
   });
@@ -2520,6 +2726,12 @@
   // history (saving whatever was being typed so Down can return to it),
   // Down steps forward and clears back to that saved draft at the end.
   cmdInput.addEventListener("keydown", function (e) {
+    if (e.key === "Tab" && !cmdSuggestions.hidden) {
+      var first = cmdSuggestions.querySelector("button");
+      if (first) { e.preventDefault(); cmdInput.value = first.dataset.command; cmdSuggestions.hidden = true; }
+      return;
+    }
+    if (e.key === "Escape") { cmdSuggestions.hidden = true; return; }
     if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
     var c = consoles[selectedServerId];
     if (!c || !c.history || !c.history.length) return;
@@ -2544,6 +2756,22 @@
     }
   });
 
+  cmdInput.addEventListener("input", function () {
+    cmdSuggestions.innerHTML = "";
+    var c = consoles[selectedServerId];
+    var game = c && window.NICON_GAMES[c.gameKey];
+    var prefix = cmdInput.value.trim().toLowerCase();
+    var commands = (game && game.commands ? game.commands : []).concat((c && c.history) || []);
+    var unique = commands.filter(function (command, index, all) { return all.indexOf(command) === index; })
+      .filter(function (command) { return prefix && command.toLowerCase().indexOf(prefix) === 0 && command.toLowerCase() !== prefix; }).slice(0, 8);
+    unique.forEach(function (command) {
+      var button = document.createElement("button"); button.type = "button"; button.dataset.command = command; button.textContent = command;
+      button.addEventListener("click", function () { cmdInput.value = command; cmdSuggestions.hidden = true; cmdInput.focus(); });
+      cmdSuggestions.appendChild(button);
+    });
+    cmdSuggestions.hidden = !unique.length;
+  });
+
   cmdForm.addEventListener("submit", function (e) {
     e.preventDefault();
     var c = consoles[selectedServerId];
@@ -2564,6 +2792,22 @@
   // every add/delete, rather than trusted purely locally.
 
   var commandTemplates = [];
+
+  function sendMacro(c, source) {
+    var steps = source.split(/\r?\n/).map(function (line) { return line.trim(); })
+      .filter(function (line) { return line && line.charAt(0) !== "#"; }).slice(0, 20);
+    if (!steps.length) return;
+    var index = 0;
+    function next() {
+      if (index >= steps.length) return;
+      var step = steps[index++];
+      var wait = step.match(/^@wait\s+([0-9]+(?:\.[0-9]+)?)$/i);
+      if (wait) { setTimeout(next, Math.min(10, Number(wait[1])) * 1000); return; }
+      if (!sendConsoleCommand(c, step)) return;
+      setTimeout(next, 750);
+    }
+    next();
+  }
 
   function loadCommandTemplates() {
     return apiFetch("/api/command-templates", { method: "GET" })
@@ -2610,7 +2854,7 @@
       sendBtn.textContent = I18N.t("templates.send");
       sendBtn.addEventListener("click", function () {
         var c = consoles[selectedServerId];
-        if (c) sendConsoleCommand(c, tpl.command);
+        if (c) sendMacro(c, tpl.command);
       });
       actions.appendChild(sendBtn);
 
@@ -2640,6 +2884,7 @@
   cmdTemplatesBtn.addEventListener("click", function () {
     var wasHidden = cmdTemplatesPanel.hidden;
     cmdHistoryPanel.hidden = true; // only one of History/Templates open at a time
+    moderationRulesPanel.hidden = true;
     cmdTemplatesPanel.hidden = !wasHidden;
   });
 
@@ -2673,6 +2918,55 @@
         cmdTemplateError.textContent = err.message;
         cmdTemplateError.hidden = false;
       });
+  });
+
+  // --- word filters and automated moderation ---
+  var moderationRules = [];
+
+  function loadModerationRules() {
+    return apiFetch("/api/moderation-rules")
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (rules) { moderationRules = rules || []; renderModerationRules(); })
+      .catch(function () { moderationRules = []; });
+  }
+
+  function renderModerationRules() {
+    moderationRulesList.innerHTML = "";
+    if (!moderationRules.length) {
+      var empty = document.createElement("p"); empty.className = "hint"; empty.textContent = I18N.t("phase2.noRules");
+      moderationRulesList.appendChild(empty); return;
+    }
+    moderationRules.forEach(function (rule) {
+      var row = document.createElement("div"); row.className = "cmd-template-row";
+      var info = document.createElement("div"); info.className = "template-info";
+      var name = document.createElement("span"); name.className = "template-name"; name.textContent = rule.pattern;
+      var action = document.createElement("span"); action.className = "template-command";
+      action.textContent = rule.action === "highlight" ? I18N.t("phase2.highlight") : (rule.action === "mute" ? I18N.t("phase2.autoMute") : I18N.t("phase2.autoKick"));
+      info.appendChild(name); info.appendChild(action); row.appendChild(info);
+      var remove = document.createElement("button"); remove.type = "button"; remove.className = "btn-xs btn-xs-danger"; remove.textContent = I18N.t("templates.delete");
+      remove.addEventListener("click", function () {
+        apiFetch("/api/moderation-rules/" + rule.id, { method: "DELETE" }).then(function (r) {
+          if (!r.ok && r.status !== 204) throw new Error("Could not delete rule");
+          moderationRules = moderationRules.filter(function (item) { return item.id !== rule.id; }); renderModerationRules();
+        }).catch(function (error) { showToast(error.message); });
+      });
+      row.appendChild(remove); moderationRulesList.appendChild(row);
+    });
+  }
+
+  moderationRulesBtn.addEventListener("click", function () {
+    var show = moderationRulesPanel.hidden;
+    cmdTemplatesPanel.hidden = true; cmdHistoryPanel.hidden = true;
+    moderationRulesPanel.hidden = !show;
+  });
+  moderationRuleForm.addEventListener("submit", function (event) {
+    event.preventDefault();
+    apiFetch("/api/moderation-rules", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pattern: moderationPatternInput.value.trim(), action: moderationActionSelect.value }),
+    }).then(function (r) { return r.ok ? r.json() : r.text().then(function (text) { throw new Error(apiErrorMessage(text)); }); })
+      .then(function (rule) { moderationRules.push(rule); moderationRuleForm.reset(); renderModerationRules(); })
+      .catch(function (error) { showToast(error.message); });
   });
 
   // --- quick commands ---

@@ -16,6 +16,8 @@ function nicon_server_response(array $row): array
         'protocol' => $row['protocol'],
         'game' => $row['game'],
         'source' => $row['source'],
+        'nitrado_game_code' => $row['nitrado_game_code'] ?? '',
+        'game_icon_url' => $row['nitrado_game_icon_url'] ?? null,
         'has_password' => $row['password_enc'] !== null,
         'health_ok' => $row['health_ok'] === null ? null : (bool) $row['health_ok'],
         'health_checked_at' => $row['health_checked_at'] !== null ? gmdate('Y-m-d\TH:i:s\Z', strtotime($row['health_checked_at'])) : null,
@@ -78,7 +80,8 @@ function nicon_handle_list_servers(int $userId): void
 {
     $stmt = nicon_db()->prepare('
         SELECT id, name, host, port, password_enc, protocol, game, source,
-               health_ok, health_checked_at, health_latency_ms, health_error
+               health_ok, health_checked_at, health_latency_ms, health_error,
+               nitrado_game_code, nitrado_game_icon_url
         FROM servers WHERE user_id = ? ORDER BY name');
     $stmt->execute([$userId]);
     $servers = array_map('nicon_server_response', $stmt->fetchAll());
@@ -114,7 +117,8 @@ function nicon_handle_create_server(int $userId): void
 
     $stmt = $pdo->prepare('
         SELECT id, name, host, port, password_enc, protocol, game, source,
-               health_ok, health_checked_at, health_latency_ms, health_error
+               health_ok, health_checked_at, health_latency_ms, health_error,
+               nitrado_game_code, nitrado_game_icon_url
         FROM servers WHERE id = ?');
     $stmt->execute([$id]);
     nicon_send_json(nicon_server_response($stmt->fetch()));

@@ -54,6 +54,8 @@
     <li><strong>Recovery code</strong> — a 20-character one-time code generated when your account is created (or last reset), shown to you exactly once. Like the password, only its bcrypt hash is stored — it's the only way to reset your password since no email address is on file.</li>
     <li><strong>Server data you add yourself</strong> — a game server's name, host, port, and game, plus its RCON password. The RCON password is stored encrypted (AES-256-GCM), with a key managed separately from the database.</li>
     <li><strong>Nitrado API token</strong> (only if you use "Sync from Nitrado") — stored encrypted the same way as an RCON password, so you don't have to re-enter it for every sync. See section 3.</li>
+    <li><strong>Moderation rules and command macros</strong> — the words, actions, names, and commands you save for your account.</li>
+    <li><strong>SteamID64 values</strong> visible in a connected server's player list — sent temporarily to Valve's Steam Web API to retrieve public profile and ban information; NiCon does not store the returned profiles.</li>
     <li><strong>Session token</strong> — a random token that identifies you after login, for up to 7 days. It's stored server-side in the database and, in your browser, in <code>sessionStorage</code> (not <code>localStorage</code>) — removed automatically when the browser tab closes.</li>
   </ul>
   <p>
@@ -97,8 +99,9 @@
     Your account data and stored servers are not shared with third
     parties. A connection to your game server (RCON) goes directly from
     the relay you control or trust; a Nitrado sync goes directly from the
-    Cloud API to Nitrado's own API — no other intermediaries are involved
-    in either case.
+    Cloud API to Nitrado's own API. If Steam enrichment is enabled, player
+    SteamID64 values are sent to Valve's Steam Web API to request public
+    profile and ban information.
   </p>
 
   <h2>7. Your rights</h2>

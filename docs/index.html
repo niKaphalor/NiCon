@@ -14,7 +14,7 @@
      frontend at your own deployment"), so there's no reason for this to
      stay open to arbitrary hosts. Update this list alongside those two
      constants if you point this frontend at a different deployment. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://nicon.mylss.de https://relay.130.61.8.150.sslip.io wss://relay.130.61.8.150.sslip.io; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://nitrado.net https://*.nitrado.net; connect-src 'self' https://nicon.mylss.de https://relay.130.61.8.150.sslip.io wss://relay.130.61.8.150.sslip.io; base-uri 'self'; form-action 'self'">
 <title>NiCon</title>
 <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -185,6 +185,7 @@
                 <div class="console-toolbar-actions">
                   <button type="button" id="console-follow-btn" class="icon-btn small" data-i18n="console.followOutput" data-i18n-title="console.followOutput" title="Follow output" hidden>Follow output</button>
                   <button type="button" id="cmd-templates-btn" class="icon-btn small" data-i18n="templates.button" data-i18n-title="templates.button" title="Templates">Templates</button>
+                  <button type="button" id="moderation-rules-btn" class="icon-btn small" data-i18n="phase2.rules">Rules</button>
                   <button type="button" id="cmd-history-btn" class="icon-btn small" data-i18n="console.history" data-i18n-title="console.history" title="History">History</button>
                   <button type="button" id="console-copy-btn" class="icon-btn small" data-i18n="console.copy" data-i18n-title="console.copy" title="Copy">Copy</button>
                   <button type="button" id="console-clear-btn" class="icon-btn small" data-i18n="console.clear" data-i18n-title="console.clear" title="Clear">Clear</button>
@@ -196,14 +197,29 @@
                 <div id="cmd-templates-list" class="cmd-templates-list"></div>
                 <form id="cmd-template-add-form" class="cmd-template-add-form">
                   <input id="cmd-template-name-input" type="text" autocomplete="off" maxlength="64" aria-label="Template name" data-i18n-placeholder="templates.namePlaceholder" data-i18n-aria-label="templates.namePlaceholder">
-                  <input id="cmd-template-command-input" type="text" autocomplete="off" maxlength="500" aria-label="Template command" data-i18n-placeholder="templates.commandPlaceholder" data-i18n-aria-label="templates.commandPlaceholder">
+                  <textarea id="cmd-template-command-input" autocomplete="off" maxlength="500" rows="3" aria-label="Macro commands" data-i18n-placeholder="phase2.macroPlaceholder" placeholder="One command per line; @wait 2 pauses"></textarea>
                   <button type="submit" class="btn-xs" data-i18n="templates.save">Save</button>
                 </form>
                 <p id="cmd-template-error" class="hint login-error" hidden></p>
               </div>
+              <div id="moderation-rules-panel" class="cmd-templates-panel" hidden>
+                <div id="moderation-rules-list" class="cmd-templates-list"></div>
+                <form id="moderation-rule-form" class="cmd-template-add-form">
+                  <input id="moderation-pattern-input" type="text" maxlength="128" data-i18n-placeholder="phase2.patternPlaceholder" placeholder="Word or phrase" required>
+                  <select id="moderation-action-select" aria-label="Moderation action">
+                    <option value="highlight" data-i18n="phase2.highlight">Highlight</option>
+                    <option value="mute" data-i18n="phase2.autoMute">Auto-mute</option>
+                    <option value="kick" data-i18n="phase2.autoKick">Auto-kick</option>
+                  </select>
+                  <button type="submit" class="btn-xs" data-i18n="phase2.addRule">Add</button>
+                </form>
+              </div>
               <div id="cmd-history-panel" class="cmd-history-panel" role="listbox" aria-label="Command history" data-i18n-aria-label="console.historyAriaLabel" hidden></div>
               <form id="cmd-form" class="cmd-bar">
-                <input id="cmd-input" type="text" autocomplete="off" placeholder="Type a command…" aria-label="RCON command" data-i18n-placeholder="console.commandPlaceholder">
+                <div class="cmd-input-wrap">
+                  <input id="cmd-input" type="text" autocomplete="off" placeholder="Type a command…" aria-label="RCON command" data-i18n-placeholder="console.commandPlaceholder">
+                  <div id="cmd-suggestions" class="cmd-suggestions" role="listbox" hidden></div>
+                </div>
                 <button type="submit" data-i18n="console.send">Send</button>
               </form>
             </div>
@@ -212,6 +228,10 @@
               <div class="card-kicker" data-i18n="console.players">Players</div>
               <p class="hint" data-i18n="info.parsingHint">Parsing is best-effort, based on documented command formats, not verified against a live server of each game — if it looks wrong, the raw response is still visible in the console.</p>
               <div id="players-panel"></div>
+            </div>
+            <div id="nitrado-resources-card" class="card resources-card" hidden>
+              <div class="card-kicker" data-i18n="phase2.nitradoResources">Nitrado resources</div>
+              <div id="nitrado-resources" class="resource-grid"></div>
             </div>
           </div>
         </div>
@@ -338,6 +358,21 @@
     <button type="button" id="notifications-close" class="link-button" data-i18n="common.close">Close</button>
   </div>
   <div id="notifications-list" class="notifications-list"></div>
+</dialog>
+
+<div id="player-context-menu" class="player-context-menu" role="menu" hidden>
+  <button type="button" data-player-action="kick" data-i18n="players.kick">Kick</button>
+  <button type="button" data-player-action="ban" data-i18n="players.ban">Ban</button>
+  <button type="button" data-player-action="mute" data-i18n="phase2.mute">Mute</button>
+  <button type="button" data-player-action="whisper" data-i18n="phase2.whisper">Whisper</button>
+</div>
+
+<dialog id="player-message-modal">
+  <div class="modal-header"><h2 data-i18n="phase2.whisper">Whisper</h2><button type="button" id="player-message-close" class="link-button" data-i18n="common.close">Close</button></div>
+  <form id="player-message-form" class="stacked-form">
+    <input id="player-message-input" type="text" maxlength="300" data-i18n-placeholder="quickCommands.messagePlaceholder" placeholder="Message" required>
+    <button type="submit" class="btn-primary" data-i18n="console.send">Send</button>
+  </form>
 </dialog>
 
 <dialog id="reset-modal">

@@ -82,6 +82,15 @@ bottom or click **Follow output**. For WebRCON (Rust) servers, chat/log
 lines the game pushes on its own (not in response to a command) show up
 live in the console, styled differently from command output.
 
+The command center also includes shell-style command history and
+autocomplete, saved multi-step macros (`@wait 2` inserts a pause),
+right-click player actions, account-wide word filters with optional
+automatic mute/kick, and an adjustable balanced/wide/stacked layout.
+Nitrado servers show their current resource/status data and the official
+game icon returned by Nitrado's games catalog. If a Steam Web API key is
+configured, SteamID64 entries in player lists are enriched with public
+profile, account-age, VAC, community-ban, and game-ban information.
+
 ## Cloud API vs. relay
 
 NiCon used to be one Go binary doing everything. It's now split in two,
@@ -136,7 +145,8 @@ mysql -h <host> -u <user> -p <database> < webspace/schema.sql
 cp webspace/config.example.php webspace/config.local.php
 # edit config.local.php: db_dsn/db_user/db_pass, encryption_key_base64
 # (generate with `nicon-relay genkey` — must match the relay's key
-# exactly), and allowed_origins.
+# exactly), allowed_origins, and optionally steam_api_key for player
+# profile/ban enrichment.
 ```
 
 Then upload the whole `webspace/` directory to your hosting (e.g. into a
@@ -152,8 +162,9 @@ to disclose even without it).
 `config.local.php` is gitignored — it holds your database password and
 the encryption key, never commit it. `schema.sql` covers the same tables
 `internal/store` creates automatically, plus a few PHP-only additions
-(`rate_limits`, `notifications`, and a `nitrado_token_enc` column on
-`users`) that the Go relay's own auto-migration doesn't know about and
+(`rate_limits`, `notifications`, `moderation_rules`, and a
+`nitrado_token_enc` column on `users`) that the Go relay's own
+auto-migration doesn't know about and
 never creates. Run it once regardless of which side connects to this
 database first — every statement in it is safe to run again later,
 including against a `users`/`sessions`/`servers` set the Go relay already

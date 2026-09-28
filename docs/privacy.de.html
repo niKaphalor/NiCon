@@ -55,6 +55,8 @@
     <li><strong>Wiederherstellungscode</strong> — ein 20-stelliger, einmaliger Code, der bei Kontoerstellung (bzw. beim letzten Zurücksetzen) erzeugt und dir genau einmal angezeigt wird. Wie beim Passwort wird nur sein bcrypt-Hash gespeichert — er ist der einzige Weg, dein Passwort zurückzusetzen, da keine E-Mail-Adresse hinterlegt ist.</li>
     <li><strong>Server-Daten, die du selbst hinzufügst</strong> — Name, Host, Port und Spiel eines Spieleservers, sowie dessen RCON-Passwort. Das RCON-Passwort wird verschlüsselt (AES-256-GCM) gespeichert, mit einem Schlüssel, der getrennt von der Datenbank verwaltet wird.</li>
     <li><strong>Nitrado-API-Token</strong> (nur falls du "Von Nitrado synchronisieren" nutzt) — wird genauso verschlüsselt gespeichert wie ein RCON-Passwort, damit du ihn nicht bei jedem Sync erneut eingeben musst. Siehe Abschnitt 3.</li>
+    <li><strong>Moderationsregeln und Befehlsmakros</strong> — die Wörter, Aktionen, Namen und Befehle, die du für dein Konto speicherst.</li>
+    <li><strong>SteamID64-Werte</strong> aus der Spielerliste eines verbundenen Servers — werden vorübergehend an Valves Steam Web API übermittelt, um öffentliche Profil- und Sperrinformationen abzurufen; NiCon speichert die zurückgegebenen Profile nicht.</li>
     <li><strong>Sitzungs-Token</strong> — ein zufälliger Token, der dich nach dem Login für bis zu 7 Tage identifiziert. Er wird serverseitig in der Datenbank sowie browserseitig in <code>sessionStorage</code> (nicht <code>localStorage</code>) gespeichert und beim Schließen des Browser-Tabs aus dem Browser entfernt.</li>
   </ul>
   <p>
@@ -102,7 +104,9 @@
     weitergegeben. Eine Verbindung zu deinem Spieleserver (RCON) geht
     direkt vom Relay aus, den du selbst kontrollierst bzw. dem du
     vertraust; ein Nitrado-Sync geht direkt von der Cloud-API an Nitrados
-    eigene API — in beiden Fällen sind keine weiteren Vermittler beteiligt.
+    eigene API. Wenn die Steam-Anreicherung aktiviert ist, werden
+    SteamID64-Werte von Spielern an Valves Steam Web API übermittelt, um
+    öffentliche Profil- und Sperrinformationen abzurufen.
   </p>
 
   <h2>7. Deine Rechte</h2>

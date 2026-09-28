@@ -78,6 +78,46 @@ function nicon_nitrado_post(string $token, string $path, array $params = []): ar
     return nicon_nitrado_request($token, 'POST', $path, $params);
 }
 
+// Nitrado's games catalog varies slightly between products. Walk it for
+// the current game code and accept only an HTTPS image hosted by Nitrado.
+function nicon_nitrado_icon_url(array $data, string $gameCode): ?string
+{
+    $found = null;
+    $walk = function ($node) use (&$walk, &$found, $gameCode): void {
+        if ($found !== null || !is_array($node)) return;
+        foreach ($node as $key => $value) {
+            if (is_string($key) && strtolower($key) === strtolower($gameCode) && is_array($value)) {
+                $value['game_code'] = $gameCode;
+                $walk($value);
+                if ($found !== null) return;
+            }
+        }
+        $code = strtolower((string) ($node['game'] ?? $node['game_code'] ?? $node['id'] ?? $node['short'] ?? $node['folder_short'] ?? ''));
+        if ($code !== '' && $code === strtolower($gameCode)) {
+            foreach (['icon_url', 'icon', 'image_url', 'image', 'logo'] as $key) {
+                $candidate = $node[$key] ?? null;
+                if (is_array($candidate)) $candidate = $candidate['url'] ?? $candidate['src'] ?? null;
+                if (!empty($candidate) && is_string($candidate)) { $found = $candidate; break; }
+            }
+        }
+        foreach ($node as $child) if (is_array($child)) $walk($child);
+    };
+    $walk($data);
+    if ($found === null || filter_var($found, FILTER_VALIDATE_URL) === false) return null;
+    $parts = parse_url($found);
+    $host = strtolower((string) ($parts['host'] ?? ''));
+    if (($parts['scheme'] ?? '') !== 'https' || !($host === 'nitrado.net' || str_ends_with($host, '.nitrado.net'))) return null;
+    return $found;
+}
+
+function nicon_nitrado_saved_token(PDO $pdo, int $userId): string
+{
+    $stmt = $pdo->prepare('SELECT nitrado_token_enc FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    $encrypted = $stmt->fetchColumn();
+    return $encrypted ? nicon_decrypt_password($encrypted) : '';
+}
+
 // nicon_handle_nitrado_sync upserts every RCON-capable service from
 // Nitrado into the caller's own server list, and returns the full updated
 // list. A token in the request body is saved (encrypted, AES-256-GCM —
@@ -110,6 +150,7 @@ function nicon_handle_nitrado_sync(int $userId): void
         return;
     }
 
+    $gamesMetadata = [];
     foreach ($services as $svc) {
         $serviceId = (int) ($svc['id'] ?? 0);
         try {
@@ -118,6 +159,14 @@ function nicon_handle_nitrado_sync(int $userId): void
             continue; // one bad service shouldn't abort the whole sync
         }
         $gs = $data['gameserver'] ?? [];
+        $gameCode = (string) ($gs['game'] ?? '');
+        $gameIconUrl = null;
+        if ($gameCode !== '') {
+            try {
+                if (!$gamesMetadata) $gamesMetadata = nicon_nitrado_get($token, "/services/$serviceId/gameservers/games");
+                $gameIconUrl = nicon_nitrado_icon_url($gamesMetadata, $gameCode);
+            } catch (RuntimeException $e) { /* icon metadata is optional */ }
+        }
 
         $gameHuman = (string) ($gs['game_human'] ?? '');
         $isRust = stripos($gameHuman, 'rust') !== false;
@@ -153,11 +202,12 @@ function nicon_handle_nitrado_sync(int $userId): void
         // (user_id, nitrado_service_id), never touches an existing
         // password_enc — Nitrado never gives us one to overwrite it with.
         $pdo->prepare('
-            INSERT INTO servers (user_id, name, host, port, protocol, game, source, nitrado_service_id)
-            VALUES (?, ?, ?, ?, ?, ?, \'nitrado\', ?)
+            INSERT INTO servers (user_id, name, host, port, protocol, game, source, nitrado_service_id, nitrado_game_code, nitrado_game_icon_url)
+            VALUES (?, ?, ?, ?, ?, ?, \'nitrado\', ?, ?, ?)
             ON DUPLICATE KEY UPDATE name = VALUES(name), host = VALUES(host), port = VALUES(port),
-              protocol = VALUES(protocol), game = VALUES(game)
-        ')->execute([$userId, $name, $ip, $port, $protocol, $gameHuman, $serviceId]);
+              protocol = VALUES(protocol), game = VALUES(game), nitrado_game_code = VALUES(nitrado_game_code),
+              nitrado_game_icon_url = COALESCE(VALUES(nitrado_game_icon_url), nitrado_game_icon_url)
+        ')->execute([$userId, $name, $ip, $port, $protocol, $gameHuman, $serviceId, $gameCode, $gameIconUrl]);
     }
 
     nicon_handle_list_servers($userId);
@@ -229,4 +279,41 @@ function nicon_handle_nitrado_power(int $userId, int $serverId): void
     ];
     nicon_audit_log($userId, $auditActions[$action], null, (string) $server['name']);
     nicon_send_json(['ok' => true, 'action' => $action]);
+}
+
+function nicon_handle_nitrado_status(int $userId, int $serverId): void
+{
+    $pdo = nicon_db();
+    $stmt = $pdo->prepare('SELECT nitrado_service_id FROM servers WHERE id = ? AND user_id = ? AND source = \'nitrado\'');
+    $stmt->execute([$serverId, $userId]);
+    $serviceId = (int) $stmt->fetchColumn();
+    if ($serviceId <= 0) { nicon_send_error('server not found', 404); return; }
+    try {
+        $token = nicon_nitrado_saved_token($pdo, $userId);
+        if ($token === '') throw new RuntimeException('no saved Nitrado token');
+        $data = nicon_nitrado_get($token, "/services/$serviceId/gameservers");
+        $gs = $data['gameserver'] ?? [];
+        $query = $gs['query'] ?? [];
+        $result = [
+            'status' => (string) ($gs['status'] ?? 'unknown'),
+            'memory_mb' => (int) ($gs['memory_mb'] ?? $gs['memory'] ?? 0),
+            'players' => (int) ($query['player_current'] ?? 0),
+            'players_max' => (int) ($query['player_max'] ?? $gs['slots'] ?? 0),
+            'map' => (string) ($query['map'] ?? ''),
+            'version' => (string) ($query['version'] ?? ''),
+        ];
+        try {
+            $stats = nicon_nitrado_get($token, "/services/$serviceId/gameservers/stats?hours=1");
+            foreach (['cpuUsage' => 'cpu_percent', 'memoryUsage' => 'memory_percent'] as $source => $target) {
+                $values = $stats[$source] ?? [];
+                if (is_array($values) && $values) {
+                    $last = end($values);
+                    $result[$target] = is_array($last) ? (float) end($last) : (float) $last;
+                }
+            }
+        } catch (RuntimeException $e) { /* detail response remains useful */ }
+        nicon_send_json($result);
+    } catch (RuntimeException $e) {
+        nicon_send_error($e->getMessage(), 502);
+    }
 }

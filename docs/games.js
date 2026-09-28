@@ -116,6 +116,8 @@ window.NICON_GAMES = {
     // suppress on — kick/ban are always offered for Minecraft.
     kick: function (player) { return "kick " + player.id; },
     ban: function (player) { return "ban " + player.id; },
+    whisper: function (player, message) { return "tell " + player.id + " " + message; },
+    commands: ["list", "say", "tell", "kick", "ban", "pardon", "save-all", "stop", "whitelist"],
     quickCommands: [
       { id: "save", risk: "low", build: function () { return "save-all"; } },
       { id: "broadcast", risk: "medium", param: "message", build: function (message) { return "say " + message; } },
@@ -158,6 +160,8 @@ window.NICON_GAMES = {
     },
     kick: function (player) { return player.id ? "kick " + player.id : null; },
     ban: function (player) { return player.id ? "ban " + player.id + " \"Banned by admin\"" : null; },
+    mute: function (player) { return player.id ? "mute " + player.id : null; },
+    commands: ["playerlist", "status", "say", "kick", "ban", "mute", "unmute", "server.save", "restart"],
     quickCommands: [
       { id: "save", risk: "low", build: function () { return "server.save"; } },
       { id: "broadcast", risk: "medium", param: "message", build: function (message) { return "say " + message; } },
@@ -190,6 +194,7 @@ window.NICON_GAMES = {
     },
     kick: function (player) { return "KickPlayer " + player.id; },
     ban: function (player) { return "BanPlayer " + player.id; },
+    commands: ["ListPlayers", "KickPlayer", "BanPlayer", "UnBanPlayer", "SaveWorld", "Broadcast", "DoExit"],
     quickCommands: [
       { id: "save", risk: "low", build: function () { return "SaveWorld"; } },
       { id: "broadcast", risk: "medium", param: "message", build: function (message) { return "Broadcast " + message; } },
@@ -229,6 +234,7 @@ window.NICON_GAMES = {
     },
     kick: function (player) { return player.id ? "kick " + player.id : null; },
     ban: function (player) { return player.id ? "ban " + player.id + " Banned by admin" : null; },
+    commands: ["players", "kick", "ban", "save", "announce", "shutdown"],
     // Matches internal/relay/palworld_rest.go's Execute() verbs exactly —
     // "announce" and "shutdown" are real REST endpoints there, not raw
     // RCON text. shutdown with no argument uses the relay's own default
@@ -246,6 +252,8 @@ window.NICON_GAMES = {
     parse: parseBattleyePlayers,
     kick: battleyeKick,
     ban: battleyeBan,
+    whisper: function (player, message) { return "say " + player.id + " " + message; },
+    commands: ["players", "kick", "ban", "say", "loadEvents", "writeBans"],
     // "say -1 <message>" is BattlEye's own broadcast-to-everyone syntax
     // (-1 targets "no single player id", i.e. all of them). No standard
     // save/shutdown command exists at the BE RCon protocol level (that's
@@ -261,6 +269,8 @@ window.NICON_GAMES = {
     parse: parseBattleyePlayers,
     kick: battleyeKick,
     ban: battleyeBan,
+    whisper: function (player, message) { return "say " + player.id + " " + message; },
+    commands: ["players", "kick", "ban", "say", "loadEvents", "writeBans"],
     quickCommands: [
       { id: "broadcast", risk: "medium", param: "message", build: function (message) { return "say -1 " + message; } },
     ],
@@ -294,6 +304,7 @@ window.NICON_GAMES = {
     // "banid <minutes> <userid> [kick]" — 0 minutes is permanent; kick
     // removes them immediately instead of waiting for their next connect.
     ban: function (player) { return "banid 0 " + player.id + " kick"; },
+    commands: ["status", "say", "kickid", "banid", "removeid", "writeid", "quit"],
     // No universal "save" concept in the base Source engine (unlike the
     // survival-game titles above) — only broadcast and a plain "quit" are
     // included, both real, documented Source console commands. Whether

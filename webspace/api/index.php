@@ -17,6 +17,8 @@ require_once __DIR__ . '/../handlers/reset_password.php';
 require_once __DIR__ . '/../handlers/account.php';
 require_once __DIR__ . '/../handlers/servers.php';
 require_once __DIR__ . '/../handlers/command_templates.php';
+require_once __DIR__ . '/../handlers/moderation_rules.php';
+require_once __DIR__ . '/../handlers/steam_players.php';
 require_once __DIR__ . '/../handlers/nitrado_sync.php';
 require_once __DIR__ . '/../handlers/admin.php';
 require_once __DIR__ . '/../handlers/notifications.php';
@@ -69,12 +71,18 @@ $routes = [
     ['POST', '#^/servers$#', 'user', 'nicon_handle_create_server'],
     ['PUT', '#^/servers/(\d+)/password$#', 'user', 'nicon_handle_set_server_password'],
     ['POST', '#^/servers/(\d+)/nitrado-power$#', 'user', 'nicon_handle_nitrado_power'],
+    ['GET', '#^/servers/(\d+)/nitrado-status$#', 'user', 'nicon_handle_nitrado_status'],
     ['DELETE', '#^/servers/(\d+)$#', 'user', 'nicon_handle_delete_server'],
     ['POST', '#^/nitrado/sync$#', 'user', 'nicon_handle_nitrado_sync'],
 
     ['GET', '#^/command-templates$#', 'user', 'nicon_handle_list_command_templates'],
     ['POST', '#^/command-templates$#', 'user', 'nicon_handle_create_command_template'],
     ['DELETE', '#^/command-templates/(\d+)$#', 'user', 'nicon_handle_delete_command_template'],
+
+    ['GET', '#^/moderation-rules$#', 'user', 'nicon_handle_list_moderation_rules'],
+    ['POST', '#^/moderation-rules$#', 'user', 'nicon_handle_create_moderation_rule'],
+    ['DELETE', '#^/moderation-rules/(\d+)$#', 'user', 'nicon_handle_delete_moderation_rule'],
+    ['POST', '#^/steam/players$#', 'user', 'nicon_handle_steam_players'],
 
     ['GET', '#^/admin/users$#', 'admin', 'nicon_handle_admin_list_users'],
     ['DELETE', '#^/admin/users/(\d+)$#', 'admin', 'nicon_handle_admin_delete_user'],

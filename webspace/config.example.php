@@ -20,6 +20,11 @@ return [
     // Same base64-encoded 32-byte key as the Go relay's -encryption-key.
     'encryption_key_base64' => 'REPLACE_ME',
 
+    // Optional. Enables public Steam profile and ban information in the
+    // player list. The key is used server-side and is never returned to
+    // the browser. Create one in Steam's Web API key administration.
+    'steam_api_key' => '',
+
     // Origins allowed to call this API — the GitHub Pages URL, plus
     // localhost for local frontend development.
     'allowed_origins' => [

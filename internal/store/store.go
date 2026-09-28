@@ -81,6 +81,8 @@ var migrations = []string{
 	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_ok BOOLEAN NULL`,
 	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_latency_ms INT UNSIGNED NULL`,
 	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_error VARCHAR(255) NULL`,
+	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_code VARCHAR(128) NOT NULL DEFAULT ''`,
+	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_icon_url VARCHAR(2048) NULL`,
 }
 
 type Store struct {
