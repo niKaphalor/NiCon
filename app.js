@@ -2129,6 +2129,20 @@
 
   // --- content pane rendering ---
 
+  // Nitrado's own panel hides "Start" while a server is running (and
+  // "Stop"/"Restart" while it's stopped) — calling games/start on an
+  // already-running server gets a confusing "game not found" error back
+  // instead of a clear "already running" one. Mirror that gating here so
+  // the same mistake isn't possible from NiCon's menu. "unknown" (status
+  // not loaded yet) keeps every action available rather than guessing.
+  function nitradoStatusKind(status) {
+    var normalized = String(status || "").toLowerCase();
+    if (["started", "running", "online"].indexOf(normalized) !== -1) return "online";
+    if (["stopped", "offline"].indexOf(normalized) !== -1) return "offline";
+    if (["restarting", "restart"].indexOf(normalized) !== -1) return "restarting";
+    return "unknown";
+  }
+
   function nitradoActionLabel(action) {
     if (action === "start") return I18N.t("content.nitradoStart");
     if (action === "stop") return I18N.t("content.nitradoStop");
@@ -2409,17 +2423,17 @@
     nitradoResources.innerHTML = "";
     var cached = server.nitrado_resources;
     function statusLabel(status) {
-      var normalized = String(status || "unknown").toLowerCase();
-      if (["started", "running", "online"].indexOf(normalized) !== -1) return I18N.t("phase2.statusStarted");
-      if (["stopped", "offline"].indexOf(normalized) !== -1) return I18N.t("phase2.statusStopped");
-      if (["restarting", "restart"].indexOf(normalized) !== -1) return I18N.t("phase2.statusRestarting");
+      var kind = nitradoStatusKind(status);
+      if (kind === "online") return I18N.t("phase2.statusStarted");
+      if (kind === "offline") return I18N.t("phase2.statusStopped");
+      if (kind === "restarting") return I18N.t("phase2.statusRestarting");
       return status || I18N.t("phase2.statusUnknown");
     }
     function statusClass(status) {
-      var normalized = String(status || "unknown").toLowerCase();
-      if (["started", "running", "online"].indexOf(normalized) !== -1) return "is-status is-online";
-      if (["stopped", "offline"].indexOf(normalized) !== -1) return "is-status is-offline";
-      if (["restarting", "restart"].indexOf(normalized) !== -1) return "is-status is-restarting";
+      var kind = nitradoStatusKind(status);
+      if (kind === "online") return "is-status is-online";
+      if (kind === "offline") return "is-status is-offline";
+      if (kind === "restarting") return "is-status is-restarting";
       return "is-status";
     }
     function draw(data) {
@@ -2448,6 +2462,7 @@
         if (selectedServerId === server.id) {
           draw(data);
           updateServerPlayerCount(server);
+          renderHead(server); // refresh Start/Stop gating now that the real status is known
           if (activeServerTab === "overview") renderServerOverview(server);
         }
       })
@@ -2519,7 +2534,9 @@
     }
     actions.appendChild(toggleBtn);
 
-    if (server.source === "nitrado") {
+    var nitradoStatus = nitradoStatusKind(server.nitrado_resources && server.nitrado_resources.status);
+
+    if (server.source === "nitrado" && nitradoStatus !== "offline") {
       var restartBtn = document.createElement("button");
       restartBtn.type = "button"; restartBtn.className = "btn-secondary"; restartBtn.textContent = I18N.t("content.nitradoRestart");
       restartBtn.disabled = !!nitradoPowerPending[server.id];
@@ -2532,7 +2549,14 @@
     var menuBody = document.createElement("div"); menuBody.className = "server-actions-menu-body";
 
     if (server.source === "nitrado") {
-      ["start", "stop"].forEach(function (action) {
+      // Mirror Nitrado's own panel: Start only when known to be stopped
+      // (or not yet loaded), Stop only when known to be running (or not
+      // yet loaded) — calling either against the wrong state is what
+      // produced Nitrado's misleading "game not found" 500 on start.
+      ["start", "stop"].filter(function (action) {
+        if (action === "start") return nitradoStatus !== "online";
+        return nitradoStatus !== "offline";
+      }).forEach(function (action) {
         var powerButton = document.createElement("button"); powerButton.type = "button"; powerButton.className = "server-menu-action"; powerButton.textContent = nitradoActionLabel(action); powerButton.disabled = !!nitradoPowerPending[server.id];
         powerButton.addEventListener("click", function () { menu.open = false; requestNitradoPower(server, action); }); menuBody.appendChild(powerButton);
       });

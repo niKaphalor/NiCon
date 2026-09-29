@@ -58,10 +58,25 @@ Executed by the operator against a live Nitrado-backed server:
 The failing `start` action calls the same endpoint and parameter Nitrado's
 own official PHP SDK uses for `startGame($game)`
 ([source](https://github.com/nitrado/NitrAPI-PHP/blob/master/lib/Nitrapi/Services/Gameservers/Gameserver.php)),
-so this is not a request-shape bug on NiCon's side — the 500 originates in
-Nitrado's backend for this service/game combination. `nicon_nitrado_request()`
-previously discarded the response body on error; it now surfaces Nitrado's
-own error message (see `nicon_nitrado_error_detail()` in
-`webspace/handlers/nitrado_sync.php`) so the next failure is diagnosable
-instead of a bare status code. Re-test `start` once that fix is deployed and
-record Nitrado's actual error text here.
+so the request shape itself was never the bug. `nicon_nitrado_request()`
+previously discarded the response body on error; surfacing it (see
+`nicon_nitrado_error_detail()` in `webspace/handlers/nitrado_sync.php`)
+revealed Nitrado's real reason: **"Das angegebene Spiel konnte nicht
+gefunden werden"** ("the specified game could not be found").
+
+Root cause: NiCon's server-actions menu showed Start/Stop unconditionally,
+regardless of the server's actual state — unlike Nitrado's own panel, which
+hides Start while a server is running. The operator's server was running
+when Start was clicked, so the 500 was Nitrado's (confusingly worded)
+response to starting an already-running game, not an invalid game code.
+Fixed in `app.js`/`docs/app.js`: a new `nitradoStatusKind()` helper gates
+Start (hidden when known online), Stop (hidden when known offline), and
+Restart (hidden when known offline) on the live status from
+`GET /api/servers/{id}/nitrado-status`, mirroring Nitrado's own UI. Status
+"unknown" (not loaded yet) still shows every action, so nothing is blocked
+before the first status fetch completes. `sw.js`/`docs/sw.js` cache version
+bumped to `v10` for this app-shell change.
+
+Still to confirm after redeploying `app.js`/`docs/app.js`/`sw.js`: that
+Start now works correctly from a genuinely stopped server (not yet
+re-tested — the reported failure was against a running one).
