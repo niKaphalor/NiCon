@@ -588,6 +588,50 @@ func (s *Store) ListServersForHealthCheck(ctx context.Context) ([]Server, error)
 	return out, rows.Err()
 }
 
+// ListServersForPublicInfoCheck returns every server (across every user)
+// whose protocol supports a passive, unauthenticated status query — A2S
+// for any Source-RCON-protocol server (see internal/relay's
+// QueryA2SInfo/QueryMinecraftStat and main.go's public-info loop).
+// Unlike ListServersForHealthCheck, a stored RCON password is irrelevant
+// here: the whole point is populating player/uptime history for servers
+// that don't have one yet.
+func (s *Store) ListServersForPublicInfoCheck(ctx context.Context) ([]Server, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, user_id, name, host, port, password_enc, protocol, game, source, nitrado_service_id
+		 FROM servers WHERE protocol = 'source'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Server
+	for rows.Next() {
+		srv, err := s.scanServer(rows)
+		if err != nil {
+			continue // best-effort maintenance sweep — see ListServersForHealthCheck
+		}
+		out = append(out, srv)
+	}
+	return out, rows.Err()
+}
+
+// UpdateServerPlayerSample records one passive, unauthenticated status
+// probe (A2S or Minecraft Query — see internal/relay's PublicInfoCheck and
+// main.go's public-info loop) into the same history table
+// UpdateServerHealth uses, under its own source label so a failed probe
+// can't be confused with a real RCON health-check failure. Unlike
+// UpdateServerHealth, this never touches servers.health_* — that column
+// set means "the last real RCON connect attempt," which sits alongside,
+// not underneath, "is this server's public query port reachable."
+// playerCurrent/playerMax are nil (stored as SQL NULL) when online is
+// false, matching UpdateServerHealth's own handling of a failed check.
+func (s *Store) UpdateServerPlayerSample(ctx context.Context, serverID int64, online bool, playerCurrent, playerMax *int, source string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO server_health_samples (server_id, online, player_current, player_max, source) VALUES (?, ?, ?, ?, ?)`,
+		serverID, online, playerCurrent, playerMax, source)
+	return err
+}
+
 // RecordRCONAudit persists an operator-visible command outcome. Output is
 // bounded before insertion so a game server cannot turn one response into an
 // unbounded audit row. The command itself is already capped by the relay.

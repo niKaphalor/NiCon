@@ -171,6 +171,33 @@ func runServer() {
 		}
 	}()
 
+	// Passive public-info sampling: an unauthenticated A2S/Minecraft-Query
+	// probe against every Source-RCON-protocol server, independent of the
+	// RCON health check above and of whether a password is even stored
+	// yet (see internal/relay's PublicInfoCheck). Results land in
+	// server_health_samples (source "a2s"/"mcquery") for the same
+	// players_average/players_peak history the Cloud API already serves
+	// for Nitrado-synced servers (webspace/handlers/servers.php) — this
+	// just gives every other server the same live data.
+	const publicInfoCheckInterval = 5 * time.Minute
+	var publicInfoCheckRunning int32
+	runPublicInfoChecksOnce := func() {
+		if !atomic.CompareAndSwapInt32(&publicInfoCheckRunning, 0, 1) {
+			logger.Print("public info check: previous cycle still running, skipping this tick")
+			return
+		}
+		defer atomic.StoreInt32(&publicInfoCheckRunning, 0)
+		runPublicInfoChecks(context.Background(), logger, st)
+	}
+	go runPublicInfoChecksOnce()
+	publicInfoTicker := time.NewTicker(publicInfoCheckInterval)
+	defer publicInfoTicker.Stop()
+	go func() {
+		for range publicInfoTicker.C {
+			runPublicInfoChecksOnce()
+		}
+	}()
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
@@ -216,6 +243,41 @@ func runHealthChecks(ctx context.Context, logger *log.Logger, st *store.Store) {
 			ok, latencyMs, errMsg := relay.HealthCheck(srv)
 			if err := st.UpdateServerHealth(ctx, srv.ID, ok, latencyMs, errMsg); err != nil {
 				logger.Printf("health check: update server %d: %v", srv.ID, err)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// runPublicInfoChecks probes every protocol="source" server's own public
+// A2S/Minecraft-Query port (see internal/relay's PublicInfoCheck),
+// regardless of whether it has a stored RCON password — see
+// ListServersForPublicInfoCheck. Shares runHealthChecks' concurrency
+// bound: it's the same kind of "one connection attempt per server" fan-out,
+// just against a different (and possibly overlapping) server set.
+func runPublicInfoChecks(ctx context.Context, logger *log.Logger, st *store.Store) {
+	servers, err := st.ListServersForPublicInfoCheck(ctx)
+	if err != nil {
+		logger.Printf("public info check: list servers: %v", err)
+		return
+	}
+
+	sem := make(chan struct{}, healthCheckConcurrency)
+	var wg sync.WaitGroup
+	for _, srv := range servers {
+		srv := srv
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			online, players, maxPlayers, _ := relay.PublicInfoCheck(srv)
+			source := "a2s"
+			if srv.Game == "Minecraft" {
+				source = "mcquery"
+			}
+			if err := st.UpdateServerPlayerSample(ctx, srv.ID, online, players, maxPlayers, source); err != nil {
+				logger.Printf("public info check: update server %d: %v", srv.ID, err)
 			}
 		}()
 	}

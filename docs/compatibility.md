@@ -64,6 +64,12 @@ and maximum player counts at most once every four minutes. The API exposes
 average players, and peak players. Missing samples are reported through
 completeness and are not silently counted as downtime.
 
+A separate, unauthenticated five-minute sample also runs for every
+`protocol = "source"` server, independent of whether it has a saved RCON
+password: Valve's A2S_INFO query for Source-engine games, or Minecraft's
+own Query protocol (must be enabled server-side) for Minecraft. See the
+[README's Relay section](../README.md#relay) for details.
+
 The Nitrado status endpoint deliberately exposes only service status, current
 and maximum players, world/map, and version. CPU, memory, and server
 configuration values are not returned to the browser.

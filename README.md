@@ -386,6 +386,21 @@ only read sessions and server credentials, while the relay's background
 health loop performs a real authenticated connection check every five
 minutes and writes `health_*` results back to the server row.
 
+A second, independent loop on the same five-minute interval probes every
+`protocol = "source"` server's own **public** status port — no RCON
+password required, so it also covers servers that don't have one saved
+yet. Source-engine servers answer Valve's A2S_INFO query
+(`internal/relay/a2s.go`) on their game UDP port with no configuration
+needed (Steam's server browser depends on it being open); Minecraft
+answers its own, unrelated GameSpy4-derived Query protocol instead
+(`internal/relay/minecraft_query.go`), which a server operator has to
+opt into (`enable-query=true` in `server.properties` — off by default).
+Either way, a successful probe's player counts land in the same
+`server_health_samples` table (`source` `"a2s"`/`"mcquery"`) the Cloud
+API already aggregates into `players_average`/`players_peak` for the
+Overview tab — so any Source-RCON or Minecraft server gets real history
+even before its RCON password is ever set.
+
 ```sh
 go build -o nicon-relay .
 export NICON_DB_DSN="nicon:<db-password>@tcp(<host>:3306)/nicon?parseTime=true"
