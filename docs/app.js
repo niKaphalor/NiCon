@@ -3674,7 +3674,7 @@
   // This badge deliberately means a real game-server verification, not
   // merely a passing parser fixture or protocol mock. The detailed and
   // more granular evidence lives in docs/compatibility.md.
-  var TESTED_GAMES = ["rust", "sevendaystodie"];
+  var TESTED_GAMES = ["rust", "sevendaystodie", "dayz", "arksurvivalascended", "minecraft"];
 
   function renderSupportedGamesList() {
     supportedGamesList.innerHTML = "";
@@ -3687,14 +3687,21 @@
 
       var image = document.createElement("img");
       image.className = "supported-game-header";
-      image.src = game.headerImage || "";
       image.alt = game.label;
       image.loading = "lazy";
       image.referrerPolicy = "no-referrer";
       var fallback = document.createElement("span");
       fallback.className = "supported-game-fallback";
       fallback.textContent = game.label;
-      fallback.hidden = true;
+      // A game with no header art (e.g. Minecraft — not on Steam, so no
+      // steamAssets entry) skips the image outright rather than relying on
+      // an empty src to reliably fire "error" in every browser.
+      if (game.headerImage) {
+        image.src = game.headerImage;
+        fallback.hidden = true;
+      } else {
+        image.hidden = true;
+      }
       image.addEventListener("error", function () {
         image.hidden = true;
         fallback.hidden = false;

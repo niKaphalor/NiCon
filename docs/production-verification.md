@@ -77,6 +77,5 @@ Restart (hidden when known offline) on the live status from
 before the first status fetch completes. `sw.js`/`docs/sw.js` cache version
 bumped to `v10` for this app-shell change.
 
-Still to confirm after redeploying `app.js`/`docs/app.js`/`sw.js`: that
-Start now works correctly from a genuinely stopped server (not yet
-re-tested — the reported failure was against a running one).
+Redeployed and re-tested by the operator on 2026-09-29 against a genuinely
+stopped server: **Start now works correctly.**

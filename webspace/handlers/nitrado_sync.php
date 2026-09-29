@@ -238,6 +238,10 @@ function nicon_supported_game(string $label): ?array
         ['Hell Let Loose: Vietnam', 'source', ['hell let loose: vietnam', 'hell let loose vietnam']],
         ['Hell Let Loose', 'source', ['hell let loose']],
         ['Insurgency', 'source', ['insurgency']],
+        // Minecraft's remote console is the same wire protocol as Source
+        // RCON (just a different command set — see games.js), so it's
+        // eligible the same way any other 'source' entry here is.
+        ['Minecraft', 'source', ['minecraft']],
         ['MORDHAU', 'source', ['mordhau']],
         ['Palworld', 'palworld_rest', ['palworld']],
         ['Project Zomboid', 'source', ['project zomboid']],

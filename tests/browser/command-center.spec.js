@@ -188,9 +188,16 @@ async function login(page) {
 test("login, manual game selection, profile editing, and Nitrado sync", async ({ page }) => {
   const state = await installBackend(page, []);
   await login(page);
-  await expect(page.locator("#supported-games-list .supported-game-header")).toHaveCount(28);
+  await expect(page.locator("#supported-games-list .supported-game-header")).toHaveCount(29);
   await expect(page.locator('#supported-games-list li[aria-label="Rust"] img')).toHaveAttribute("src", /apps\/252490\/header\.jpg/);
   await expect(page.locator('#supported-games-list li[aria-label="7 Days to Die"] .tag')).toHaveClass(/tag-tested/);
+  await expect(page.locator('#supported-games-list li[aria-label="DayZ"] .tag')).toHaveClass(/tag-tested/);
+  await expect(page.locator('#supported-games-list li[aria-label="ARK: Survival Ascended"] .tag')).toHaveClass(/tag-tested/);
+  await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] .tag')).toHaveClass(/tag-tested/);
+  // Minecraft has no Steam header art (it isn't on Steam) — its <img> stays
+  // in the DOM (counted above) but hidden, showing the text fallback instead.
+  await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] img')).toBeHidden();
+  await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] .supported-game-fallback')).toBeVisible();
   const overviewLayout = await page.evaluate(() => {
     const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
     const panel = document.querySelector(".supported-games").getBoundingClientRect();
@@ -213,13 +220,15 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
 
   await page.locator("#add-server-btn").click();
   await page.locator('[data-tab="manual"]').click();
-  await expect(page.locator("#manual-game option")).toHaveCount(29);
+  await expect(page.locator("#manual-game option")).toHaveCount(30);
   await expect(page.locator("#manual-game")).toContainText("Counter-Strike 2");
-  await expect(page.locator("#manual-game")).not.toContainText("Minecraft");
+  await expect(page.locator("#manual-game")).toContainText("Minecraft");
   await page.locator("#manual-game").selectOption("Rust");
   await expect(page.locator("#manual-protocol")).toHaveValue("webrcon");
   await page.locator("#manual-game").selectOption("Palworld");
   await expect(page.locator("#manual-protocol")).toHaveValue("palworld_rest");
+  await page.locator("#manual-game").selectOption("Minecraft");
+  await expect(page.locator("#manual-protocol")).toHaveValue("source");
   await page.locator("#manual-name").fill("Manual 7DTD");
   await page.locator("#manual-host").fill("127.0.0.1");
   await page.locator("#manual-port").fill("2302");

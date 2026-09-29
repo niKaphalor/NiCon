@@ -394,8 +394,10 @@ Object.assign(window.NICON_GAMES, {
 });
 
 // Keep shared parser templates in this file, but do not expose games absent
-// from NiCon's supported-game list as selectable integrations.
-["minecraft", "ark"].forEach(function (key) {
+// from NiCon's supported-game list as selectable integrations. "ark" is
+// only a shared template for arksurvivalascended/arksurvivalevolved below,
+// never a standalone selectable entry itself.
+["ark"].forEach(function (key) {
   delete window.NICON_GAMES[key];
 });
 

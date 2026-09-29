@@ -737,14 +737,16 @@ The latest recorded CI and public-endpoint smoke-test results are documented in
   [webrcon](https://github.com/Facepunch/webrcon) tool and third-party
   documentation; the `playerlist` command and `kick` have been verified
   against a real Rust server, the rest of it hasn't. The BattlEye
-  implementation (Arma 2, Arma 3, Arma Reforger, DayZ) is based on BattlEye's own published
-  protocol spec and hasn't been checked against a real server at all yet
+  implementation (Arma 2, Arma 3, Arma Reforger, DayZ) is based on
+  BattlEye's own published protocol spec; DayZ's `players` command has been
+  verified against a real server, Arma 2/3/Reforger haven't
 - Structured player-list parsing (`docs/games.js`) covers Rust,
-  ARK: Survival Evolved/Ascended, Palworld (via its REST API, see
+  ARK: Survival Evolved/Ascended, Minecraft, Palworld (via its REST API, see
   [Relay](#relay)), the BattlEye games, and Garry's Mod, based on documented
-  command/API output formats rather than verified live responses — Rust's
-  is the exception, confirmed against a real server; none of the others
-  have been — see the file for details
+  command/API output formats rather than verified live responses — Rust,
+  ARK: Survival Ascended, Minecraft, and Palworld have been confirmed
+  against real servers; ARK: Survival Evolved, Garry's Mod, and the rest
+  have not — see the file for details
 - Mute and whisper are intentionally available only where a documented
   base-game/protocol command exists (currently Rust mute and BattlEye
   whisper). NiCon does not assume optional admin plugins such as

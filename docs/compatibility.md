@@ -10,11 +10,11 @@ Last matrix review: **2026-09-29**.
 
 | Protocol | Automated controlled-peer test | Real server | Notes |
 | --- | --- | --- | --- |
-| Source RCON | Pass | Not run for every game | TCP framing via `gorcon/rcon` |
+| Source RCON | Pass | ARK: Survival Ascended and Minecraft tests passed; not run for every game | TCP framing via `gorcon/rcon` |
 | WebRCON | Pass | Rust test passed | Active Rust transport |
 | Palworld REST API | Pass | Palworld test passed | HTTP Basic auth and documented `/v1/api` endpoints |
 | BattleBit WebRCON | Pass | Not run | Published `x-password`/JSON protocol |
-| BattlEye RCon | Pass | Not run | Used for Arma 2, Arma 3, Arma Reforger, and DayZ |
+| BattlEye RCon | Pass | DayZ test passed | Used for Arma 2, Arma 3, Arma Reforger, and DayZ |
 | Telnet | Pass | Not run | 7 Days to Die password login, command, response, and negotiation stripping |
 
 ## Supported games
@@ -23,7 +23,7 @@ Last matrix review: **2026-09-29**.
 | --- | --- | --- | --- |
 | 7 Days to Die | Telnet | `lp`, conservative line parser | ✅ Passed — user-confirmed live on 2026-09-29 |
 | 83 | Provisional Source transport | `status`, conservative line parser | Pending |
-| ARK: Survival Ascended | Source RCON | `ListPlayers`, ARK parser | Pending |
+| ARK: Survival Ascended | Source RCON | `ListPlayers`, ARK parser | ✅ Passed — user-confirmed live on 2026-09-29 |
 | ARK: Survival Evolved | Source RCON | `ListPlayers`, ARK parser | Pending |
 | Arma 2 | BattlEye | `players`, BattlEye parser | Pending |
 | Arma 3 | BattlEye | `players`, BattlEye parser | Pending |
@@ -34,11 +34,12 @@ Last matrix review: **2026-09-29**.
 | Conan Exiles | Source RCON | `listplayers` | Pending |
 | Counter-Strike 2 | Source RCON | `status` | Pending |
 | Dark and Light | Source RCON | `ListPlayers` | Pending |
-| DayZ | BattlEye | `players`, BattlEye parser | Pending |
+| DayZ | BattlEye | `players`, BattlEye parser | ✅ Passed — user-confirmed live on 2026-09-29 |
 | Garry's Mod | Source RCON | `status`, structured Source parser | Pending |
 | Hell Let Loose | Provisional Source transport | `get playerids` | Pending |
 | Hell Let Loose: Vietnam | Provisional Source transport | `get playerids` | Pending |
 | Insurgency | Source RCON | `status` | Pending |
+| Minecraft | Source RCON | `list`, dedicated parser | ✅ Passed — user-confirmed live on 2026-09-29 |
 | MORDHAU | Source RCON | `playerlist` | Pending |
 | Palworld | Palworld REST API | `players` JSON | Passed on a real Nitrado service |
 | Project Zomboid | Source RCON | `players` | Pending |
@@ -74,7 +75,8 @@ provider, protocol, harmless read command, raw player-list output, and every
 tested moderation action. Mock-server coverage proves NiCon framing and UI
 flow, not compatibility with a particular game release.
 
-The 7 Days to Die result was confirmed directly by the operator on
-2026-09-29. The tested build, hosting provider, raw `lp` response, and tested
-moderation actions were not retained during that live check and should be
-added when the server is next available.
+The 7 Days to Die, DayZ, ARK: Survival Ascended, and Minecraft results were
+confirmed directly by the operator on 2026-09-29. The tested build, hosting
+provider, raw player-list output, and tested moderation actions were not
+retained during those live checks and should be added when the servers are
+next available.
