@@ -15,7 +15,7 @@
      frontend at your own deployment"), so there's no reason for this to
      stay open to arbitrary hosts. Update this list alongside those two
      constants if you point this frontend at a different deployment. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: https://nitrado.net https://*.nitrado.net https://shared.fastly.steamstatic.com https://store.fastly.steamstatic.com; connect-src 'self' https://nicon.mylss.de https://relay.130.61.8.150.sslip.io wss://relay.130.61.8.150.sslip.io; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: https://nitrado.net https://*.nitrado.net https://shared.fastly.steamstatic.com https://store.fastly.steamstatic.com https://www.minecraft.net; connect-src 'self' https://nicon.mylss.de https://relay.130.61.8.150.sslip.io wss://relay.130.61.8.150.sslip.io; base-uri 'self'; form-action 'self'">
 <title>NiCon</title>
 <meta name="theme-color" content="#101418">
 <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96">
@@ -163,6 +163,9 @@
 
         <div id="content-password" class="card password-card" hidden>
           <div class="card-title" id="password-server-name"></div>
+          <div id="password-public-status" class="public-status-strip" aria-label="Public server status" data-i18n-aria-label="phase2.nitradoResources" hidden>
+            <div id="password-public-status-values" class="public-status-values" aria-live="polite"></div>
+          </div>
           <div id="password-power-actions" class="password-power-actions" hidden></div>
           <p class="card-body" data-i18n="content.passwordHint">Enter this server's RCON password to connect.</p>
           <form id="password-form" class="stacked-form">

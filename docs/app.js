@@ -114,6 +114,8 @@
   var emptyAddBtn = document.getElementById("empty-add-btn");
   var contentPassword = document.getElementById("content-password");
   var passwordServerName = document.getElementById("password-server-name");
+  var passwordPublicStatus = document.getElementById("password-public-status");
+  var passwordPublicStatusValues = document.getElementById("password-public-status-values");
   var passwordPowerActions = document.getElementById("password-power-actions");
   var passwordForm = document.getElementById("password-form");
   var passwordInput = document.getElementById("password-input");
@@ -2220,6 +2222,8 @@
     contentPassword.hidden = true;
     contentConsole.hidden = true;
     nitradoResourcesCard.hidden = true;
+    passwordPublicStatus.hidden = true;
+    passwordPublicStatusValues.innerHTML = "";
     passwordPowerActions.hidden = true;
     passwordPowerActions.innerHTML = "";
 
@@ -2232,6 +2236,10 @@
     if (!server.has_password) {
       contentPassword.hidden = false;
       passwordServerName.textContent = server.name;
+      // The relay's A2S/Minecraft-Query sampling (see README's Relay
+      // section) needs no RCON password at all, so a server can already
+      // have real player/uptime history before one is ever entered here.
+      renderPublicStatus(server);
       if (server.source === "nitrado") {
         passwordPowerActions.hidden = false;
         appendNitradoPowerButtons(passwordPowerActions, server, true);
@@ -2414,6 +2422,47 @@
     work.classList.toggle("layout-wide", layout === "wide");
     work.classList.toggle("layout-stacked", layout === "stacked");
     work.classList.toggle("layout-compact", layout === "compact");
+  }
+
+  // Shown on the "enter RCON password" screen, for any server (not just
+  // Nitrado-sourced ones) — reads whatever the relay's passive A2S/
+  // Minecraft-Query sampling has already recorded (see README's Relay
+  // section), since that never needed a password in the first place. A
+  // server this has no data for yet (wrong protocol, unreachable query
+  // port, or just too soon after being added) degrades to a plain
+  // "unavailable" line rather than an empty box.
+  function renderPublicStatus(server) {
+    passwordPublicStatus.hidden = false;
+    passwordPublicStatusValues.textContent = I18N.t("phase2.resourcesLoading");
+    apiFetch("/api/servers/" + server.id + "/health-history?range=24h")
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error("status unavailable")); })
+      .then(function (history) {
+        if (selectedServerId !== server.id || server.has_password) return;
+        var samples = history.samples || [];
+        var latest = samples.length ? samples[samples.length - 1] : null;
+        passwordPublicStatusValues.innerHTML = "";
+        if (!latest) {
+          passwordPublicStatusValues.textContent = I18N.t("phase2.resourcesUnavailable");
+          return;
+        }
+        var items = [
+          [I18N.t("phase2.status"), latest.online ? I18N.t("phase2.statusStarted") : I18N.t("phase2.statusStopped"),
+            "is-status " + (latest.online ? "is-online" : "is-offline")],
+          [I18N.t("console.players"), latest.players == null ? "—" : latest.players + (latest.players_max != null ? " / " + latest.players_max : "")],
+        ];
+        if (history.players_peak != null) {
+          items.push([I18N.t("health.range24h"), I18N.t("health.playerSummary", { average: history.players_average, peak: history.players_peak })]);
+        }
+        items.forEach(function (item) {
+          var box = document.createElement("div"); box.className = "resource-item" + (item[2] ? " " + item[2] : "");
+          var label = document.createElement("span"); label.textContent = item[0];
+          var value = document.createElement("strong"); value.textContent = item[1];
+          box.appendChild(label); box.appendChild(value); passwordPublicStatusValues.appendChild(box);
+        });
+      })
+      .catch(function () {
+        if (selectedServerId === server.id && !server.has_password) passwordPublicStatusValues.textContent = I18N.t("phase2.resourcesUnavailable");
+      });
   }
 
   function renderNitradoResources(server) {

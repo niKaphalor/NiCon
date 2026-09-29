@@ -451,6 +451,15 @@ Object.keys(steamAssets).forEach(function (key) {
   game.backgroundImage = asset.background || "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/" + asset.appId + "/page_bg_generated_v6b.jpg";
 });
 
+// Minecraft isn't on Steam, so it has no steamAssets entry above — official
+// key art from Mojang's own CDN instead, the same image minecraft.net
+// itself serves as the social-preview image for its own "key art" article
+// (https://www.minecraft.net/en-us/article/key-art-update). Hotlinked
+// directly from minecraft.net, same as every other game's art is hotlinked
+// from Steam's CDN — nothing here is downloaded into this repository.
+window.NICON_GAMES.minecraft.headerImage = "https://www.minecraft.net/content/dam/minecraftnet/games/minecraft/key-art/NewKeyArt_Header.jpg";
+window.NICON_GAMES.minecraft.backgroundImage = window.NICON_GAMES.minecraft.headerImage;
+
 // Best-effort mapping from a Nitrado "game" string (e.g. "Minecraft
 // Vanilla") to one of the keys above, for auto-selecting the parser. Most
 // keys already are the substring to look for; a few games' key names

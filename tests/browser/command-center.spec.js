@@ -194,10 +194,10 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   await expect(page.locator('#supported-games-list li[aria-label="DayZ"] .tag')).toHaveClass(/tag-tested/);
   await expect(page.locator('#supported-games-list li[aria-label="ARK: Survival Ascended"] .tag')).toHaveClass(/tag-tested/);
   await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] .tag')).toHaveClass(/tag-tested/);
-  // Minecraft has no Steam header art (it isn't on Steam) — its <img> stays
-  // in the DOM (counted above) but hidden, showing the text fallback instead.
-  await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] img')).toBeHidden();
-  await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] .supported-game-fallback')).toBeVisible();
+  // Minecraft isn't on Steam — official key art hotlinked from Mojang's
+  // own CDN instead (see games.js), not the Steam header path every other
+  // game above uses.
+  await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] img')).toHaveAttribute("src", /minecraft\.net.*key-art/);
   const overviewLayout = await page.evaluate(() => {
     const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
     const panel = document.querySelector(".supported-games").getBoundingClientRect();
