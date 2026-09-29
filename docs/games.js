@@ -459,6 +459,12 @@ Object.keys(steamAssets).forEach(function (key) {
 // from Steam's CDN — nothing here is downloaded into this repository.
 window.NICON_GAMES.minecraft.headerImage = "https://www.minecraft.net/content/dam/minecraftnet/games/minecraft/key-art/NewKeyArt_Header.jpg";
 window.NICON_GAMES.minecraft.backgroundImage = window.NICON_GAMES.minecraft.headerImage;
+// Unlike a Steam header (which already has the game's name baked into the
+// artwork by its publisher), this key art doesn't — overlay the official
+// wordmark on top in the supported-games tile (see app.js's
+// renderSupportedGamesList). Current official logo (used since 2021),
+// hotlinked from Wikipedia's own hosted copy of it, not stored here.
+window.NICON_GAMES.minecraft.logoImage = "https://upload.wikimedia.org/wikipedia/en/b/be/Minecraft_game_logo_2023.png";
 
 // Best-effort mapping from a Nitrado "game" string (e.g. "Minecraft
 // Vanilla") to one of the keys above, for auto-selecting the parser. Most

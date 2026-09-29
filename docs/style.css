@@ -252,6 +252,7 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .supported-game-header { display: block; width: 100%; aspect-ratio: 460 / 215; object-fit: cover; }
 .supported-game-fallback { display: flex; min-height: 64px; align-items: center; justify-content: center; padding: 12px; font-weight: 650; text-align: center; }
 .supported-games-list .tag { position: absolute; right: 6px; bottom: 6px; box-shadow: 0 2px 8px rgba(0, 0, 0, .5); }
+.supported-game-logo-overlay { position: absolute; top: 50%; left: 50%; width: 62%; max-width: 200px; transform: translate(-50%, -50%); filter: drop-shadow(0 1px 4px rgba(0, 0, 0, .8)); pointer-events: none; }
 #content-console { display: flex; flex-direction: column; gap: 0; }
 .head { position: relative; z-index: 5; isolation: isolate; display: flex; min-height: 168px; align-items: flex-end; gap: 20px; overflow: visible; padding: 32px; border: 1px solid var(--color-border); border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: linear-gradient(135deg, #1a232a, #11171c); }
 .head::before { position: absolute; inset: 0; z-index: -2; border-radius: inherit; background-image: var(--game-background-image); background-position: center; background-repeat: no-repeat; background-size: cover; content: ""; opacity: 0; transition: opacity 180ms ease; }

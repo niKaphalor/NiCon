@@ -3758,6 +3758,20 @@
       li.appendChild(image);
       li.appendChild(fallback);
 
+      // Optional wordmark overlay for a game whose header art doesn't
+      // already have its own logo baked in (Minecraft's key art doesn't —
+      // see games.js). Purely decorative: the header image and the <li>
+      // itself already carry the game's name for assistive tech.
+      if (game.logoImage) {
+        var logo = document.createElement("img");
+        logo.className = "supported-game-logo-overlay";
+        logo.src = game.logoImage;
+        logo.alt = "";
+        logo.loading = "lazy";
+        logo.referrerPolicy = "no-referrer";
+        li.appendChild(logo);
+      }
+
       var tag = document.createElement("span");
       tag.className = "tag " + (tested ? "tag-tested" : "tag-untested");
       tag.textContent = I18N.t(tested ? "welcome.tested" : "welcome.untested");

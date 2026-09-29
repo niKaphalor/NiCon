@@ -196,8 +196,10 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] .tag')).toHaveClass(/tag-tested/);
   // Minecraft isn't on Steam — official key art hotlinked from Mojang's
   // own CDN instead (see games.js), not the Steam header path every other
-  // game above uses.
-  await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] img')).toHaveAttribute("src", /minecraft\.net.*key-art/);
+  // game above uses, plus a wordmark overlay since that key art has no
+  // logo baked in the way a Steam header does.
+  await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] .supported-game-header')).toHaveAttribute("src", /minecraft\.net.*key-art/);
+  await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] .supported-game-logo-overlay')).toHaveAttribute("src", /wikimedia\.org.*Minecraft_game_logo/);
   const overviewLayout = await page.evaluate(() => {
     const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
     const panel = document.querySelector(".supported-games").getBoundingClientRect();
