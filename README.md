@@ -69,7 +69,8 @@ hands-off production control plane.
    before connecting), or add one manually and select the game so NiCon can
    choose the matching protocol and player parser. Servers you add belong to
    your account only. Their name, address, port, game, protocol, and optional
-   replacement RCON password can be edited later from the server header.
+   replacement RCON password can be edited later from the server header's
+   **More actions** menu.
 5. Click **Connect** on a server to open its console — this is the one
    action that needs the **relay** running. For recognized games, the
    player list is queried automatically and refreshed every 10 seconds
@@ -97,6 +98,9 @@ live in the console, styled differently from command output.
 
 The command center includes:
 
+- a focused server header with game backdrop, status, current player count,
+  endpoint, primary connection action, and separate **Overview**, **Console**,
+  **Players**, and server-filtered **Audit** tabs;
 - color-classified chat, warning, and error lines plus literal/regex log
   filtering and pause/resume tail-following;
 - per-console shell-style history and autocomplete for known game commands;
@@ -108,7 +112,8 @@ The command center includes:
 - account-wide word filters that highlight matching pushed chat/log lines
   and can automatically mute or kick a matched player, with a per-rule/
   player cooldown;
-- balanced, console-wide, and stacked layouts stored in `localStorage`;
+- balanced, console-wide, stacked, and compact power-user layouts stored in
+  `localStorage` and selected from the server action menu;
 - Nitrado service status, players, map, version, and memory allocation only
   for Minecraft/Hytale where Nitrado supplies it; CPU is deliberately not
   shown because Nitrado does not expose a reliable value here;
@@ -119,9 +124,11 @@ The command center includes:
   game-ban data for newly observed SteamID64 players. Steam enrichment is
   disabled unless the Cloud API has a Steam Web API key configured.
 
-The separate **Health** view combines the relay's automatic five-minute
+Each server's **Overview** tab combines the relay's automatic five-minute
 RCON checks with retained 24-hour, 7-day, 30-day, and 90-day uptime/player
-graphs, sample completeness, connection time, latency, and recent client-side errors.
+graphs, sample completeness, connection time, relay overhead, and recent
+client-side errors. The separate **Health** view keeps the cross-server table
+for fleet-level comparison.
 For uninterrupted Nitrado player history, schedule
 `php webspace/cron/sample_nitrado.php` every five minutes in the hosting
 control panel; the command reuses the shared 30–60-second Nitrado cache and

@@ -93,7 +93,22 @@ async function installBackend(page, initialServers = []) {
     }
     if (method === "PUT" && /^\/api\/servers\/\d+\/password$/.test(path)) return route.fulfill({ status: 204 });
     if (method === "GET" && path === "/api/account") return json({ username: "operator", nitrado_token_saved: false });
-    if (method === "GET" && path === "/api/audit-log") return json([]);
+    if (method === "GET" && path === "/api/audit-log") return json(state.commandAudits.map((entry, index) => ({
+      kind: "rcon",
+      action: "rcon_command",
+      rcon_action: entry.action,
+      origin: entry.origin,
+      command: entry.command,
+      target_player: entry.targetPlayer || null,
+      result: "ok",
+      success: true,
+      upstream_ms: 5.2,
+      relay_overhead_ms: 0.8,
+      actor_username: "operator",
+      server_id: entry.serverId,
+      server_name: state.servers.find((item) => item.id === entry.serverId)?.name || "Server",
+      created_at: new Date(Date.now() + index).toISOString(),
+    })));
     if (method === "GET" && path === "/api/notifications") return json([]);
     if (method === "GET" && path === "/api/command-templates") return json(state.templates);
     if (method === "POST" && path === "/api/command-templates") {
@@ -216,7 +231,10 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
 
   await page.locator(".server-row", { hasText: "Manual 7DTD" }).click();
   await expect(page.locator("#content")).toHaveAttribute("style", /apps\/251570\/page_bg_generated_v6b\.jpg/);
-  await page.locator("#head .head-actions button", { hasText: "Edit" }).click();
+  await expect.poll(() => page.locator("#head").evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).toContain("apps/251570/page_bg_generated_v6b.jpg");
+  await expect(page.locator('[data-server-tab="console"]')).toHaveAttribute("aria-selected", "true");
+  await page.locator("#head .server-actions-menu summary").click();
+  await page.locator("#head .server-menu-action", { hasText: "Edit" }).click();
   await page.locator("#edit-server-name").fill("Edited Reforger");
   await page.locator("#edit-server-game").selectOption("Arma Reforger");
   await page.locator('#edit-server-form button[type="submit"]').click();
@@ -244,6 +262,10 @@ test("two consoles stay connected and player actions reach the selected server",
 
   await page.locator(".server-row", { hasText: "GMod Alpha" }).click();
   await expect(page.locator("#players-panel .player-name")).toHaveText("Alice");
+  await page.locator('[data-server-tab="overview"]').click();
+  await expect(page.locator("#server-overview-content")).toContainText("100.00%");
+  await expect(page.locator("#server-overview-content")).toContainText("0.8 ms");
+  await page.locator('[data-server-tab="console"]').click();
   await page.locator(".server-row", { hasText: "GMod Beta" }).click();
   await expect.poll(() => state.connectedServerIds).toEqual(expect.arrayContaining([1, 2]));
 
@@ -252,6 +274,9 @@ test("two consoles stay connected and player actions reach the selected server",
   await page.locator("#confirm-dialog-ok").click();
   await expect.poll(() => state.commands).toContainEqual({ serverId: 2, command: "kickid 2" });
   await expect.poll(() => state.commandAudits).toContainEqual({ serverId: 2, command: "kickid 2", origin: "player_action", action: "kick", targetPlayer: "Alice" });
+  await page.locator('[data-server-tab="audit"]').click();
+  await expect(page.locator("#server-audit-list")).toContainText("kickid 2");
+  await expect(page.locator("#server-audit-list")).not.toContainText("GMod Alpha");
 
   await page.locator(".server-row", { hasText: "GMod Alpha" }).click();
   await page.locator("#cmd-input").fill("status");

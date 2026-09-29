@@ -5,7 +5,7 @@ function nicon_rcon_audit_rows(?int $userId, int $limit): array
 {
     $where = $userId === null ? '' : 'WHERE user_id = ?';
     $stmt = nicon_db()->prepare("
-        SELECT username, server_name, command, action, target_player, origin,
+        SELECT server_id, username, server_name, command, action, target_player, origin,
                result, success, upstream_ms, relay_overhead_ms, created_at
         FROM rcon_audit_log
         $where
@@ -26,6 +26,7 @@ function nicon_rcon_audit_rows(?int $userId, int $limit): array
             'upstream_ms' => $row['upstream_ms'] !== null ? (float) $row['upstream_ms'] : null,
             'relay_overhead_ms' => $row['relay_overhead_ms'] !== null ? (float) $row['relay_overhead_ms'] : null,
             'actor_username' => $row['username'],
+            'server_id' => (int) $row['server_id'],
             'server_name' => $row['server_name'],
             'target_username' => null,
             'detail' => null,

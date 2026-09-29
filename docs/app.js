@@ -54,6 +54,8 @@
   var consoles = {};
   var nitradoPowerPending = {};
   var selectedServerId = null;
+  var activeServerTab = "console";
+  var lastActivityLog = [];
 
   // --- element refs ---
 
@@ -118,6 +120,17 @@
   var passwordEditServerBtn = document.getElementById("password-edit-server-btn");
   var contentConsole = document.getElementById("content-console");
   var head = document.getElementById("head");
+  var serverTabs = document.getElementById("server-tabs");
+  var serverTabButtons = serverTabs.querySelectorAll("[data-server-tab]");
+  var serverOverviewPanel = document.getElementById("server-overview-panel");
+  var serverOverviewRange = document.getElementById("server-overview-range");
+  var serverOverviewContent = document.getElementById("server-overview-content");
+  var serverConsolePanel = document.getElementById("server-console-panel");
+  var serverPlayersPanel = document.getElementById("server-players-panel");
+  var serverPlayersList = document.getElementById("server-players-list");
+  var serverPlayerCount = document.getElementById("server-player-count");
+  var serverAuditPanel = document.getElementById("server-audit-panel");
+  var serverAuditList = document.getElementById("server-audit-list");
 
   var viewSettings = document.getElementById("view-settings");
   var privacyCard = document.getElementById("privacy-card");
@@ -1635,7 +1648,12 @@
   function loadActivity() {
     return apiFetch("/api/audit-log", { method: "GET" })
       .then(function (r) { return r.ok ? r.json() : []; })
-      .then(function (list) { renderAuditLogList(activityList, list || [], "settings.activityEmpty"); })
+      .then(function (list) {
+        lastActivityLog = list || [];
+        renderAuditLogList(activityList, lastActivityLog, "settings.activityEmpty");
+        var server = findServer(selectedServerId);
+        if (server) renderServerAudit(server);
+      })
       .catch(function () { /* the rest of settings still works without this */ });
   }
 
@@ -1862,6 +1880,7 @@
     h.lastErrorAt = null;
     saveServerHealth();
     if (!viewHealth.hidden) renderHealth();
+    if (selectedServerId === serverId && activeServerTab === "overview") renderServerOverview(findServer(serverId));
   }
 
   function recordHealthError(serverId, message) {
@@ -1870,6 +1889,7 @@
     h.lastErrorAt = Date.now();
     saveServerHealth();
     if (!viewHealth.hidden) renderHealth();
+    if (selectedServerId === serverId && activeServerTab === "overview") renderServerOverview(findServer(serverId));
   }
 
   function recordLatency(serverId, ms, relayOverheadMs, upstreamMs) {
@@ -1879,6 +1899,7 @@
     h.upstreamMs = typeof upstreamMs === "number" ? upstreamMs : null;
     saveServerHealth();
     if (!viewHealth.hidden) renderHealth();
+    if (selectedServerId === serverId && activeServerTab === "overview") renderServerOverview(findServer(serverId));
   }
 
   function formatHealthTimestamp(ms) {
@@ -2071,6 +2092,7 @@
   function selectServer(id) {
     stopPlayersAutoRefresh();
     selectedServerId = id;
+    activeServerTab = "console";
     var server = findServer(id);
     if (server && server.has_password) {
       if (!isConnected(id)) {
@@ -2205,14 +2227,158 @@
 
     contentConsole.hidden = false;
     renderHead(server);
+    renderServerWorkspace(server);
     renderLog(consoles[server.id]);
     renderQuickCommands(consoles[server.id]);
     cmdHistoryPanel.hidden = true; // a switch to a different server's console starts closed, not showing the old one's history
     cmdTemplatesPanel.hidden = true;
     moderationRulesPanel.hidden = true;
     renderPlayersPanel(consoles[server.id]);
+    renderPlayersInto(serverPlayersList, consoles[server.id]);
+    updateServerPlayerCount(server);
     renderNitradoResources(server);
     updateCmdBarState();
+  }
+
+  function setActiveServerTab(tab) {
+    if (["overview", "console", "players", "audit"].indexOf(tab) === -1) tab = "console";
+    activeServerTab = tab;
+    var server = findServer(selectedServerId);
+    if (server) renderServerWorkspace(server);
+  }
+
+  function renderServerWorkspace(server) {
+    var panels = {
+      overview: serverOverviewPanel,
+      console: serverConsolePanel,
+      players: serverPlayersPanel,
+      audit: serverAuditPanel,
+    };
+    serverTabButtons.forEach(function (button) {
+      var selected = button.dataset.serverTab === activeServerTab;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-selected", String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    });
+    Object.keys(panels).forEach(function (key) { panels[key].hidden = key !== activeServerTab; });
+    if (activeServerTab === "overview") renderServerOverview(server);
+    if (activeServerTab === "players") renderPlayersInto(serverPlayersList, consoles[server.id]);
+    if (activeServerTab === "audit") {
+      renderServerAudit(server);
+      loadActivity();
+    }
+  }
+
+  serverTabs.addEventListener("click", function (event) {
+    var button = event.target.closest("[data-server-tab]");
+    if (button) setActiveServerTab(button.dataset.serverTab);
+  });
+
+  serverTabs.addEventListener("keydown", function (event) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    var buttons = Array.prototype.slice.call(serverTabButtons);
+    var index = buttons.indexOf(document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    var next = (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[next].focus();
+    setActiveServerTab(buttons[next].dataset.serverTab);
+  });
+
+  serverOverviewRange.addEventListener("change", function () {
+    var server = findServer(selectedServerId);
+    if (server) renderServerOverview(server);
+  });
+
+  function currentPlayerCount(server) {
+    var c = consoles[server.id];
+    if (c && c.lastParsed && c.lastParsed.ok) return c.lastParsed.players.length;
+    if (server.nitrado_resources && server.nitrado_resources.players != null) return Number(server.nitrado_resources.players);
+    return null;
+  }
+
+  function updateServerPlayerCount(server) {
+    var count = currentPlayerCount(server);
+    serverPlayerCount.textContent = count == null ? "—" : String(count);
+    var headerCount = head.querySelector(".server-current-player-count");
+    if (headerCount) headerCount.textContent = I18N.t("workspace.playersNow") + ": " + (count == null ? "—" : count);
+  }
+
+  function appendOverviewMetric(container, labelText, valueText, detailText, stateClass) {
+    var card = document.createElement("div");
+    card.className = "overview-metric" + (stateClass ? " " + stateClass : "");
+    var label = document.createElement("span"); label.textContent = labelText;
+    var value = document.createElement("strong"); value.textContent = valueText;
+    card.appendChild(label); card.appendChild(value);
+    if (detailText) {
+      var detail = document.createElement("small"); detail.textContent = detailText; card.appendChild(detail);
+    }
+    container.appendChild(card);
+  }
+
+  function renderServerOverview(server) {
+    serverOverviewContent.innerHTML = "";
+    var h = serverHealth[server.id] || {};
+    var range = serverOverviewRange.value;
+    var historyKey = server.id + ":" + range;
+    var historyEntry = healthHistoryCache[historyKey];
+    var history = historyEntry && historyEntry.data;
+
+    var metrics = document.createElement("div"); metrics.className = "overview-metrics";
+    appendOverviewMetric(metrics, I18N.t("health.colUptime"), history && history.uptime_percent != null ? history.uptime_percent.toFixed(2) + "%" : "—", history ? I18N.t("health.samples", { value: history.sample_completeness_percent }) : "", server.health_ok ? "is-good" : "");
+    var playerCount = currentPlayerCount(server);
+    appendOverviewMetric(metrics, I18N.t("workspace.playersNow"), playerCount == null ? "—" : String(playerCount), history && history.players_peak != null ? I18N.t("health.playerSummary", { average: history.players_average, peak: history.players_peak }) : "");
+    appendOverviewMetric(metrics, I18N.t("workspace.relayOverhead"), h.relayOverheadMs == null ? "—" : h.relayOverheadMs.toFixed(1) + " ms", I18N.t("workspace.relayTarget"), h.relayOverheadMs != null && h.relayOverheadMs <= 50 ? "is-good" : "");
+    appendOverviewMetric(metrics, I18N.t("workspace.lastCheck"), server.health_checked_at ? new Date(server.health_checked_at).toLocaleString() : I18N.t("health.autoCheckNeverRun"), server.health_latency_ms == null ? "" : server.health_latency_ms + " ms", server.health_ok ? "is-good" : (server.health_checked_at ? "is-bad" : ""));
+    serverOverviewContent.appendChild(metrics);
+
+    if (!historyEntry) {
+      healthHistoryCache[historyKey] = { loading: true };
+      apiFetch("/api/servers/" + server.id + "/health-history?range=" + encodeURIComponent(range))
+        .then(function (response) { if (!response.ok) throw new Error("history unavailable"); return response.json(); })
+        .then(function (data) { healthHistoryCache[historyKey] = { data: data, fetchedAt: Date.now() }; if (selectedServerId === server.id && activeServerTab === "overview") renderServerOverview(server); })
+        .catch(function () { healthHistoryCache[historyKey] = { data: null, failed: true }; if (selectedServerId === server.id && activeServerTab === "overview") renderServerOverview(server); });
+    }
+
+    var charts = document.createElement("div"); charts.className = "overview-charts";
+    [[I18N.t("workspace.chartUptime"), false], [I18N.t("workspace.chartPlayers"), true]].forEach(function (item) {
+      var figure = document.createElement("figure"); figure.className = "overview-chart-card";
+      var caption = document.createElement("figcaption"); caption.textContent = item[0]; figure.appendChild(caption);
+      if (history) {
+        var chart = buildHealthChart(history.samples, item[1], history.range || range);
+        chart.removeAttribute("aria-hidden");
+        chart.setAttribute("role", "img");
+        chart.setAttribute("aria-label", item[0]);
+        figure.appendChild(chart);
+      } else {
+        var placeholder = document.createElement("p"); placeholder.className = "hint";
+        placeholder.textContent = historyEntry && historyEntry.failed ? I18N.t("workspace.unavailable") : I18N.t("workspace.loading");
+        figure.appendChild(placeholder);
+      }
+      charts.appendChild(figure);
+    });
+    serverOverviewContent.appendChild(charts);
+
+    var signals = document.createElement("div"); signals.className = "card overview-signals";
+    var title = document.createElement("div"); title.className = "card-kicker"; title.textContent = I18N.t("workspace.recentSignals"); signals.appendChild(title);
+    var list = document.createElement("dl");
+    function signal(labelText, valueText, error) {
+      var dt = document.createElement("dt"); dt.textContent = labelText;
+      var dd = document.createElement("dd"); dd.textContent = valueText; if (error) dd.className = "health-error";
+      list.appendChild(dt); list.appendChild(dd);
+    }
+    signal(I18N.t("workspace.status"), serverStatusTooltip(server));
+    signal(I18N.t("workspace.autoCheck"), server.health_checked_at ? (server.health_ok ? I18N.t("health.autoCheckOk") : I18N.t("health.autoCheckFailed")) : I18N.t("health.autoCheckNeverRun"), !!server.health_checked_at && !server.health_ok);
+    signal(I18N.t("workspace.lastConnected"), formatHealthTimestamp(h.lastConnectedAt) || I18N.t("health.never"));
+    signal(I18N.t("workspace.lastError"), h.lastError || server.health_error || I18N.t("health.noError"), !!(h.lastError || server.health_error));
+    signals.appendChild(list); serverOverviewContent.appendChild(signals);
+  }
+
+  function renderServerAudit(server) {
+    var filtered = lastActivityLog.filter(function (entry) {
+      return entry.kind === "rcon" && (Number(entry.server_id) === Number(server.id) || (!entry.server_id && entry.server_name === server.name));
+    });
+    renderAuditLogList(serverAuditList, filtered, "workspace.auditEmpty");
   }
 
   function setServerBackground(server) {
@@ -2228,11 +2394,12 @@
   }
 
   function setDashboardLayout(layout) {
-    if (["balanced", "wide", "stacked"].indexOf(layout) === -1) layout = "balanced";
+    if (["balanced", "wide", "stacked", "compact"].indexOf(layout) === -1) layout = "balanced";
     localStorage.setItem("nicon_dashboard_layout", layout);
     var work = document.querySelector(".work");
     work.classList.toggle("layout-wide", layout === "wide");
     work.classList.toggle("layout-stacked", layout === "stacked");
+    work.classList.toggle("layout-compact", layout === "compact");
   }
 
   function renderNitradoResources(server) {
@@ -2263,13 +2430,30 @@
     server.nitradoResourcesLoading = true;
     apiFetch("/api/servers/" + server.id + "/nitrado-status")
       .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error("status unavailable")); })
-      .then(function (data) { server.nitrado_resources = data; server.nitradoResourcesFetchedAt = Date.now(); if (selectedServerId === server.id) draw(data); })
+      .then(function (data) {
+        server.nitrado_resources = data;
+        server.nitradoResourcesFetchedAt = Date.now();
+        if (selectedServerId === server.id) {
+          draw(data);
+          updateServerPlayerCount(server);
+          if (activeServerTab === "overview") renderServerOverview(server);
+        }
+      })
       .catch(function () { if (!cached && selectedServerId === server.id) nitradoResources.textContent = "Unavailable"; })
       .finally(function () { server.nitradoResourcesLoading = false; });
   }
 
   function renderHead(server) {
     head.innerHTML = "";
+
+    var identity = document.createElement("div");
+    identity.className = "server-identity";
+    var gameKey = window.NICON_GUESS_GAME(server.game);
+    var game = gameKey ? window.NICON_GAMES[gameKey] : null;
+    var eyebrow = document.createElement("div");
+    eyebrow.className = "server-eyebrow";
+    eyebrow.textContent = (game ? game.label : server.game || I18N.t("info.genericOption")) + " · " + protocolLabel(server.protocol);
+    identity.appendChild(eyebrow);
 
     var h1 = document.createElement("h1");
     if (server.game_icon_url) {
@@ -2287,45 +2471,26 @@
     dot.setAttribute("aria-label", serverStatusTooltip(server));
     h1.appendChild(dot);
     h1.appendChild(document.createTextNode(server.name));
-    head.appendChild(h1);
+    identity.appendChild(h1);
 
-    var protoTag = document.createElement("span");
-    protoTag.className = "tag tag-outline";
-    protoTag.textContent = protocolLabel(server.protocol);
-    head.appendChild(protoTag);
-
+    var meta = document.createElement("div");
+    meta.className = "server-meta";
+    var status = document.createElement("span"); status.textContent = serverStatusTooltip(server); meta.appendChild(status);
+    var playerCount = currentPlayerCount(server);
+    var players = document.createElement("span"); players.className = "server-current-player-count"; players.textContent = I18N.t("workspace.playersNow") + ": " + (playerCount == null ? "—" : playerCount); meta.appendChild(players);
+    var endpoint = document.createElement("span"); endpoint.className = "mono"; endpoint.textContent = server.host + ":" + server.port; meta.appendChild(endpoint);
     if (server.source === "nitrado") {
-      var nitradoTag = document.createElement("span");
-      nitradoTag.className = "tag tag-nitrado";
-      nitradoTag.textContent = I18N.t("common.nitrado");
-      head.appendChild(nitradoTag);
+      var nitradoTag = document.createElement("span"); nitradoTag.className = "tag tag-nitrado"; nitradoTag.textContent = I18N.t("common.nitrado"); meta.appendChild(nitradoTag);
     }
-
-    var hostTag = document.createElement("span");
-    hostTag.className = "tag tag-neutral mono";
-    hostTag.textContent = server.host + ":" + server.port;
-    head.appendChild(hostTag);
-
-    var layout = localStorage.getItem("nicon_dashboard_layout") || "balanced";
-    var layoutGroup = document.createElement("div");
-    layoutGroup.className = "dashboard-layout";
-    [["balanced", "1:1"], ["wide", I18N.t("phase2.wide")], ["stacked", I18N.t("phase2.stack")]].forEach(function (item) {
-      var button = document.createElement("button");
-      button.type = "button";
-      button.className = "btn-xs";
-      button.textContent = item[1];
-      button.setAttribute("aria-pressed", String(layout === item[0]));
-      button.addEventListener("click", function () { setDashboardLayout(item[0]); renderContent(); });
-      layoutGroup.appendChild(button);
-    });
-    head.appendChild(layoutGroup);
+    identity.appendChild(meta);
+    head.appendChild(identity);
 
     var actions = document.createElement("div");
     actions.className = "head-actions";
 
     var toggleBtn = document.createElement("button");
     toggleBtn.type = "button";
-    toggleBtn.className = "btn-secondary";
+    toggleBtn.className = isConnected(server.id) ? "btn-secondary" : "btn-primary";
     if (isConnected(server.id)) {
       toggleBtn.textContent = I18N.t("content.disconnect");
       toggleBtn.addEventListener("click", function () {
@@ -2342,22 +2507,38 @@
     }
     actions.appendChild(toggleBtn);
 
-    appendNitradoPowerButtons(actions, server, false);
+    if (server.source === "nitrado") {
+      var restartBtn = document.createElement("button");
+      restartBtn.type = "button"; restartBtn.className = "btn-secondary"; restartBtn.textContent = I18N.t("content.nitradoRestart");
+      restartBtn.disabled = !!nitradoPowerPending[server.id];
+      restartBtn.addEventListener("click", function () { requestNitradoPower(server, "restart"); });
+      actions.appendChild(restartBtn);
+    }
 
-    var editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "btn-secondary";
-    editBtn.textContent = I18N.t("common.edit");
-    editBtn.addEventListener("click", function () { openEditServerModal(server); });
-    actions.appendChild(editBtn);
+    var menu = document.createElement("details"); menu.className = "server-actions-menu";
+    var menuSummary = document.createElement("summary"); menuSummary.className = "icon-btn"; menuSummary.textContent = "•••"; menuSummary.setAttribute("aria-label", I18N.t("workspace.moreActions")); menu.appendChild(menuSummary);
+    var menuBody = document.createElement("div"); menuBody.className = "server-actions-menu-body";
 
-    var removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "btn-secondary btn-danger";
-    removeBtn.textContent = I18N.t("common.remove");
-    removeBtn.setAttribute("aria-label", I18N.t("servers.removeAriaLabel", { name: server.name }));
-    removeBtn.addEventListener("click", function () { removeServer(server.id); });
-    actions.appendChild(removeBtn);
+    if (server.source === "nitrado") {
+      ["start", "stop"].forEach(function (action) {
+        var powerButton = document.createElement("button"); powerButton.type = "button"; powerButton.className = "server-menu-action"; powerButton.textContent = nitradoActionLabel(action); powerButton.disabled = !!nitradoPowerPending[server.id];
+        powerButton.addEventListener("click", function () { menu.open = false; requestNitradoPower(server, action); }); menuBody.appendChild(powerButton);
+      });
+    }
+
+    var editBtn = document.createElement("button"); editBtn.type = "button"; editBtn.className = "server-menu-action"; editBtn.textContent = I18N.t("common.edit");
+    editBtn.addEventListener("click", function () { menu.open = false; openEditServerModal(server); }); menuBody.appendChild(editBtn);
+
+    var layoutLabel = document.createElement("span"); layoutLabel.className = "server-menu-label"; layoutLabel.textContent = I18N.t("workspace.layout"); menuBody.appendChild(layoutLabel);
+    var layout = localStorage.getItem("nicon_dashboard_layout") || "balanced";
+    [["balanced", I18N.t("workspace.balanced")], ["wide", I18N.t("phase2.wide")], ["stacked", I18N.t("phase2.stack")], ["compact", I18N.t("workspace.compact")]].forEach(function (item) {
+      var layoutButton = document.createElement("button"); layoutButton.type = "button"; layoutButton.className = "server-menu-action"; layoutButton.textContent = item[1]; layoutButton.setAttribute("aria-pressed", String(layout === item[0]));
+      layoutButton.addEventListener("click", function () { menu.open = false; setDashboardLayout(item[0]); renderContent(); }); menuBody.appendChild(layoutButton);
+    });
+
+    var removeBtn = document.createElement("button"); removeBtn.type = "button"; removeBtn.className = "server-menu-action danger"; removeBtn.textContent = I18N.t("common.remove");
+    removeBtn.setAttribute("aria-label", I18N.t("servers.removeAriaLabel", { name: server.name })); removeBtn.addEventListener("click", function () { menu.open = false; removeServer(server.id); }); menuBody.appendChild(removeBtn);
+    menu.appendChild(menuBody); actions.appendChild(menu);
 
     head.appendChild(actions);
   }
@@ -2498,7 +2679,10 @@
         appendConsoleLine(c, "system", I18N.t("console.connected"));
         recordConnected(c.server.id);
         renderServers();
-        if (selectedServerId === c.server.id) startPlayersAutoRefresh(c);
+        if (selectedServerId === c.server.id) {
+          renderHead(c.server);
+          startPlayersAutoRefresh(c);
+        }
       } else if (msg.type === "response") {
         appendConsoleLine(c, "response", msg.output && msg.output.length ? msg.output : I18N.t("console.noOutput"));
         if (c.pendingPlayersRequest) {
@@ -2520,7 +2704,12 @@
               });
             }).catch(function () { /* telemetry must never interrupt the console */ });
           }
-          if (selectedServerId === c.server.id) renderPlayersPanel(c);
+          if (selectedServerId === c.server.id) {
+            renderPlayersPanel(c);
+            renderPlayersInto(serverPlayersList, c);
+            updateServerPlayerCount(c.server);
+            if (activeServerTab === "overview") renderServerOverview(c.server);
+          }
         }
       } else if (msg.type === "broadcast") {
         // WebRCON servers (Rust) push chat/log lines unsolicited.
@@ -2761,6 +2950,8 @@
     c.lastParsed = null;
     renderLog(c);
     renderPlayersPanel(c);
+    renderPlayersInto(serverPlayersList, c);
+    updateServerPlayerCount(c.server);
   });
 
   // --- players card (inline, next to the console) ---
@@ -2809,7 +3000,10 @@
 
   function requestPlayers(c) {
     if (!c.gameKey) {
-      if (selectedServerId === c.server.id) renderPlayersPanel(c);
+      if (selectedServerId === c.server.id) {
+        renderPlayersPanel(c);
+        renderPlayersInto(serverPlayersList, c);
+      }
       return;
     }
     if (!c.gameConnected || !c.socket || c.socket.readyState !== WebSocket.OPEN) return;
@@ -2829,33 +3023,37 @@
     return label === "players.col." + key ? key : label;
   }
 
-  function playersHint(text) {
-    playersPanel.innerHTML = "";
+  function playersHint(container, text) {
+    container.innerHTML = "";
     var notice = document.createElement("p");
     notice.className = "hint";
     notice.textContent = text;
-    playersPanel.appendChild(notice);
+    container.appendChild(notice);
   }
 
   function renderPlayersPanel(c) {
-    playersPanel.innerHTML = "";
+    renderPlayersInto(playersPanel, c);
+  }
+
+  function renderPlayersInto(container, c) {
+    container.innerHTML = "";
     if (!c) return;
     if (!c.gameKey) {
-      playersHint(I18N.t("info.genericOption"));
+      playersHint(container, I18N.t("info.genericOption"));
       return;
     }
     if (!c.lastParsed) return; // waiting on the first response
 
     var game = window.NICON_GAMES[c.gameKey];
     if (!c.lastParsed.ok) {
-      playersHint(I18N.t("info.couldNotParse", { game: game.label }));
+      playersHint(container, I18N.t("info.couldNotParse", { game: game.label }));
       return;
     }
 
     var summary = document.createElement("p");
     summary.className = "hint";
     summary.textContent = c.lastParsed.summary;
-    playersPanel.appendChild(summary);
+    container.appendChild(summary);
 
     var players = c.lastParsed.players;
     if (!players.length) return;
@@ -2932,7 +3130,7 @@
 
       list.appendChild(row);
     });
-    playersPanel.appendChild(list);
+    container.appendChild(list);
   }
 
   function requestSteamProfiles(c, columns, players) {
@@ -2947,7 +3145,10 @@
     }).then(function (r) { return r.ok ? r.json() : Promise.reject(new Error("Steam unavailable")); })
       .then(function (data) {
         (data.players || []).forEach(function (profile) { c.steamProfiles[profile.steamid] = profile; });
-        if (selectedServerId === c.server.id) renderPlayersPanel(c);
+        if (selectedServerId === c.server.id) {
+          renderPlayersPanel(c);
+          renderPlayersInto(serverPlayersList, c);
+        }
       }).catch(function () { /* optional integration */ });
   }
 

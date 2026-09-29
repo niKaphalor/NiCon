@@ -174,7 +174,33 @@
 
         <div id="content-console" hidden>
           <div class="head" id="head"></div>
-          <div class="work">
+          <div id="server-tabs" class="server-tabs" role="tablist" aria-label="Server workspace" data-i18n-aria-label="workspace.tabsAriaLabel">
+            <button type="button" id="server-tab-overview" class="server-tab" role="tab" data-server-tab="overview" aria-controls="server-overview-panel" aria-selected="false" data-i18n="workspace.overview">Overview</button>
+            <button type="button" id="server-tab-console" class="server-tab" role="tab" data-server-tab="console" aria-controls="server-console-panel" aria-selected="true" data-i18n="workspace.console">Console</button>
+            <button type="button" id="server-tab-players" class="server-tab" role="tab" data-server-tab="players" aria-controls="server-players-panel" aria-selected="false"><span data-i18n="workspace.players">Players</span><span id="server-player-count" class="server-tab-count">0</span></button>
+            <button type="button" id="server-tab-audit" class="server-tab" role="tab" data-server-tab="audit" aria-controls="server-audit-panel" aria-selected="false" data-i18n="workspace.audit">Audit</button>
+          </div>
+
+          <section id="server-overview-panel" class="server-workspace-panel" role="tabpanel" aria-labelledby="server-tab-overview" hidden>
+            <div class="overview-toolbar">
+              <div>
+                <div class="card-kicker" data-i18n="workspace.healthTitle">Health overview</div>
+                <p class="hint" data-i18n="workspace.healthHint">Availability, player activity and the latest connection measurements for this server.</p>
+              </div>
+              <label class="health-range"><span data-i18n="health.range">Range</span>
+                <select id="server-overview-range">
+                  <option value="24h" data-i18n="health.range24h">24 hours</option>
+                  <option value="7d" data-i18n="health.range7d">7 days</option>
+                  <option value="30d" data-i18n="health.range30d">30 days</option>
+                  <option value="90d" data-i18n="health.range90d">90 days</option>
+                </select>
+              </label>
+            </div>
+            <div id="server-overview-content"></div>
+          </section>
+
+          <section id="server-console-panel" class="server-workspace-panel" role="tabpanel" aria-labelledby="server-tab-console">
+            <div class="work">
             <div class="console">
               <div class="console-toolbar">
                 <div class="console-filter">
@@ -235,7 +261,24 @@
               <div class="card-kicker" data-i18n="phase2.nitradoResources">Nitrado resources</div>
               <div id="nitrado-resources" class="resource-grid"></div>
             </div>
-          </div>
+            </div>
+          </section>
+
+          <section id="server-players-panel" class="server-workspace-panel" role="tabpanel" aria-labelledby="server-tab-players" hidden>
+            <div class="card workspace-card">
+              <div class="card-kicker" data-i18n="workspace.players">Players</div>
+              <p class="hint" data-i18n="info.parsingHint">Parsing is best-effort, based on documented command formats, not verified against a live server of each game — if it looks wrong, the raw response is still visible in the console.</p>
+              <div id="server-players-list"></div>
+            </div>
+          </section>
+
+          <section id="server-audit-panel" class="server-workspace-panel" role="tabpanel" aria-labelledby="server-tab-audit" hidden>
+            <div class="card workspace-card">
+              <div class="card-kicker" data-i18n="workspace.auditTitle">Server audit</div>
+              <p class="hint" data-i18n="workspace.auditHint">Commands, player actions, macros and automated moderation for this server.</p>
+              <div id="server-audit-list" class="admin-notifications-list"></div>
+            </div>
+          </section>
         </div>
       </main>
     </div>

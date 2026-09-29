@@ -255,7 +255,7 @@ try {
     assert_test(in_array('server_password_changed', $actions, true), 'password update audit entry missing');
     assert_test(in_array('nitrado_server_restarted', $actions, true), 'Nitrado power audit entry missing');
     $rconRows = array_values(array_filter($audit ?? [], static fn(array $row): bool => ($row['kind'] ?? '') === 'rcon'));
-    assert_test(count($rconRows) === 1 && ($rconRows[0]['target_player'] ?? '') === 'Alice' && ($rconRows[0]['success'] ?? false), 'structured RCON audit entry missing');
+    assert_test(count($rconRows) === 1 && (int) ($rconRows[0]['server_id'] ?? 0) === $serverId && ($rconRows[0]['target_player'] ?? '') === 'Alice' && ($rconRows[0]['success'] ?? false), 'structured RCON audit entry missing');
     assert_test(!in_array('expired_test_entry', $actions, true), 'expired audit entry was not removed');
     assert_test((int) $pdo->query("SELECT COUNT(*) FROM audit_log WHERE action = 'expired_test_entry'")->fetchColumn() === 0, 'expired audit entry remained in the database');
     assert_test((int) $pdo->query("SELECT COUNT(*) FROM rcon_audit_log WHERE command = 'old'")->fetchColumn() === 0, 'expired RCON audit entry remained in the database');

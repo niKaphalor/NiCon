@@ -1880,6 +1880,7 @@
     h.lastErrorAt = null;
     saveServerHealth();
     if (!viewHealth.hidden) renderHealth();
+    if (selectedServerId === serverId && activeServerTab === "overview") renderServerOverview(findServer(serverId));
   }
 
   function recordHealthError(serverId, message) {
@@ -1888,6 +1889,7 @@
     h.lastErrorAt = Date.now();
     saveServerHealth();
     if (!viewHealth.hidden) renderHealth();
+    if (selectedServerId === serverId && activeServerTab === "overview") renderServerOverview(findServer(serverId));
   }
 
   function recordLatency(serverId, ms, relayOverheadMs, upstreamMs) {
@@ -1897,6 +1899,7 @@
     h.upstreamMs = typeof upstreamMs === "number" ? upstreamMs : null;
     saveServerHealth();
     if (!viewHealth.hidden) renderHealth();
+    if (selectedServerId === serverId && activeServerTab === "overview") renderServerOverview(findServer(serverId));
   }
 
   function formatHealthTimestamp(ms) {
@@ -2297,6 +2300,8 @@
   function updateServerPlayerCount(server) {
     var count = currentPlayerCount(server);
     serverPlayerCount.textContent = count == null ? "—" : String(count);
+    var headerCount = head.querySelector(".server-current-player-count");
+    if (headerCount) headerCount.textContent = I18N.t("workspace.playersNow") + ": " + (count == null ? "—" : count);
   }
 
   function appendOverviewMetric(container, labelText, valueText, detailText, stateClass) {
@@ -2323,7 +2328,7 @@
     appendOverviewMetric(metrics, I18N.t("health.colUptime"), history && history.uptime_percent != null ? history.uptime_percent.toFixed(2) + "%" : "—", history ? I18N.t("health.samples", { value: history.sample_completeness_percent }) : "", server.health_ok ? "is-good" : "");
     var playerCount = currentPlayerCount(server);
     appendOverviewMetric(metrics, I18N.t("workspace.playersNow"), playerCount == null ? "—" : String(playerCount), history && history.players_peak != null ? I18N.t("health.playerSummary", { average: history.players_average, peak: history.players_peak }) : "");
-    appendOverviewMetric(metrics, I18N.t("workspace.relayOverhead"), h.relayOverheadMs == null ? "—" : h.relayOverheadMs.toFixed(1) + " ms", "p95 target ≤50 ms", h.relayOverheadMs != null && h.relayOverheadMs <= 50 ? "is-good" : "");
+    appendOverviewMetric(metrics, I18N.t("workspace.relayOverhead"), h.relayOverheadMs == null ? "—" : h.relayOverheadMs.toFixed(1) + " ms", I18N.t("workspace.relayTarget"), h.relayOverheadMs != null && h.relayOverheadMs <= 50 ? "is-good" : "");
     appendOverviewMetric(metrics, I18N.t("workspace.lastCheck"), server.health_checked_at ? new Date(server.health_checked_at).toLocaleString() : I18N.t("health.autoCheckNeverRun"), server.health_latency_ms == null ? "" : server.health_latency_ms + " ms", server.health_ok ? "is-good" : (server.health_checked_at ? "is-bad" : ""));
     serverOverviewContent.appendChild(metrics);
 
@@ -2389,11 +2394,12 @@
   }
 
   function setDashboardLayout(layout) {
-    if (["balanced", "wide", "stacked"].indexOf(layout) === -1) layout = "balanced";
+    if (["balanced", "wide", "stacked", "compact"].indexOf(layout) === -1) layout = "balanced";
     localStorage.setItem("nicon_dashboard_layout", layout);
     var work = document.querySelector(".work");
     work.classList.toggle("layout-wide", layout === "wide");
     work.classList.toggle("layout-stacked", layout === "stacked");
+    work.classList.toggle("layout-compact", layout === "compact");
   }
 
   function renderNitradoResources(server) {
@@ -2424,7 +2430,15 @@
     server.nitradoResourcesLoading = true;
     apiFetch("/api/servers/" + server.id + "/nitrado-status")
       .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error("status unavailable")); })
-      .then(function (data) { server.nitrado_resources = data; server.nitradoResourcesFetchedAt = Date.now(); if (selectedServerId === server.id) draw(data); })
+      .then(function (data) {
+        server.nitrado_resources = data;
+        server.nitradoResourcesFetchedAt = Date.now();
+        if (selectedServerId === server.id) {
+          draw(data);
+          updateServerPlayerCount(server);
+          if (activeServerTab === "overview") renderServerOverview(server);
+        }
+      })
       .catch(function () { if (!cached && selectedServerId === server.id) nitradoResources.textContent = "Unavailable"; })
       .finally(function () { server.nitradoResourcesLoading = false; });
   }
@@ -2438,7 +2452,7 @@
     var game = gameKey ? window.NICON_GAMES[gameKey] : null;
     var eyebrow = document.createElement("div");
     eyebrow.className = "server-eyebrow";
-    eyebrow.textContent = (game ? game.label : server.game || I18N.t("servers.genericOption")) + " · " + protocolLabel(server.protocol);
+    eyebrow.textContent = (game ? game.label : server.game || I18N.t("info.genericOption")) + " · " + protocolLabel(server.protocol);
     identity.appendChild(eyebrow);
 
     var h1 = document.createElement("h1");
@@ -2463,7 +2477,7 @@
     meta.className = "server-meta";
     var status = document.createElement("span"); status.textContent = serverStatusTooltip(server); meta.appendChild(status);
     var playerCount = currentPlayerCount(server);
-    var players = document.createElement("span"); players.textContent = I18N.t("workspace.playersNow") + ": " + (playerCount == null ? "—" : playerCount); meta.appendChild(players);
+    var players = document.createElement("span"); players.className = "server-current-player-count"; players.textContent = I18N.t("workspace.playersNow") + ": " + (playerCount == null ? "—" : playerCount); meta.appendChild(players);
     var endpoint = document.createElement("span"); endpoint.className = "mono"; endpoint.textContent = server.host + ":" + server.port; meta.appendChild(endpoint);
     if (server.source === "nitrado") {
       var nitradoTag = document.createElement("span"); nitradoTag.className = "tag tag-nitrado"; nitradoTag.textContent = I18N.t("common.nitrado"); meta.appendChild(nitradoTag);
@@ -2665,7 +2679,10 @@
         appendConsoleLine(c, "system", I18N.t("console.connected"));
         recordConnected(c.server.id);
         renderServers();
-        if (selectedServerId === c.server.id) startPlayersAutoRefresh(c);
+        if (selectedServerId === c.server.id) {
+          renderHead(c.server);
+          startPlayersAutoRefresh(c);
+        }
       } else if (msg.type === "response") {
         appendConsoleLine(c, "response", msg.output && msg.output.length ? msg.output : I18N.t("console.noOutput"));
         if (c.pendingPlayersRequest) {

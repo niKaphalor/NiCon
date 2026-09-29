@@ -160,6 +160,7 @@ window.NICON_I18N_STRINGS.de = {
     status: "Status",
     playersNow: "Spieler aktuell",
     relayOverhead: "Relay-Overhead",
+    relayTarget: "p95-Ziel ≤50 ms",
     lastCheck: "Letzter Check",
     recentSignals: "Letzte Signale",
     noTelemetry: "Noch keine Browser-Telemetrie. Verbinde die Konsole, um Live-Messwerte zu erfassen.",
