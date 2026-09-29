@@ -40,17 +40,20 @@ import (
 // open either way; it goes through connectGame() the same as "connect"
 // does, so it's covered by the same metadata-host guard.
 type wsMessage struct {
-	Type     string `json:"type"`
-	Token    string `json:"token,omitempty"`
-	ServerID int64  `json:"server_id,omitempty"`
-	Command  string `json:"command,omitempty"`
-	Output   string `json:"output,omitempty"`
-	Message  string `json:"message,omitempty"`
-	Host     string `json:"host,omitempty"`
-	Port     int    `json:"port,omitempty"`
-	Password string `json:"password,omitempty"`
-	Protocol string `json:"protocol,omitempty"`
-	OK       bool   `json:"ok,omitempty"`
+	Type          string `json:"type"`
+	Token         string `json:"token,omitempty"`
+	ServerID      int64  `json:"server_id,omitempty"`
+	Command       string `json:"command,omitempty"`
+	Output        string `json:"output,omitempty"`
+	Message       string `json:"message,omitempty"`
+	Host          string `json:"host,omitempty"`
+	Port          int    `json:"port,omitempty"`
+	Password      string `json:"password,omitempty"`
+	Protocol      string `json:"protocol,omitempty"`
+	QueryProtocol string `json:"query_protocol,omitempty"`
+	OK            bool   `json:"ok,omitempty"`
+	Players       *int   `json:"players,omitempty"`
+	PlayersMax    *int   `json:"players_max,omitempty"`
 
 	// Audit metadata describes the UI path that emitted a command. The relay
 	// validates and persists it together with the authenticated user/server;
@@ -360,6 +363,21 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			testConn.Close()
 			_ = writeJSON(wsMessage{Type: "test_result", OK: true})
+
+		case "query_test":
+			queryPort := msg.Port
+			online, players, maxPlayers, queryErr := PublicInfoCheck(store.Server{
+				Host: msg.Host, Port: msg.Port, QueryProtocol: msg.QueryProtocol, QueryPort: &queryPort,
+			})
+			if queryErr != nil || !online {
+				message := "query did not answer"
+				if queryErr != nil {
+					message = queryErr.Error()
+				}
+				_ = writeJSON(wsMessage{Type: "query_test_result", OK: false, Message: message})
+				continue
+			}
+			_ = writeJSON(wsMessage{Type: "query_test_result", OK: true, Players: players, PlayersMax: maxPlayers})
 
 		case "command":
 			commandStarted := time.Now()

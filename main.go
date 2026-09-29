@@ -249,8 +249,8 @@ func runHealthChecks(ctx context.Context, logger *log.Logger, st *store.Store) {
 	wg.Wait()
 }
 
-// runPublicInfoChecks probes every protocol="source" server's own public
-// A2S/Minecraft-Query port (see internal/relay's PublicInfoCheck),
+// runPublicInfoChecks probes every server with an enabled public query
+// configuration (see internal/relay's PublicInfoCheck),
 // regardless of whether it has a stored RCON password — see
 // ListServersForPublicInfoCheck. Shares runHealthChecks' concurrency
 // bound: it's the same kind of "one connection attempt per server" fan-out,
@@ -273,7 +273,7 @@ func runPublicInfoChecks(ctx context.Context, logger *log.Logger, st *store.Stor
 			defer func() { <-sem }()
 			online, players, maxPlayers, _ := relay.PublicInfoCheck(srv)
 			source := "a2s"
-			if srv.Game == "Minecraft" {
+			if relay.EffectivePublicQueryProtocol(srv) == "minecraft" {
 				source = "mcquery"
 			}
 			if err := st.UpdateServerPlayerSample(ctx, srv.ID, online, players, maxPlayers, source); err != nil {

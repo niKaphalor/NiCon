@@ -161,9 +161,12 @@ try {
         'port' => 28016,
         'password' => 'secret',
         'protocol' => 'source',
+        'query_protocol' => 'a2s',
+        'query_port' => 27015,
         'game' => "Garry's Mod",
     ], $aliceToken);
     assert_test($status === 200 && ($server['game'] ?? '') === "Garry's Mod", 'manual server game was not persisted');
+    assert_test(($server['query_protocol'] ?? '') === 'a2s' && ($server['query_port'] ?? 0) === 27015, 'manual query configuration was not persisted');
     assert_test(($server['has_password'] ?? false) === true && !array_key_exists('password', $server), 'server response exposed or lost password state');
     $serverId = (int) $server['id'];
 
@@ -183,9 +186,19 @@ try {
         'host' => '127.0.0.2',
         'port' => 28017,
         'protocol' => 'source',
+        'query_protocol' => 'disabled',
+        'query_port' => null,
         'game' => "Garry's Mod",
     ], $aliceToken);
     assert_test($status === 200 && ($updated['name'] ?? '') === 'Edited GMod' && ($updated['port'] ?? 0) === 28017, 'profile update failed');
+    assert_test(($updated['query_protocol'] ?? '') === 'disabled' && ($updated['query_port'] ?? 'not-null') === null, 'query configuration update failed');
+
+    $pdo->prepare("INSERT INTO server_health_samples (server_id, online, player_current, player_max, source) VALUES (?, TRUE, 2, 20, 'relay'), (?, FALSE, 3, 20, 'a2s')")
+        ->execute([$serverId, $serverId]);
+    [$status, $deduplicatedHistory] = request_json($base, 'GET', "/api/servers/$serverId/health-history?range=24h", null, $aliceToken);
+    assert_test($status === 200 && (float) ($deduplicatedHistory['uptime_percent'] ?? -1) === 100.0, 'RCON and query samples in one interval must not double-count uptime');
+    assert_test((float) ($deduplicatedHistory['sample_completeness_percent'] ?? -1) === 0.35, 'sample completeness must count five-minute intervals, not raw sources');
+    assert_test((float) ($deduplicatedHistory['players_average'] ?? -1) === 3.0, 'player aggregation must prefer the public query sample in a shared interval');
 
     [$status] = request_json($base, 'PUT', "/api/servers/$serverId/password", ['password' => 'new-secret'], $aliceToken);
     assert_test($status === 204, 'password update failed');
@@ -202,6 +215,7 @@ try {
     foreach ($synced as $candidate) if (($candidate['source'] ?? '') === 'nitrado') $nitradoServer = $candidate;
     assert_test(is_array($nitradoServer), 'Nitrado server missing from sync response');
     assert_test(($nitradoServer['game_icon_url'] ?? '') === 'https://assets.nitrado.net/gmod-64.png', 'Nitrado icon URL missing');
+    assert_test(($nitradoServer['query_protocol'] ?? '') === 'a2s' && ($nitradoServer['query_port'] ?? 0) === 27015, 'Nitrado query metadata missing');
 
     [$status, $nitradoStatus] = request_json($base, 'GET', '/api/servers/' . $nitradoServer['id'] . '/nitrado-status', null, $aliceToken);
     assert_test($status === 200 && ($nitradoStatus['players'] ?? null) === 3, 'Nitrado status lookup failed');
@@ -224,6 +238,8 @@ try {
         'host' => $nitradoServer['host'],
         'port' => $nitradoServer['port'],
         'protocol' => 'telnet',
+        'query_protocol' => 'disabled',
+        'query_port' => null,
         'game' => '7 Days to Die',
     ], $aliceToken);
     assert_test($status === 200 && ($editedNitrado['source'] ?? '') === 'nitrado', 'Nitrado profile update failed');

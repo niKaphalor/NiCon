@@ -547,7 +547,18 @@
         <option value="WARDOGS">WARDOGS</option>
       </select>
       <div class="form-row">
+        <select id="manual-query-protocol" aria-label="Public status query" data-i18n-aria-label="addModal.queryProtocolAriaLabel">
+          <option value="auto" data-i18n="addModal.queryAuto">Automatic</option>
+          <option value="a2s">A2S</option>
+          <option value="minecraft">Minecraft Query</option>
+          <option value="disabled" data-i18n="addModal.queryDisabled">Disabled</option>
+        </select>
+        <input id="manual-query-port" type="number" min="1" max="65535" placeholder="Query port (optional)" aria-label="Query port" data-i18n-placeholder="addModal.queryPortPlaceholder" data-i18n-aria-label="addModal.queryPortAriaLabel">
+      </div>
+      <p class="hint" data-i18n="addModal.queryHint">Public status checks are independent from RCON. If empty, the RCON port is used.</p>
+      <div class="form-row">
         <button type="button" id="manual-test-btn" class="btn-secondary" data-i18n="addModal.testConnection">Test connection</button>
+        <button type="button" id="manual-query-test-btn" class="btn-secondary" data-i18n="addModal.testQuery">Test status query</button>
         <span id="manual-test-status" class="hint form-status" hidden></span>
       </div>
       <button type="submit" class="btn-primary" data-i18n="addModal.addServerSubmit">Add server</button>
@@ -607,6 +618,20 @@
       <option value="V Rising">V Rising</option>
       <option value="WARDOGS">WARDOGS</option>
     </select>
+    <div class="form-row">
+      <select id="edit-server-query-protocol" aria-label="Public status query" data-i18n-aria-label="addModal.queryProtocolAriaLabel">
+        <option value="auto" data-i18n="addModal.queryAuto">Automatic</option>
+        <option value="a2s">A2S</option>
+        <option value="minecraft">Minecraft Query</option>
+        <option value="disabled" data-i18n="addModal.queryDisabled">Disabled</option>
+      </select>
+      <input id="edit-server-query-port" type="number" min="1" max="65535" placeholder="Query port (optional)" aria-label="Query port" data-i18n-placeholder="addModal.queryPortPlaceholder" data-i18n-aria-label="addModal.queryPortAriaLabel">
+    </div>
+    <p class="hint" data-i18n="addModal.queryHint">Public status checks are independent from RCON. If empty, the RCON port is used.</p>
+    <div class="form-row">
+      <button type="button" id="edit-server-query-test-btn" class="btn-secondary" data-i18n="addModal.testQuery">Test status query</button>
+      <span id="edit-server-query-test-status" class="hint form-status" hidden></span>
+    </div>
     <input id="edit-server-password" type="password" autocomplete="off" data-i18n-placeholder="editServer.passwordPlaceholder" data-i18n-aria-label="editServer.passwordPlaceholder" placeholder="New RCON password (leave blank to keep current)" aria-label="New RCON password">
     <p id="edit-server-error" class="hint login-error" hidden></p>
     <button type="submit" class="btn-primary" data-i18n="editServer.save">Save changes</button>

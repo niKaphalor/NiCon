@@ -265,6 +265,33 @@ function nicon_supported_game(string $label): ?array
     return null;
 }
 
+function nicon_nitrado_query_protocol(array $game): string
+{
+    if ($game['name'] === 'Minecraft') return 'minecraft';
+    if ($game['protocol'] === 'source' || in_array($game['name'], ['Rust', 'Arma 2', 'Arma 3', 'Arma Reforger', 'DayZ'], true)) {
+        return 'a2s';
+    }
+    return 'auto';
+}
+
+function nicon_nitrado_query_port(array $gameserver): ?int
+{
+    // Consume only ports actually reported by the provider; never derive a
+    // query port by adding a guessed offset to the RCON port.
+    $candidates = [
+        $gameserver['query_port'] ?? null,
+        $gameserver['game_specific']['query_port'] ?? null,
+        $gameserver['ports']['query'] ?? null,
+        $gameserver['query']['port'] ?? null,
+        $gameserver['game_port'] ?? null,
+    ];
+    foreach ($candidates as $candidate) {
+        $port = filter_var($candidate, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]);
+        if ($port !== false) return (int) $port;
+    }
+    return null;
+}
+
 // nicon_handle_nitrado_sync upserts every RCON-capable service from
 // Nitrado into the caller's own server list, and returns the full updated
 // list. A token in the request body is saved (encrypted, AES-256-GCM —
@@ -332,6 +359,8 @@ function nicon_handle_nitrado_sync(int $userId): void
         $ip = (string) ($gs['ip'] ?? '');
         $hasConnectionInfo = $rconPort !== 0 && $ip !== '';
         $protocol = $supported['protocol'];
+        $queryProtocol = nicon_nitrado_query_protocol($supported);
+        $queryPort = nicon_nitrado_query_port($gs);
         $eligibleWithoutRconFlag = in_array($protocol, ['telnet', 'palworld_rest', 'webrcon', 'battleye'], true);
         $eligible = ($hasRcon || $eligibleWithoutRconFlag) && $hasConnectionInfo;
         if (!$eligible) {
@@ -350,12 +379,13 @@ function nicon_handle_nitrado_sync(int $userId): void
         // (user_id, nitrado_service_id), never touches an existing
         // password_enc — Nitrado never gives us one to overwrite it with.
         $pdo->prepare('
-            INSERT INTO servers (user_id, name, host, port, protocol, game, source, nitrado_service_id, nitrado_game_code, nitrado_game_icon_url)
-            VALUES (?, ?, ?, ?, ?, ?, \'nitrado\', ?, ?, ?)
+            INSERT INTO servers (user_id, name, host, port, protocol, query_protocol, query_port, game, source, nitrado_service_id, nitrado_game_code, nitrado_game_icon_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, \'nitrado\', ?, ?, ?)
             ON DUPLICATE KEY UPDATE name = VALUES(name), host = VALUES(host), port = VALUES(port),
-              protocol = VALUES(protocol), game = VALUES(game), nitrado_game_code = VALUES(nitrado_game_code),
+              protocol = VALUES(protocol), query_protocol = VALUES(query_protocol), query_port = VALUES(query_port),
+              game = VALUES(game), nitrado_game_code = VALUES(nitrado_game_code),
               nitrado_game_icon_url = COALESCE(VALUES(nitrado_game_icon_url), nitrado_game_icon_url)
-        ')->execute([$userId, $name, $ip, $port, $protocol, $supported['name'], $serviceId, $gameCode, $gameIconUrl]);
+        ')->execute([$userId, $name, $ip, $port, $protocol, $queryProtocol, $queryPort, $supported['name'], $serviceId, $gameCode, $gameIconUrl]);
     }
 
     nicon_handle_list_servers($userId);

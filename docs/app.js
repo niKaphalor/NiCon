@@ -180,8 +180,11 @@
   var forgetNitradoTokenBtn = document.getElementById("forget-nitrado-token-btn");
   var manualForm = document.getElementById("manual-form");
   var manualTestBtn = document.getElementById("manual-test-btn");
+  var manualQueryTestBtn = document.getElementById("manual-query-test-btn");
   var manualTestStatus = document.getElementById("manual-test-status");
   var manualGameSelect = document.getElementById("manual-game");
+  var manualQueryProtocol = document.getElementById("manual-query-protocol");
+  var manualQueryPort = document.getElementById("manual-query-port");
 
   var editServerModal = document.getElementById("edit-server-modal");
   var editServerClose = document.getElementById("edit-server-close");
@@ -191,6 +194,10 @@
   var editServerPort = document.getElementById("edit-server-port");
   var editServerProtocol = document.getElementById("edit-server-protocol");
   var editServerGame = document.getElementById("edit-server-game");
+  var editServerQueryProtocol = document.getElementById("edit-server-query-protocol");
+  var editServerQueryPort = document.getElementById("edit-server-query-port");
+  var editServerQueryTestBtn = document.getElementById("edit-server-query-test-btn");
+  var editServerQueryTestStatus = document.getElementById("edit-server-query-test-status");
   var editServerPassword = document.getElementById("edit-server-password");
   var editServerError = document.getElementById("edit-server-error");
   var editServerNitradoHint = document.getElementById("edit-server-nitrado-hint");
@@ -980,8 +987,22 @@
     return "source";
   }
 
+  function suggestedQueryProtocolForGame(game) {
+    var key = window.NICON_GUESS_GAME(game);
+    if (key === "minecraft") return "minecraft";
+    if (["rust", "arma2", "arma3", "armareforger", "dayz"].indexOf(key) !== -1) return "a2s";
+    return "auto";
+  }
+
+  function optionalPort(input) {
+    if (!input.value) return null;
+    var value = parseInt(input.value, 10);
+    return value >= 1 && value <= 65535 ? value : null;
+  }
+
   manualGameSelect.addEventListener("change", function () {
     document.getElementById("manual-protocol").value = suggestedProtocolForGame(manualGameSelect.value);
+    manualQueryProtocol.value = suggestedQueryProtocolForGame(manualGameSelect.value);
   });
 
   function setGameSelectValue(select, game) {
@@ -1005,9 +1026,12 @@
     editServerHost.value = server.host;
     editServerPort.value = server.port;
     editServerProtocol.value = server.protocol || "source";
+    editServerQueryProtocol.value = server.query_protocol || "auto";
+    editServerQueryPort.value = server.query_port || "";
     setGameSelectValue(editServerGame, server.game);
     editServerPassword.value = "";
     editServerError.hidden = true;
+    editServerQueryTestStatus.hidden = true;
     editServerNitradoHint.hidden = server.source !== "nitrado";
     editServerModal.showModal();
   }
@@ -1018,6 +1042,7 @@
   });
   editServerGame.addEventListener("change", function () {
     editServerProtocol.value = suggestedProtocolForGame(editServerGame.value);
+    editServerQueryProtocol.value = suggestedQueryProtocolForGame(editServerGame.value);
   });
   passwordEditServerBtn.addEventListener("click", function () {
     var server = findServer(selectedServerId);
@@ -1035,6 +1060,8 @@
       host: editServerHost.value.trim(),
       port: parseInt(editServerPort.value, 10),
       protocol: editServerProtocol.value,
+      query_protocol: editServerQueryProtocol.value,
+      query_port: optionalPort(editServerQueryPort),
       game: editServerGame.value,
     };
 
@@ -1197,6 +1224,71 @@
     manualTestStatus.hidden = false;
   }
 
+  function runQueryTest(options) {
+    var host = options.host.value.trim();
+    var port = optionalPort(options.queryPort) || parseInt(options.rconPort.value, 10);
+    var protocol = options.queryProtocol.value;
+    if (protocol === "auto") {
+      protocol = options.game.value === "Minecraft" ? "minecraft" : (options.rconProtocol.value === "source" ? "a2s" : "disabled");
+    }
+    if (!host || !port || protocol === "disabled") {
+      options.setStatus(I18N.t("addModal.queryNeedsConfig"), true);
+      return;
+    }
+    options.button.disabled = true;
+    options.setStatus(I18N.t("addModal.testing"), false);
+    var socket;
+    var settled = false;
+    var timer = setTimeout(function () { finish(I18N.t("addModal.testTimedOut"), true); }, 10000);
+    function finish(message, isError) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      options.setStatus(message, isError);
+      options.button.disabled = false;
+      if (socket) socket.close();
+    }
+    try { socket = new WebSocket(relayWsUrl() + "/ws/rcon"); }
+    catch (e) { finish(I18N.t("addModal.testRelayUnreachable"), true); return; }
+    socket.addEventListener("open", function () { socket.send(JSON.stringify({ type: "auth", token: authToken })); });
+    socket.addEventListener("error", function () { finish(I18N.t("addModal.testRelayUnreachable"), true); });
+    socket.addEventListener("close", function () { finish(I18N.t("addModal.testRelayUnreachable"), true); });
+    socket.addEventListener("message", function (event) {
+      var msg;
+      try { msg = JSON.parse(event.data); } catch (e) { return; }
+      if (msg.type === "authenticated") {
+        socket.send(JSON.stringify({ type: "query_test", host: host, port: port, query_protocol: protocol }));
+      } else if (msg.type === "query_test_result") {
+        var success = I18N.t("addModal.queryTestOk", { players: msg.players == null ? "–" : msg.players, max: msg.players_max == null ? "–" : msg.players_max });
+        finish(msg.ok ? success : I18N.t("addModal.testFailed", { message: msg.message || "" }), !msg.ok);
+      } else if (msg.type === "error") {
+        finish(I18N.t("addModal.testFailed", { message: msg.message || "" }), true);
+      }
+    });
+  }
+
+  manualQueryTestBtn.addEventListener("click", function () {
+    runQueryTest({
+      host: document.getElementById("manual-host"), rconPort: document.getElementById("manual-port"),
+      rconProtocol: document.getElementById("manual-protocol"), game: manualGameSelect,
+      queryProtocol: manualQueryProtocol, queryPort: manualQueryPort, button: manualQueryTestBtn,
+      setStatus: setManualTestStatus,
+    });
+  });
+
+  editServerQueryTestBtn.addEventListener("click", function () {
+    runQueryTest({
+      host: editServerHost, rconPort: editServerPort, rconProtocol: editServerProtocol, game: editServerGame,
+      queryProtocol: editServerQueryProtocol, queryPort: editServerQueryPort, button: editServerQueryTestBtn,
+      setStatus: function (text, isError) {
+        editServerQueryTestStatus.textContent = text;
+        editServerQueryTestStatus.classList.toggle("is-error", !!isError);
+        editServerQueryTestStatus.classList.toggle("is-success", !isError);
+        editServerQueryTestStatus.hidden = false;
+      },
+    });
+  });
+
   manualTestBtn.addEventListener("click", function () {
     var host = document.getElementById("manual-host").value.trim();
     var port = parseInt(document.getElementById("manual-port").value, 10);
@@ -1267,11 +1359,13 @@
     var password = document.getElementById("manual-password").value;
     var protocol = document.getElementById("manual-protocol").value;
     var game = manualGameSelect.value;
+    var queryProtocol = manualQueryProtocol.value;
+    var queryPort = optionalPort(manualQueryPort);
 
     apiFetch("/api/servers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name, host: host, port: port, password: password, protocol: protocol, game: game }),
+      body: JSON.stringify({ name: name, host: host, port: port, password: password, protocol: protocol, query_protocol: queryProtocol, query_port: queryPort, game: game }),
     })
       .then(function (r) {
         if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t)); });

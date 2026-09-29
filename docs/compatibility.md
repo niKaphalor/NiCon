@@ -15,7 +15,7 @@ Last matrix review: **2026-09-29**.
 | Palworld REST API | Pass | Palworld test passed | HTTP Basic auth and documented `/v1/api` endpoints |
 | BattleBit WebRCON | Pass | Not run | Published `x-password`/JSON protocol |
 | BattlEye RCon | Pass | DayZ test passed | Used for Arma 2, Arma 3, Arma Reforger, and DayZ |
-| Telnet | Pass | Not run | 7 Days to Die password login, command, response, and negotiation stripping |
+| Telnet | Pass | 7 Days to Die test passed | 7 Days to Die password login, command, response, and negotiation stripping |
 
 ## Supported games
 
@@ -64,11 +64,12 @@ and maximum player counts at most once every four minutes. The API exposes
 average players, and peak players. Missing samples are reported through
 completeness and are not silently counted as downtime.
 
-A separate, unauthenticated five-minute sample also runs for every
-`protocol = "source"` server, independent of whether it has a saved RCON
-password: Valve's A2S_INFO query for Source-engine games, or Minecraft's
-own Query protocol (must be enabled server-side) for Minecraft. See the
-[README's Relay section](../README.md#relay) for details.
+A separate, unauthenticated five-minute sample runs independently from RCON.
+Each profile can select `auto`, `a2s`, `minecraft`, or `disabled` and can use
+a dedicated query port. `auto` keeps the previous Source/Minecraft behaviour;
+WebRCON and BattlEye profiles can explicitly opt into A2S. Minecraft Query
+must be enabled server-side. See the
+[README's Relay section](https://github.com/niKaphalor/NiCon#relay) for details.
 
 The Nitrado status endpoint deliberately exposes only service status, current
 and maximum players, world/map, and version. CPU, memory, and server

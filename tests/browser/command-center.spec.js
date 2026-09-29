@@ -10,6 +10,8 @@ function server(overrides) {
     host: "127.0.0.1",
     port: 28016,
     protocol: "source",
+    query_protocol: "auto",
+    query_port: null,
     game: "Garry's Mod",
     source: "manual",
     nitrado_game_code: "",
@@ -153,6 +155,8 @@ async function installBackend(page, initialServers = []) {
         socket.send(JSON.stringify({ type: "connected" }));
       } else if (message.type === "test") {
         socket.send(JSON.stringify({ type: "test_result", ok: true }));
+      } else if (message.type === "query_test") {
+        socket.send(JSON.stringify({ type: "query_test_result", ok: true, players: 3, players_max: 20 }));
       } else if (message.type === "command") {
         state.commands.push({ serverId: connection.serverId, command: message.command });
         state.commandAudits.push({
@@ -228,19 +232,25 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   await expect(page.locator("#manual-game")).toContainText("Minecraft");
   await page.locator("#manual-game").selectOption("Rust");
   await expect(page.locator("#manual-protocol")).toHaveValue("webrcon");
+  await expect(page.locator("#manual-query-protocol")).toHaveValue("a2s");
   await page.locator("#manual-game").selectOption("Palworld");
   await expect(page.locator("#manual-protocol")).toHaveValue("palworld_rest");
   await page.locator("#manual-game").selectOption("Minecraft");
   await expect(page.locator("#manual-protocol")).toHaveValue("source");
+  await expect(page.locator("#manual-query-protocol")).toHaveValue("minecraft");
   await page.locator("#manual-name").fill("Manual 7DTD");
   await page.locator("#manual-host").fill("127.0.0.1");
   await page.locator("#manual-port").fill("2302");
   await page.locator("#manual-password").fill("secret");
   await page.locator("#manual-game").selectOption("7 Days to Die");
   await expect(page.locator("#manual-protocol")).toHaveValue("telnet");
+  await page.locator("#manual-query-protocol").selectOption("a2s");
+  await page.locator("#manual-query-port").fill("26900");
+  await page.locator("#manual-query-test-btn").click();
+  await expect(page.locator("#manual-test-status")).toContainText("3 / 20");
   await page.locator("#manual-form button[type=submit]").click();
   await expect(page.locator(".server-row", { hasText: "Manual 7DTD" })).toBeVisible();
-  expect(state.servers.find((item) => item.name === "Manual 7DTD")).toMatchObject({ game: "7 Days to Die", protocol: "telnet" });
+  expect(state.servers.find((item) => item.name === "Manual 7DTD")).toMatchObject({ game: "7 Days to Die", protocol: "telnet", query_protocol: "a2s", query_port: 26900 });
 
   await page.locator(".server-row", { hasText: "Manual 7DTD" }).click();
   await expect(page.locator("#content")).toHaveAttribute("style", /apps\/251570\/page_bg_generated_v6b\.jpg/);
@@ -250,9 +260,10 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   await page.locator("#head .server-menu-action", { hasText: "Edit" }).click();
   await page.locator("#edit-server-name").fill("Edited Reforger");
   await page.locator("#edit-server-game").selectOption("Arma Reforger");
+  await expect(page.locator("#edit-server-query-protocol")).toHaveValue("a2s");
   await page.locator('#edit-server-form button[type="submit"]').click();
   await expect(page.locator(".server-row", { hasText: "Edited Reforger" })).toBeVisible();
-  expect(state.servers.find((item) => item.name === "Edited Reforger")).toMatchObject({ game: "Arma Reforger", protocol: "battleye" });
+  expect(state.servers.find((item) => item.name === "Edited Reforger")).toMatchObject({ game: "Arma Reforger", protocol: "battleye", query_protocol: "a2s" });
 
   await page.locator("#add-server-btn").click();
   await page.locator('[data-tab="nitrado"]').click();

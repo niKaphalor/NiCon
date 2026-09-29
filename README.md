@@ -460,9 +460,12 @@ health loop performs a real authenticated connection check every five
 minutes and writes `health_*` results back to the server row.
 
 A second, independent loop on the same five-minute interval probes every
-`protocol = "source"` server's own **public** status port — no RCON
+server whose separate public-query configuration is enabled — no RCON
 password required, so it also covers servers that don't have one saved
-yet. Source-engine servers answer Valve's A2S_INFO query
+yet. `query_protocol` supports `auto`, `a2s`, `minecraft`, and `disabled`;
+`query_port` can differ from the RCON port. `auto` preserves the legacy
+behaviour (A2S for Source RCON, Minecraft Query for Minecraft) without
+guessing support for other transports. Source-engine servers answer Valve's A2S_INFO query
 (`internal/relay/a2s.go`) on their game UDP port with no configuration
 needed (Steam's server browser depends on it being open); Minecraft
 answers its own, unrelated GameSpy4-derived Query protocol instead
@@ -471,8 +474,10 @@ opt into (`enable-query=true` in `server.properties` — off by default).
 Either way, a successful probe's player counts land in the same
 `server_health_samples` table (`source` `"a2s"`/`"mcquery"`) the Cloud
 API already aggregates into `players_average`/`players_peak` for the
-Overview tab — so any Source-RCON or Minecraft server gets real history
-even before its RCON password is ever set.
+Overview tab. WebRCON and BattlEye profiles can now explicitly use A2S as
+well, independently from their authenticated control protocol. The add/edit
+forms include a direct query test; Nitrado sync imports an explicitly reported
+query/game port when available and never derives one using a port offset.
 
 ```sh
 go build -o nicon-relay .
@@ -855,10 +860,7 @@ The latest recorded CI and public-endpoint smoke-test results are documented in
   [Cloud API (`webspace/`)](#cloud-api-webspace) above, but not restricted
   to people you've invited)
 - The relay's passive public-status sampling (A2S/Minecraft Query, see
-  [Relay](#relay)) only covers `protocol = "source"` servers today — Rust,
-  Arma/DayZ, and the other non-Source protocols don't get it yet, even
-  though several of those games likely answer A2S too. It's also
-  read-only by design: A2S_PLAYER carries no stable player ID, so it can
+  [Relay](#relay)) is read-only by design: A2S_PLAYER carries no stable player ID, so it can
   never back a kick/ban action the way a real RCON connection can
 - A moderation rule has no enable/disable toggle — only create and
   delete (see [Cloud API (`webspace/`)](#cloud-api-webspace) above)

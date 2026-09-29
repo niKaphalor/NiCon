@@ -1,18 +1,18 @@
 # Production verification
 
 Last verification: **2026-09-29**  
-Verified frontend commit: **9983632e782c924676c601b6b6ffd636e029d617**
+Verified frontend commit: **61c18948949d9d1752c5f6a8d16d43de5fdae966**
 
 ## Continuous integration
 
 GitHub Actions run
-[`36536971340`](https://github.com/niKaphalor/NiCon/actions/runs/36536971340)
-completed successfully for commit `9983632`.
+[`36567984385`](https://github.com/niKaphalor/NiCon/actions/runs/36567984385)
+completed successfully for commit `61c1894`.
 
 - MariaDB became ready and all Go tests passed against it.
 - PHP syntax checks and the PHP API integration suite passed.
 - Chromium installation and the complete Playwright browser suite passed.
-- The GitHub Pages deployment run `36536971306` completed successfully.
+- The GitHub Pages deployment run `36567984449` completed successfully.
 
 ## Production smoke tests
 

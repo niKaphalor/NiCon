@@ -15,6 +15,23 @@ function nicon_game_is_allowed(string $game): bool
     ], true);
 }
 
+function nicon_query_config(array $req): array
+{
+    $protocol = strtolower(trim((string) ($req['query_protocol'] ?? 'auto')));
+    if (!in_array($protocol, ['auto', 'a2s', 'minecraft', 'disabled'], true)) {
+        nicon_send_error('unsupported query protocol', 400);
+        exit;
+    }
+    $rawPort = $req['query_port'] ?? null;
+    if ($rawPort === null || $rawPort === '') return [$protocol, null];
+    $port = filter_var($rawPort, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]);
+    if ($port === false) {
+        nicon_send_error('query port must be between 1 and 65535', 400);
+        exit;
+    }
+    return [$protocol, (int) $port];
+}
+
 function nicon_handle_server_health_history(int $userId, int $serverId): void
 {
     $ranges = ['24h' => 1, '7d' => 7, '30d' => 30, '90d' => 90];
@@ -39,23 +56,25 @@ function nicon_handle_server_health_history(int $userId, int $serverId): void
     ");
     $stmt->execute([$serverId]);
     $samples = [];
-    $online = 0;
-    $availabilityCount = 0;
-    $playersTotal = 0;
-    $playersCount = 0;
-    $playersPeak = null;
+    $availabilityBuckets = [];
+    $playerBuckets = [];
     foreach ($stmt as $row) {
         $isOnline = (bool) $row['online'];
         $source = (string) $row['source'];
+        $timestamp = strtotime((string) $row['sampled_at']);
+        $bucket = (int) floor($timestamp / 300);
         if ($source !== 'client') {
-            $availabilityCount++;
-            if ($isOnline) $online++;
+            $priority = $source === 'relay' ? 20 : 10;
+            if (!isset($availabilityBuckets[$bucket]) || $priority > $availabilityBuckets[$bucket]['priority']) {
+                $availabilityBuckets[$bucket] = ['online' => $isOnline, 'priority' => $priority];
+            }
         }
         $current = $row['player_current'] === null ? null : (int) $row['player_current'];
         if ($current !== null) {
-            $playersTotal += $current;
-            $playersCount++;
-            $playersPeak = $playersPeak === null ? $current : max($playersPeak, $current);
+            $priority = $source === 'nitrado' ? 40 : (in_array($source, ['a2s', 'mcquery'], true) ? 30 : ($source === 'client' ? 20 : 10));
+            if (!isset($playerBuckets[$bucket]) || $priority > $playerBuckets[$bucket]['priority']) {
+                $playerBuckets[$bucket] = ['players' => $current, 'priority' => $priority];
+            }
         }
         $samples[] = [
             'at' => gmdate('Y-m-d\TH:i:s\Z', strtotime((string) $row['sampled_at'])),
@@ -66,6 +85,12 @@ function nicon_handle_server_health_history(int $userId, int $serverId): void
             'source' => $source,
         ];
     }
+    $availabilityCount = count($availabilityBuckets);
+    $online = count(array_filter($availabilityBuckets, static fn(array $sample): bool => $sample['online']));
+    $playerValues = array_column($playerBuckets, 'players');
+    $playersCount = count($playerValues);
+    $playersTotal = array_sum($playerValues);
+    $playersPeak = $playersCount ? max($playerValues) : null;
     $expected = $ranges[$range] * 24 * 12;
     nicon_send_json([
         'range' => $range,
@@ -122,6 +147,8 @@ function nicon_server_response(array $row): array
         'host' => $row['host'],
         'port' => (int) $row['port'],
         'protocol' => $row['protocol'],
+        'query_protocol' => $row['query_protocol'] ?? 'auto',
+        'query_port' => isset($row['query_port']) ? (int) $row['query_port'] : null,
         'game' => $row['game'],
         'source' => $row['source'],
         'nitrado_game_code' => $row['nitrado_game_code'] ?? '',
@@ -187,7 +214,7 @@ function nicon_is_cloud_metadata_host(string $host): bool
 function nicon_handle_list_servers(int $userId): void
 {
     $stmt = nicon_db()->prepare('
-        SELECT id, name, host, port, password_enc, protocol, game, source,
+        SELECT id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source,
                health_ok, health_checked_at, health_latency_ms, health_error,
                nitrado_game_code, nitrado_game_icon_url
         FROM servers WHERE user_id = ? ORDER BY name');
@@ -204,6 +231,7 @@ function nicon_handle_create_server(int $userId): void
     $port = (int) ($req['port'] ?? 0);
     $password = (string) ($req['password'] ?? '');
     $protocol = (string) ($req['protocol'] ?? '') ?: 'source';
+    [$queryProtocol, $queryPort] = nicon_query_config($req);
     $game = trim((string) ($req['game'] ?? ''));
     if (!nicon_game_is_allowed($game)) {
         nicon_send_error('unsupported game', 400);
@@ -229,15 +257,15 @@ function nicon_handle_create_server(int $userId): void
 
     $pdo = nicon_db();
     $pdo->prepare('
-        INSERT INTO servers (user_id, name, host, port, password_enc, protocol, game, source)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ')->execute([$userId, $name, $host, $port, nicon_encrypt_password($password), $protocol, $game, 'manual']);
+        INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ')->execute([$userId, $name, $host, $port, nicon_encrypt_password($password), $protocol, $queryProtocol, $queryPort, $game, 'manual']);
     $id = (int) $pdo->lastInsertId();
 
     nicon_audit_log($userId, 'server_added', null, $name);
 
     $stmt = $pdo->prepare('
-        SELECT id, name, host, port, password_enc, protocol, game, source,
+        SELECT id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source,
                health_ok, health_checked_at, health_latency_ms, health_error,
                nitrado_game_code, nitrado_game_icon_url
         FROM servers WHERE id = ?');
@@ -252,6 +280,7 @@ function nicon_handle_update_server(int $userId, int $serverId): void
     $host = trim((string) ($req['host'] ?? ''));
     $port = (int) ($req['port'] ?? 0);
     $protocol = strtolower(trim((string) ($req['protocol'] ?? '')));
+    [$queryProtocol, $queryPort] = nicon_query_config($req);
     $game = trim((string) ($req['game'] ?? ''));
     if (!nicon_game_is_allowed($game)) {
         nicon_send_error('unsupported game', 400);
@@ -278,7 +307,7 @@ function nicon_handle_update_server(int $userId, int $serverId): void
     $pdo = nicon_db();
     $stmt = $pdo->prepare('
         UPDATE servers
-        SET name = ?, host = ?, port = ?, protocol = ?,
+        SET name = ?, host = ?, port = ?, protocol = ?, query_protocol = ?, query_port = ?,
             nitrado_game_code = CASE WHEN game <> ? THEN \'\' ELSE nitrado_game_code END,
             nitrado_game_icon_url = CASE WHEN game <> ? THEN NULL ELSE nitrado_game_icon_url END,
             game = ?,
@@ -286,10 +315,10 @@ function nicon_handle_update_server(int $userId, int $serverId): void
             health_latency_ms = NULL, health_error = NULL
         WHERE id = ? AND user_id = ?
     ');
-    $stmt->execute([$name, $host, $port, $protocol, $game, $game, $game, $serverId, $userId]);
+    $stmt->execute([$name, $host, $port, $protocol, $queryProtocol, $queryPort, $game, $game, $game, $serverId, $userId]);
 
     $serverStmt = $pdo->prepare('
-        SELECT id, name, host, port, password_enc, protocol, game, source,
+        SELECT id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source,
                health_ok, health_checked_at, health_latency_ms, health_error,
                nitrado_game_code, nitrado_game_icon_url
         FROM servers WHERE id = ? AND user_id = ?

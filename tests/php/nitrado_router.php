@@ -38,6 +38,7 @@ if ($method === 'GET' && $path === '/services') {
         'game_human' => "Garry's Mod",
         'ip' => '127.0.0.1',
         'rcon_port' => 28016,
+        'query_port' => 27015,
         'status' => 'started',
         'slots' => 50,
         'game_specific' => ['features' => ['has_rcon' => true]],
