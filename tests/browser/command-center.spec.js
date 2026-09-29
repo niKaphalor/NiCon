@@ -135,7 +135,7 @@ async function installBackend(page, initialServers = []) {
       return json(state.servers);
     }
     if (method === "GET" && /^\/api\/servers\/\d+\/nitrado-status$/.test(path)) {
-      return json({ status: "started", players: 1, players_max: 50, map: "Procedural Map", version: "test" });
+      return json({ status: "started", players: 1, players_max: 50, map: "Procedural Map", version: "test", memory_mb: 8192, settings: [{ key: "config.pvp", value: true }] });
     }
     return json({ error: `unmocked ${method} ${path}` }, 404);
   });
@@ -251,6 +251,15 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   const rowBox = await nitradoRow.boundingBox();
   const iconBox = await nitradoRow.locator(".server-game-icon").boundingBox();
   expect(iconBox.height).toBeGreaterThanOrEqual(rowBox.height - 12);
+  await nitradoRow.click();
+  await expect(page.locator("#nitrado-resources-card")).toBeVisible();
+  await expect(page.locator("#nitrado-resources .resource-item")).toHaveCount(4);
+  await expect(page.locator("#nitrado-resources")).toContainText("Started");
+  await expect(page.locator("#nitrado-resources")).toContainText("1 / 50");
+  await expect(page.locator("#nitrado-resources")).toContainText("Procedural Map");
+  await expect(page.locator("#nitrado-resources")).toContainText("test");
+  await expect(page.locator("#nitrado-resources")).not.toContainText("8192");
+  await expect(page.locator("#nitrado-resources")).not.toContainText("config.pvp");
 });
 
 test("two consoles stay connected and player actions reach the selected server", async ({ page }) => {

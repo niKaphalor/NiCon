@@ -244,30 +244,6 @@ function nicon_supported_game(string $label): ?array
     return null;
 }
 
-// Return a compact read-only subset of Nitrado settings. Secrets are denied
-// first, then only operationally useful keys are admitted. The raw settings
-// object never crosses the API boundary.
-function nicon_nitrado_public_settings(array $settings): array
-{
-    $safe = [];
-    $walk = function (array $node, string $category = '') use (&$walk, &$safe): void {
-        foreach ($node as $key => $value) {
-            $name = (string) $key;
-            $path = $category === '' ? $name : "$category.$name";
-            if (preg_match('/password|passwd|token|secret|api.?key|credential|ftp|rcon/i', $path)) continue;
-            if (is_array($value)) {
-                $walk($value, $path);
-                continue;
-            }
-            if (count($safe) >= 50 || !is_scalar($value) || strlen((string) $value) > 300) continue;
-            if (!preg_match('/server.?name|hostname|map|players?|slots?|pvp|pve|friendly.?fire|difficulty|whitelist|mods?|rate|multiplier|day|night|restart/i', $path)) continue;
-            $safe[] = ['key' => $path, 'value' => $value];
-        }
-    };
-    $walk($settings);
-    return $safe;
-}
-
 // nicon_handle_nitrado_sync upserts every RCON-capable service from
 // Nitrado into the caller's own server list, and returns the full updated
 // list. A token in the request body is saved (encrypted, AES-256-GCM —
@@ -435,7 +411,7 @@ function nicon_handle_nitrado_power(int $userId, int $serverId): void
 function nicon_handle_nitrado_status(int $userId, int $serverId): void
 {
     $pdo = nicon_db();
-    $stmt = $pdo->prepare('SELECT nitrado_service_id, game, nitrado_game_code FROM servers WHERE id = ? AND user_id = ? AND source = \'nitrado\'');
+    $stmt = $pdo->prepare('SELECT nitrado_service_id FROM servers WHERE id = ? AND user_id = ? AND source = \'nitrado\'');
     $stmt->execute([$serverId, $userId]);
     $server = $stmt->fetch();
     $serviceId = (int) ($server['nitrado_service_id'] ?? 0);
@@ -452,12 +428,7 @@ function nicon_handle_nitrado_status(int $userId, int $serverId): void
             'players_max' => (int) ($query['player_max'] ?? $gs['slots'] ?? 0),
             'map' => (string) ($query['map'] ?? ''),
             'version' => (string) ($query['version'] ?? ''),
-            'settings' => nicon_nitrado_public_settings(is_array($gs['settings'] ?? null) ? $gs['settings'] : []),
         ];
-        $resourceGame = strtolower((string) ($server['game'] ?? '') . ' ' . (string) ($server['nitrado_game_code'] ?? ''));
-        if (str_contains($resourceGame, 'minecraft') || str_contains($resourceGame, 'hytale') || preg_match('/\bmc[a-z0-9_-]*/', $resourceGame)) {
-            $result['memory_mb'] = (int) ($gs['memory_mb'] ?? $gs['memory'] ?? 0);
-        }
         $online = in_array(strtolower((string) ($gs['status'] ?? '')), ['started', 'running', 'online'], true);
         $pdo->prepare('
             INSERT INTO server_health_samples (server_id, online, player_current, player_max, source)

@@ -2408,24 +2408,36 @@
     if (server.source !== "nitrado") return;
     nitradoResources.innerHTML = "";
     var cached = server.nitrado_resources;
+    function statusLabel(status) {
+      var normalized = String(status || "unknown").toLowerCase();
+      if (["started", "running", "online"].indexOf(normalized) !== -1) return I18N.t("phase2.statusStarted");
+      if (["stopped", "offline"].indexOf(normalized) !== -1) return I18N.t("phase2.statusStopped");
+      if (["restarting", "restart"].indexOf(normalized) !== -1) return I18N.t("phase2.statusRestarting");
+      return status || I18N.t("phase2.statusUnknown");
+    }
+    function statusClass(status) {
+      var normalized = String(status || "unknown").toLowerCase();
+      if (["started", "running", "online"].indexOf(normalized) !== -1) return "is-status is-online";
+      if (["stopped", "offline"].indexOf(normalized) !== -1) return "is-status is-offline";
+      if (["restarting", "restart"].indexOf(normalized) !== -1) return "is-status is-restarting";
+      return "is-status";
+    }
     function draw(data) {
       nitradoResources.innerHTML = "";
       var items = [
-        [I18N.t("phase2.status"), data.status || "—"],
+        [I18N.t("phase2.status"), statusLabel(data.status), statusClass(data.status)],
         [I18N.t("console.players"), (data.players || 0) + " / " + (data.players_max || 0)],
         [I18N.t("phase2.map"), data.map || "—"],
         [I18N.t("phase2.version"), data.version || "—"],
       ];
-      if (data.memory_mb != null) items.splice(2, 0, [I18N.t("phase2.memory"), data.memory_mb ? data.memory_mb + " MB" : "—"]);
-      (data.settings || []).slice(0, 12).forEach(function (setting) { items.push([setting.key, String(setting.value)]); });
       items.forEach(function (item) {
-        var box = document.createElement("div"); box.className = "resource-item";
+        var box = document.createElement("div"); box.className = "resource-item" + (item[2] ? " " + item[2] : "");
         var label = document.createElement("span"); label.textContent = item[0];
         var value = document.createElement("strong"); value.textContent = item[1];
         box.appendChild(label); box.appendChild(value); nitradoResources.appendChild(box);
       });
     }
-    if (cached) draw(cached); else nitradoResources.textContent = "Loading…";
+    if (cached) draw(cached); else nitradoResources.textContent = I18N.t("phase2.resourcesLoading");
     if (server.nitradoResourcesLoading || (server.nitradoResourcesFetchedAt && Date.now() - server.nitradoResourcesFetchedAt < 60000)) return;
     server.nitradoResourcesLoading = true;
     apiFetch("/api/servers/" + server.id + "/nitrado-status")
@@ -2439,7 +2451,7 @@
           if (activeServerTab === "overview") renderServerOverview(server);
         }
       })
-      .catch(function () { if (!cached && selectedServerId === server.id) nitradoResources.textContent = "Unavailable"; })
+      .catch(function () { if (!cached && selectedServerId === server.id) nitradoResources.textContent = I18N.t("phase2.resourcesUnavailable"); })
       .finally(function () { server.nitradoResourcesLoading = false; });
   }
 

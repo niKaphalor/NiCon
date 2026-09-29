@@ -236,7 +236,9 @@ window.NICON_I18N_STRINGS.de = {
     rules: "Regeln", macroPlaceholder: "Ein Befehl pro Zeile; @wait 2 pausiert", patternPlaceholder: "Wort oder Ausdruck",
     highlight: "Hervorheben", autoMute: "Automatisch stummschalten", autoKick: "Automatisch kicken", addRule: "Hinzufügen",
     nitradoResources: "Nitrado-Ressourcen", mute: "Stummschalten", whisper: "Flüstern", wide: "Breit", stack: "Gestapelt",
-    status: "Status", memory: "Speicher", map: "Karte", version: "Version", noRules: "Keine Wortfilter eingerichtet.",
+    status: "Status", map: "Welt", version: "Version", noRules: "Keine Wortfilter eingerichtet.",
+    statusStarted: "Gestartet", statusStopped: "Gestoppt", statusRestarting: "Wird neu gestartet", statusUnknown: "Unbekannt",
+    resourcesLoading: "Nitrado-Status wird geladen…", resourcesUnavailable: "Nitrado-Status ist nicht verfügbar.",
   },
   quickCommands: {
     groupAriaLabel: "Schnellbefehle",

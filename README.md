@@ -114,9 +114,8 @@ The command center includes:
   player cooldown;
 - balanced, console-wide, stacked, and compact power-user layouts stored in
   `localStorage` and selected from the server action menu;
-- Nitrado service status, players, map, version, and memory allocation only
-  for Minecraft/Hytale where Nitrado supplies it; CPU is deliberately not
-  shown because Nitrado does not expose a reliable value here;
+- compact Nitrado status strip with service status, players, world, and version;
+  CPU, memory, and server configuration values are deliberately not shown;
 - official per-game icons from Nitrado's games catalog;
 - official Steam header art in the supported-games overview plus a game
   backdrop for the selected server; and

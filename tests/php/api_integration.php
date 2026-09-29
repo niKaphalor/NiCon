@@ -205,9 +205,7 @@ try {
 
     [$status, $nitradoStatus] = request_json($base, 'GET', '/api/servers/' . $nitradoServer['id'] . '/nitrado-status', null, $aliceToken);
     assert_test($status === 200 && ($nitradoStatus['players'] ?? null) === 3, 'Nitrado status lookup failed');
-    assert_test(!array_key_exists('memory_mb', $nitradoStatus) && !array_key_exists('cpu', $nitradoStatus), 'GMod status must not expose memory or CPU');
-    assert_test(count($nitradoStatus['settings'] ?? []) === 2, 'safe Nitrado settings were not normalized');
-    assert_test(strpos(json_encode($nitradoStatus), 'must-not-leak') === false, 'Nitrado secrets leaked through settings');
+    assert_test(!array_key_exists('memory_mb', $nitradoStatus) && !array_key_exists('cpu', $nitradoStatus) && !array_key_exists('settings', $nitradoStatus), 'Nitrado status must expose only the compact status fields');
     [$status, $history] = request_json($base, 'GET', '/api/servers/' . $nitradoServer['id'] . '/health-history?range=24h', null, $aliceToken);
     assert_test($status === 200 && ($history['players_peak'] ?? null) === 3 && count($history['samples'] ?? []) >= 1, 'health history did not include Nitrado player sample');
     $counts = json_decode((string) file_get_contents($counterFile), true);
