@@ -169,7 +169,7 @@ try {
 
     [$status] = request_json($base, 'POST', '/api/servers', [
         'name' => 'Not allow-listed', 'host' => '127.0.0.1', 'port' => 25575,
-        'password' => 'secret', 'protocol' => 'source', 'game' => 'Minecraft',
+        'password' => 'secret', 'protocol' => 'source', 'game' => 'Definitely Not A Real Game',
     ], $aliceToken);
     assert_test($status === 400, 'games outside NiCon\'s supported-game list must be rejected');
 

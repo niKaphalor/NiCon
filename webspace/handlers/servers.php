@@ -9,7 +9,7 @@ function nicon_game_is_allowed(string $game): bool
         'Arma 2', 'Arma 3', 'Arma Reforger', 'ATLAS', 'BattleBit Remastered',
         'Beyond the Wire', 'Conan Exiles', 'Counter-Strike 2', 'Dark and Light',
         'DayZ', "Garry's Mod", 'Hell Let Loose', 'Hell Let Loose: Vietnam',
-        'Insurgency', 'MORDHAU', 'Palworld', 'Project Zomboid',
+        'Insurgency', 'Minecraft', 'MORDHAU', 'Palworld', 'Project Zomboid',
         'Rising Storm 2: Vietnam', 'Rust', 'Squad', 'Squad 44', 'Soulmask',
         'V Rising', 'WARDOGS',
     ], true);

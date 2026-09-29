@@ -194,6 +194,7 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   await expect(page.locator('#supported-games-list li[aria-label="DayZ"] .tag')).toHaveClass(/tag-tested/);
   await expect(page.locator('#supported-games-list li[aria-label="ARK: Survival Ascended"] .tag')).toHaveClass(/tag-tested/);
   await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] .tag')).toHaveClass(/tag-tested/);
+  await expect(page.locator('#supported-games-list li[aria-label="Palworld"] .tag')).toHaveClass(/tag-tested/);
   // Minecraft isn't on Steam — official key art hotlinked from Mojang's
   // own CDN instead (see games.js), not the Steam header path every other
   // game above uses, plus a wordmark overlay since that key art has no

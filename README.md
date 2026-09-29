@@ -2,7 +2,10 @@
 
 A browser-based command center for game servers. NiCon combines Source RCON,
 WebRCON, BattleBit WebRCON, BattlEye RCon, Palworld REST, and 7 Days to Die Telnet in one interface, imports
-allow-listed Nitrado services, monitors connectivity and player history, enriches player lists
+allow-listed Nitrado services, monitors connectivity and player history —
+including a passive, unauthenticated fallback (Source's own A2S query,
+Minecraft's separate Query protocol) for a server that doesn't have its
+RCON password saved yet — enriches player lists
 with optional Steam data, and provides moderation rules, macros, and
 Nitrado power controls.
 
@@ -114,11 +117,16 @@ The command center includes:
   player cooldown;
 - balanced, console-wide, stacked, and compact power-user layouts stored in
   `localStorage` and selected from the server action menu;
-- compact Nitrado status strip with service status, players, world, and version;
-  CPU, memory, and server configuration values are deliberately not shown;
+- compact Nitrado status strip with service status, players, world, and version
+  (CPU, memory, and server configuration values are deliberately not shown), plus
+  a public-status equivalent for any server — Nitrado-sourced or not — showing
+  whatever the relay's passive A2S/Minecraft-Query sampling has recorded even
+  before its RCON password is ever entered;
 - official per-game icons from Nitrado's games catalog;
 - official Steam header art in the supported-games overview plus a game
-  backdrop for the selected server; and
+  backdrop for the selected server (Minecraft isn't on Steam, so it gets
+  official key art and wordmark hotlinked from Mojang's and Wikipedia's own
+  CDNs instead — see `games.js`); and
 - optional public Steam profile, account-age, VAC, community-ban, and
   game-ban data for newly observed SteamID64 players. Steam enrichment is
   disabled unless the Cloud API has a Steam Web API key configured.
@@ -221,7 +229,17 @@ those files execute anything at the top level anyway, so there's nothing
 to disclose even without it).
 
 `config.local.php` is gitignored — it holds your database password and
-the encryption key, never commit it. `schema.sql` covers the same tables
+the encryption key, never commit it. Its `.htaccess` (alongside
+`schema.sql`'s own) also denies it direct web access at the server level,
+on top of that — a defense-in-depth pairing with `webspace/api/`'s
+document root being the only thing your host's vhost/DNS actually needs
+to expose. No `config.local.php` on disk at all (e.g. a container image
+built from this repo) falls back to reading
+`NICON_DB_DSN`/`NICON_DB_USER`/`NICON_DB_PASS`/`NICON_ENCRYPTION_KEY`/
+`NICON_ALLOWED_ORIGINS` environment variables instead — meant for local
+testing with PHP's built-in server (`php -S`, where env vars are simpler
+to set than a file), not a substitute for `config.local.php` on ordinary
+shared hosting. `schema.sql` covers the same tables
 `internal/store` creates automatically, plus a few PHP-only additions
 (`rate_limits`, `notifications`, `command_templates`, `moderation_rules`,
 `audit_log`, the short-lived shared `nitrado_cache`, and a
@@ -266,7 +284,17 @@ Once deployed, it serves the same JSON API the relay used to (except
   /account/nitrado-token`): login exchanges a
   username/password (bcrypt-hashed at rest) for a session token, which the
   frontend then sends as `Authorization: Bearer <token>` on every other
-  API request and as the WebSocket's first message to the relay. Tokens
+  API request and as the WebSocket's first message to the relay. A
+  nonexistent username still runs a bcrypt comparison against a fixed
+  dummy hash before failing, so a wrong-username response takes about the
+  same time as a wrong-password one — timing alone can't be used to probe
+  which usernames exist. `/login` is rate-limited two ways at once: 20 per
+  15-minute window per client IP (caps how many different accounts one IP
+  can try), and separately 10 per 15-minute window per IP+username pair
+  (caps repeated guesses against one specific account from that IP). Note
+  what this doesn't cover: a slow, distributed guess against one account
+  spread across many IPs isn't caught by either counter, since each IP
+  gets its own share of both limits. Tokens
   live 7 days server-side (a `sessions` row with an expiry) and are stored
   in the browser's `sessionStorage`, not `localStorage`, so they don't
   outlive the tab. Register is the same, minus an existing account — it
@@ -291,13 +319,19 @@ Once deployed, it serves the same JSON API the relay used to (except
   with a `Retry-After` header. The limiter only ever sees
   `$_SERVER['REMOTE_ADDR']`, never an `X-Forwarded-For` header, so it's
   not meaningful if you put this behind a reverse proxy without teaching
-  it to trust that header. Account deletion removes the user row;
+  it to trust that header. `PUT /account/password` and
+  `PUT /account/username` both require the account's *current* password
+  in the request body (not just a valid session) before making the
+  change, and share one rate limit (10 per 15-minute window per account).
+  Account deletion removes the user row;
   `sessions` and `servers` cascade-delete with it at the database level
   (`ON DELETE CASCADE`), so there's nothing left to clean up separately.
-- **Per-user server storage** (`GET/POST /servers`,
+- **Per-user server storage** (`GET/POST /servers`, `PUT /servers/{id}`,
   `PUT /servers/{id}/password`, `DELETE /servers/{id}`,
   `POST /servers/{id}/nitrado-power`, `GET
-  /servers/{id}/nitrado-status`, `POST /nitrado/sync`): every query
+  /servers/{id}/nitrado-status`, `POST /nitrado/sync`,
+  `GET /servers/{id}/health-history`, `POST /servers/{id}/player-sample`):
+  every query
   is scoped to the authenticated user's
   `user_id` in SQL — that's the actual access control, not a UI filter.
   Asking for another user's server by ID gets the same "not found"
@@ -306,6 +340,32 @@ Once deployed, it serves the same JSON API the relay used to (except
   AES-256-GCM before being written to the `servers` table and are never
   sent back to the browser once set (`has_password: true/false` only) —
   the frontend only ever supplies a new one to overwrite the old one.
+  `PUT /servers/{id}` edits name/host/port/protocol/game (not the
+  password — that's the dedicated endpoint above); both it and
+  `POST /servers` reject a `host` that is, or (via a DNS lookup) resolves
+  to, a well-known cloud provider's instance-metadata endpoint —
+  `169.254.169.254` (AWS/GCP/Azure/DigitalOcean/Oracle Cloud),
+  `169.254.170.2` (AWS ECS tasks), `fd00:ec2::254` (AWS IMDSv2 over IPv6),
+  `100.100.100.200` (Alibaba Cloud), or `metadata.google.internal` — an
+  SSRF guard against a manually-added "RCON server" leaking those
+  endpoints' unauthenticated cloud credentials back through the relay's
+  otherwise-legitimate host/port passthrough. This is a convenience
+  check, not the authoritative one (a hostname could re-resolve
+  differently by the time the relay itself connects later): the relay's
+  own `isBlockedMetadataHost` (`internal/relay/ws.go`) re-checks the same
+  list immediately before dialing. Deliberately not blocked: localhost
+  and private/LAN addresses, since a locally hosted game server is the
+  documented primary use case. The game itself must be one of NiCon's
+  explicitly allow-listed supported games (empty is allowed, for a plain
+  unparsed console). `GET /servers/{id}/health-history` (`range` one of
+  `24h`/`7d`/`30d`/`90d`) returns per-sample online/latency/player data
+  plus aggregate uptime%, sample completeness%, and average/peak players
+  — fed by the relay's own RCON health check, the Nitrado sampling cron,
+  the relay's passive A2S/Minecraft-Query loop (see [Relay](#relay)), and
+  `POST /servers/{id}/player-sample` itself, which lets the frontend
+  report a live client-observed count (rate-limited to once per 4 minutes
+  per server) — this is how the Nitrado status strip's polling also feeds
+  the same history graphs.
 - **Nitrado API proxy**, used by `/nitrado/sync` and the power endpoint:
   sync takes
   `{"token": "..."}`, calls the Nitrado API server-side over HTTPS (an
@@ -334,16 +394,26 @@ Once deployed, it serves the same JSON API the relay used to (except
 - **Command center data** (`GET/POST /command-templates`, `DELETE
   /command-templates/{id}`, `GET/POST /moderation-rules`, `DELETE
   /moderation-rules/{id}`): macros and word-filter actions are stored per
-  account. A macro remains a literal, bounded command sequence interpreted
-  by the frontend; it never executes on the PHP host.
-- **Steam enrichment** (`POST /steam/players`): accepts at most 100 valid
-  SteamID64 values, is rate-limited per account, and calls Valve's
+  account, capped at 50 of each. A macro remains a literal, bounded command
+  sequence interpreted
+  by the frontend; it never executes on the PHP host. A moderation rule's
+  match pattern is capped at 128 characters and its action is exactly one
+  of `highlight`/`mute`/`kick` — there's no enable/disable toggle, only
+  create and delete, so pausing one without losing its pattern isn't
+  possible today.
+- **Steam enrichment** (`POST /steam/players`): accepts at most 100
+  SteamID64 values matching Steam's fixed 64-bit ID format
+  (`7656119` + 10 digits), is rate-limited to 30 requests per 60 seconds
+  per account, and calls Valve's
   `GetPlayerSummaries` and `GetPlayerBans` endpoints with the server-side
-  `steam_api_key`. The key is never sent to the browser and returned Steam
+  `steam_api_key` (Valve's own response is capped to 2 MiB read). The key
+  is never sent to the browser and returned Steam
   data is not persisted by NiCon.
 - **Activity and notifications** (`GET /audit-log`, `GET /notifications`):
   users see their latest relevant security/account actions and active
-  instance notices. Notification dismissal is browser-local. Admin-only
+  instance notices, each typed as exactly one of `info`/`success`/
+  `warning`/`error` (styled accordingly in the UI). Notification
+  dismissal is browser-local. Admin-only
   endpoints create/delete notices and expose the latest instance-wide
   audit records, including the recorded request IP address, cross-server RCON
   commands, player targets, outcomes, and latency. Automatic player-list
@@ -358,7 +428,10 @@ Once deployed, it serves the same JSON API the relay used to (except
   session check — a regular account gets 403, not just a UI that happens
   to hide the button. Listing returns only username/created-at/role/
   server-count per account, never password or recovery-code hashes, or
-  any of that account's server details.
+  any of that account's server details. Deleting the instance's last
+  remaining admin account is refused — there's no HTTP way to grant admin
+  (see [Admin panel](#admin-panel) below), so losing the last one would
+  need command-line database access to recover from.
 - **Contact form** (`POST /contact`): no login required — this is the
   page people reach before they have an account, or don't want one. Takes
   `{name, email, message}` and sends it as an email to the operator's own
@@ -481,7 +554,11 @@ and assigns this protocol automatically.
 Only origins in `-allow-origin` (default: the GitHub Pages URL plus
 `localhost:8765`) can open that WebSocket at all — without that check, any
 other page open in your browser could otherwise talk to `localhost:8765`
-directly.
+directly. A single account can also only hold 20 concurrent `/ws/rcon`
+connections open at once (across every server and browser tab combined) —
+a cap against one compromised or runaway client exhausting the relay's
+own connection pool, not a limit anyone doing normal multi-console work
+should ever hit.
 
 The relay binary is also still how you manage accounts from the command
 line — see [User accounts](#user-accounts) and [Admin panel](#admin-panel)
@@ -663,24 +740,23 @@ language.
 
 ## Architecture
 
-- `internal/nitrado` — minimal Nitrado API client (list services, fetch a
-  service's live gameserver data including `rcon_port` and `has_rcon`) —
-  used by the Go relay's build only; `webspace/`'s PHP has its own small
-  Nitrado client (`handlers/nitrado_sync.php`) rather than sharing this
-  one across languages
 - `internal/store` — MariaDB persistence: core schema auto-migration,
-  per-user
-  CRUD for servers, and AES-256-GCM encryption of RCON passwords at rest.
-  Still used by the relay's CLI subcommands (`adduser`, `gen-recovery-code`,
-  `setadmin`, ...) and by `internal/relay/ws.go`'s two read-only lookups
-  (session, server); no longer backs any HTTP write path — those moved to
-  `webspace/`
+  per-user CRUD for servers, and AES-256-GCM encryption of RCON passwords
+  at rest. Still used by the relay's CLI subcommands (`adduser`,
+  `gen-recovery-code`, `setadmin`, `genkey`) and by `internal/relay`'s
+  read-only lookups (session, server) and its two periodic background
+  loops' writes (`UpdateServerHealth`, `UpdateServerPlayerSample`); no
+  longer backs any HTTP write path — those moved to `webspace/`
 - `internal/auth` — bcrypt password hashing, session-token issuance, and
   recovery-code generation on top of `internal/store`; same scope note as
   above
 - `internal/relay` — the WebSocket↔RCON/WebRCON/BattlEye/Palworld bridge
-  (`/ws/rcon`) plus `/healthz`; the process also runs periodic authenticated
-  server health checks; see [Cloud API vs. relay](#cloud-api-vs-relay)
+  (`/ws/rcon`) plus `/healthz`. `a2s.go` and `minecraft_query.go` are the
+  passive, unauthenticated status-query clients, dispatched per-server by
+  `publicinfo.go`; the process also runs two independent periodic
+  loops — authenticated RCON health checks, and public A2S/Minecraft-Query
+  sampling — see [Cloud API vs. relay](#cloud-api-vs-relay) and
+  [Relay](#relay)
 - `webspace/` — the PHP Cloud API: accounts, registration, password
   reset, per-user server CRUD, Nitrado sync/status/power controls, Steam
   enrichment, macros, moderation rules, activity, notifications, contact
@@ -720,7 +796,9 @@ go test ./...
 The relay tests cover its HTTP health/CORS surface, metadata-host blocking,
 and a full browser-WebSocket-to-mock-game-server round trip for Source RCON,
 Rust WebRCON, Palworld REST, and BattlEye. Protocol-specific tests additionally
-cover BattlEye framing/reassembly and Palworld request mapping.
+cover BattlEye framing/reassembly, Palworld request mapping, and (against a
+fake UDP server, the same pattern as BattlEye's) A2S_INFO's challenge round
+trip and Minecraft Query's handshake/basic-stat exchange.
 
 The PHP API integration suite requires a disposable MariaDB/MySQL database.
 It skips cleanly when `NICON_PHP_TEST_DB_DSN` is unset. Configure all three
@@ -776,6 +854,14 @@ The latest recorded CI and public-endpoint smoke-test results are documented in
   the frontend (rate-limited per IP, see
   [Cloud API (`webspace/`)](#cloud-api-webspace) above, but not restricted
   to people you've invited)
+- The relay's passive public-status sampling (A2S/Minecraft Query, see
+  [Relay](#relay)) only covers `protocol = "source"` servers today — Rust,
+  Arma/DayZ, and the other non-Source protocols don't get it yet, even
+  though several of those games likely answer A2S too. It's also
+  read-only by design: A2S_PLAYER carries no stable player ID, so it can
+  never back a kick/ban action the way a real RCON connection can
+- A moderation rule has no enable/disable toggle — only create and
+  delete (see [Cloud API (`webspace/`)](#cloud-api-webspace) above)
 
 ## Roadmap
 
@@ -785,8 +871,12 @@ current Phase 2 command-center scope (automatic player lists, contextual
 actions, classified logs, moderation rules, autocomplete/history, macros,
 Nitrado metadata/icons, optional Steam enrichment, manual game selection,
 and server-profile editing) are implemented. Automated API, relay-protocol,
-and browser end-to-end coverage is active in CI. Likely next steps are the
-remaining live game/protocol verification tracked in the
-[compatibility matrix](docs/compatibility.md), scheduled/triggered commands,
-durable player history/notes, shared ban lists or teams/roles, and
-Discord/webhook delivery.
+and browser end-to-end coverage is active in CI. Passive player/uptime
+history for a server that hasn't had its RCON password entered yet (or
+never needs one, being read-only) also now works, via the relay's own
+A2S/Minecraft-Query sampling — see [Relay](#relay). Active next steps are
+the remaining live game/protocol verification tracked in the
+[compatibility matrix](docs/compatibility.md) (Garry's Mod and the
+provisional-transport games in particular). Scheduled/triggered commands,
+shared ban lists or teams/roles, a visual moderation-rules builder, and
+Discord OAuth2/webhook delivery are on the roadmap but currently on hold.
