@@ -3650,7 +3650,7 @@
   // This badge deliberately means a real game-server verification, not
   // merely a passing parser fixture or protocol mock. The detailed and
   // more granular evidence lives in docs/compatibility.md.
-  var TESTED_GAMES = ["rust"];
+  var TESTED_GAMES = ["rust", "sevendaystodie"];
 
   function renderSupportedGamesList() {
     supportedGamesList.innerHTML = "";

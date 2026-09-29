@@ -190,6 +190,7 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   await login(page);
   await expect(page.locator("#supported-games-list .supported-game-header")).toHaveCount(28);
   await expect(page.locator('#supported-games-list li[aria-label="Rust"] img')).toHaveAttribute("src", /apps\/252490\/header\.jpg/);
+  await expect(page.locator('#supported-games-list li[aria-label="7 Days to Die"] .tag')).toHaveClass(/tag-tested/);
   const overviewLayout = await page.evaluate(() => {
     const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
     const panel = document.querySelector(".supported-games").getBoundingClientRect();

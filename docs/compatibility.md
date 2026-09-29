@@ -4,7 +4,7 @@ NiCon's selectable/importable game catalog is an explicitly maintained list.
 Games absent from that list are not offered as new integrations. Existing
 database records are left intact so an update never destroys user data.
 
-Last matrix review: **2026-09-28**.
+Last matrix review: **2026-09-29**.
 
 ## Protocol transports
 
@@ -21,7 +21,7 @@ Last matrix review: **2026-09-28**.
 
 | Game | NiCon transport | Player command/parser | Live verification |
 | --- | --- | --- | --- |
-| 7 Days to Die | Telnet | `lp`, conservative line parser | Pending |
+| 7 Days to Die | Telnet | `lp`, conservative line parser | ✅ Passed — user-confirmed live on 2026-09-29 |
 | 83 | Provisional Source transport | `status`, conservative line parser | Pending |
 | ARK: Survival Ascended | Source RCON | `ListPlayers`, ARK parser | Pending |
 | ARK: Survival Evolved | Source RCON | `ListPlayers`, ARK parser | Pending |
@@ -63,9 +63,9 @@ and maximum player counts at most once every four minutes. The API exposes
 average players, and peak players. Missing samples are reported through
 completeness and are not silently counted as downtime.
 
-Nitrado settings are read-only and allow-listed. Keys resembling passwords,
-tokens, API keys, FTP credentials, RCON credentials, or other secrets are
-discarded in PHP before the response reaches the browser.
+The Nitrado status endpoint deliberately exposes only service status, current
+and maximum players, world/map, and version. CPU, memory, and server
+configuration values are not returned to the browser.
 
 ## Verification rule
 
@@ -73,3 +73,8 @@ A game may be marked live only after recording the date, build, hosting
 provider, protocol, harmless read command, raw player-list output, and every
 tested moderation action. Mock-server coverage proves NiCon framing and UI
 flow, not compatibility with a particular game release.
+
+The 7 Days to Die result was confirmed directly by the operator on
+2026-09-29. The tested build, hosting provider, raw `lp` response, and tested
+moderation actions were not retained during that live check and should be
+added when the server is next available.

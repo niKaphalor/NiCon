@@ -726,6 +726,8 @@ service-worker registration, local fonts, and offline app-shell startup. CI
 runs Go and PHP against a MariaDB service container and runs the Chromium
 suite in a separate job. See [the compatibility matrix](docs/compatibility.md)
 for the distinction between mock coverage and real-server verification.
+The latest recorded CI and public-endpoint smoke-test results are documented in
+[`docs/production-verification.md`](docs/production-verification.md).
 
 ## Not implemented yet
 
