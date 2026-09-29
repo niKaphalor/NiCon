@@ -71,6 +71,12 @@ WebRCON and BattlEye profiles can explicitly opt into A2S. Minecraft Query
 must be enabled server-side. See the
 [README's Relay section](https://github.com/niKaphalor/NiCon#relay) for details.
 
+ARK: Survival Ascended's A2S query port doesn't answer in practice — confirmed
+unreachable on every candidate port, including the one Nitrado's own API
+reports, from two independent networks (RCON itself is unaffected). `auto`
+mode defaults new ARK: Survival Ascended servers to `disabled` rather than
+repeating that dead end.
+
 The Nitrado status endpoint deliberately exposes only service status, current
 and maximum players, world/map, and version. CPU, memory, and server
 configuration values are not returned to the browser.

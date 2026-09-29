@@ -864,6 +864,12 @@ The latest recorded CI and public-endpoint smoke-test results are documented in
   never back a kick/ban action the way a real RCON connection can
 - A moderation rule has no enable/disable toggle — only create and
   delete (see [Cloud API (`webspace/`)](#cloud-api-webspace) above)
+- ARK: Survival Ascended's A2S query port doesn't answer in practice —
+  confirmed unreachable on every candidate port, including the one
+  Nitrado's own API reports, from two independent networks (RCON itself
+  is unaffected). `auto` mode defaults new ARK: Survival Ascended servers
+  to `disabled` rather than repeating that dead end; the older ARK:
+  Survival Evolved isn't affected
 
 ## Roadmap
 

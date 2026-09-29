@@ -19,6 +19,9 @@ func TestEffectivePublicQueryProtocol(t *testing.T) {
 		{"legacy Minecraft auto", store.Server{Protocol: "source", Game: "Minecraft", QueryProtocol: "auto"}, "minecraft"},
 		{"non-Source auto does not guess", store.Server{Protocol: "battleye", QueryProtocol: "auto"}, "disabled"},
 		{"empty database value behaves as auto", store.Server{Protocol: "source"}, "a2s"},
+		{"ARK: Survival Ascended auto defaults to disabled", store.Server{Protocol: "source", Game: "ARK: Survival Ascended", QueryProtocol: "auto"}, "disabled"},
+		{"ARK: Survival Ascended can still opt in explicitly", store.Server{Protocol: "source", Game: "ARK: Survival Ascended", QueryProtocol: "a2s"}, "a2s"},
+		{"ARK: Survival Evolved auto is unaffected", store.Server{Protocol: "source", Game: "ARK: Survival Evolved", QueryProtocol: "auto"}, "a2s"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

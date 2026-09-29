@@ -268,6 +268,12 @@ function nicon_supported_game(string $label): ?array
 function nicon_nitrado_query_protocol(array $game): string
 {
     if ($game['name'] === 'Minecraft') return 'minecraft';
+    // ARK: Survival Ascended (unlike the older Evolved) does not reliably
+    // expose a working Steam/A2S query port in practice — confirmed
+    // unreachable on every candidate port, including the one Nitrado's own
+    // API reports, both from the relay's network and an independent one.
+    // Default new syncs to disabled rather than repeating that dead end.
+    if ($game['name'] === 'ARK: Survival Ascended') return 'disabled';
     if ($game['protocol'] === 'source' || in_array($game['name'], ['Rust', 'Arma 2', 'Arma 3', 'Arma Reforger', 'DayZ'], true)) {
         return 'a2s';
     }

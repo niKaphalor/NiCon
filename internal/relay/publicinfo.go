@@ -56,6 +56,15 @@ func EffectivePublicQueryProtocol(srv store.Server) string {
 		if srv.Game == "Minecraft" {
 			return "minecraft"
 		}
+		// ARK: Survival Ascended does not reliably expose a working
+		// Steam/A2S query port in practice, unlike the older Evolved —
+		// confirmed unreachable on every candidate port, including the one
+		// Nitrado's own API reports, from two independent networks. Auto
+		// mode shouldn't repeat that dead end for every server of this
+		// specific game.
+		if srv.Game == "ARK: Survival Ascended" {
+			return "disabled"
+		}
 		if srv.Protocol == "source" {
 			return "a2s"
 		}
