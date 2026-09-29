@@ -84,7 +84,7 @@ html, body { min-height: 100%; }
 
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 280px;
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-body);
@@ -169,7 +169,8 @@ textarea { min-height: 120px; resize: vertical; }
 .topbar { position: relative; z-index: 10; display: flex; align-items: center; min-height: 64px; gap: var(--space-6); padding: 0 28px; border-bottom: 1px solid var(--color-border); background: rgba(16, 20, 24, 0.94); }
 .wordmark { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text); font-size: 1.08rem; font-weight: 750; letter-spacing: -0.02em; cursor: pointer; }
 .wordmark img { display: block; height: 28px; width: auto; }
-.topbar-nav { display: flex; align-items: stretch; align-self: stretch; gap: 22px; }
+.topbar-nav { display: flex; min-width: 0; flex: 1; align-items: stretch; align-self: stretch; gap: 22px; overflow-x: auto; scrollbar-width: none; }
+.topbar-nav::-webkit-scrollbar { display: none; }
 .navlink { position: relative; border: 0; background: none; color: var(--color-muted); font-size: 0.86rem; font-weight: 600; cursor: pointer; }
 .navlink:hover, .navlink[aria-current="page"] { color: var(--color-text); }
 .navlink[aria-current="page"]::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 2px; background: var(--color-accent); }
@@ -407,10 +408,22 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 
 /* Settings and administration */
 .settings-page { flex: 1; overflow-y: auto; }
-.settings-inner { display: flex; width: min(1080px, calc(100% - 24px)); flex-direction: column; gap: 22px; margin: 0 auto; padding: 34px 0 80px; }
-.settings-inner h1, .admin-page h1, .health-page h1 { font-size: 1.6rem; }
+.settings-inner { display: flex; width: min(1120px, calc(100% - 40px)); flex-direction: column; gap: 22px; margin: 0 auto; padding: 42px 0 96px; }
+.page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 22px; border-bottom: 1px solid var(--color-border); }
+.page-header h1 { margin-top: 5px; font-size: clamp(1.7rem, 3vw, 2.25rem); }
+.page-header .hint { max-width: 72ch; margin-top: 9px; }
+.page-eyebrow { display: block; color: var(--color-accent-strong); font-family: var(--font-mono); font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.page-header-with-control .health-range { flex-shrink: 0; margin: 0; }
+.section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
+.section-heading h2 { margin-top: 4px; font-size: 1.15rem; }
+.section-heading .hint { max-width: 66ch; text-align: right; }
+.page-section { padding: 20px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: rgba(23, 29, 35, .72); box-shadow: var(--shadow-sm); }
+.table-shell { width: 100%; overflow-x: auto; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.table-shell table { border: 0; border-radius: 0; }
+.settings-inner h1, .admin-page h1, .health-page h1 { font-size: clamp(1.7rem, 3vw, 2.25rem); }
 .settings-columns { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 18px; }
-.settings-col { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
+.settings-col { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.settings-col #account-card { grid-column: 1 / -1; }
 .settings-inner .card .form-row { margin-top: 6px; }
 .settings-inner .card .stacked-form { margin-top: 10px; }
 .settings-inner .card .login-error { margin-top: 2px; }
@@ -418,10 +431,10 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .settings-inner .card .row + .form-row { margin-top: 8px; }
 .card-kicker-danger { color: var(--color-error); }
 .card-section-danger { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding-top: 16px; border-top: 1px solid var(--color-border); }
-.admin-page, .health-page { width: min(1060px, calc(100% - 24px)); margin: 0 auto; padding: 34px 0 80px; }
+.admin-page, .health-page { display: flex; width: min(1180px, calc(100% - 40px)); flex-direction: column; gap: 20px; margin: 0 auto; padding: 42px 0 96px; }
 .admin-page .view-header, .health-page .view-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .view-subhead { max-width: 75ch; margin: 0 0 18px; }
-.admin-section-header { margin-top: 40px; }
+.admin-section-header { margin-top: 20px; }
 .admin-users-table, .health-table { width: 100%; border-collapse: collapse; border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; background: var(--color-surface); font-size: 0.84rem; }
 .admin-users-table th, .admin-users-table td, .health-table th, .health-table td { padding: 12px 14px; border-bottom: 1px solid var(--color-border); text-align: left; }
 .admin-users-table th, .health-table th { color: var(--color-muted); font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; }
@@ -444,6 +457,7 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .health-summary { display: block; white-space: nowrap; font-weight: 600; }
 .health-completeness { display: block; color: var(--color-muted); font-size: .7rem; white-space: nowrap; }
 .admin-notifications-list { display: flex; flex-direction: column; gap: 8px; }
+.page-section > .form-row + .admin-notifications-list { margin-top: 14px; }
 .admin-notification-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--color-border); border-left: 3px solid var(--color-accent); border-radius: var(--radius-md); background: var(--color-surface); }
 .admin-notification-row.type-success { border-left-color: var(--color-success); }
 .admin-notification-row.type-warning { border-left-color: var(--color-warn); }
@@ -504,17 +518,35 @@ dialog::backdrop { background: rgba(7, 10, 12, 0.76); backdrop-filter: blur(3px)
 .site-footer { position: fixed; right: 0; bottom: 0; left: 0; z-index: 30; display: flex; justify-content: center; gap: 9px; padding: 9px 20px; border-top: 1px solid var(--color-border); background: rgba(16, 20, 24, 0.96); color: var(--color-muted-2); font-size: 0.72rem; }
 .site-footer a { color: inherit; }
 .site-footer a:hover { color: var(--color-text); }
-.legal-page { max-width: 720px; margin: 0 auto; padding: 32px 20px 90px; line-height: 1.65; }
-.legal-page h1 { margin-bottom: 8px; font-size: 1.7rem; }
-.legal-page h2 { margin: 32px 0 8px; font-size: 1.1rem; }
-.legal-page p, .legal-page ul { margin: 0 0 14px; }
-.legal-page ul { padding-left: 22px; }
-.legal-page li { margin-bottom: 6px; }
-.legal-page .hint { margin-bottom: 24px; }
-.legal-page .back-link { display: inline-block; margin-bottom: 24px; }
-.lang-switch { display: flex; gap: 8px; margin-bottom: 24px; color: var(--color-muted); font-family: var(--font-mono); font-size: 0.78rem; }
+.site-footer a[aria-current="page"] { color: var(--color-text-soft); }
+.legal-shell { overflow-x: hidden; background: radial-gradient(circle at 50% -20%, rgba(79, 195, 177, .09), transparent 38%), var(--color-bg); }
+.legal-shell .site-footer { position: static; margin-top: auto; }
+.legal-shell .wordmark { text-decoration: none; }
+.public-topbar { position: sticky; top: 0; }
+.public-nav { display: flex; align-self: stretch; align-items: stretch; gap: 22px; margin-left: 18px; }
+.public-nav a { position: relative; display: flex; align-items: center; color: var(--color-muted); font-size: .84rem; font-weight: 600; text-decoration: none; }
+.public-nav a:hover, .public-nav a[aria-current="page"] { color: var(--color-text); }
+.public-nav a[aria-current="page"]::after { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; background: var(--color-accent); content: ""; }
+.public-back { min-height: 34px; margin-left: auto; text-decoration: none; }
+.legal-page { display: block; width: min(920px, calc(100% - 40px)); min-height: calc(100vh - 130px); margin: 0 auto; padding: 34px 0 64px; line-height: 1.72; }
+.legal-page-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.legal-card { min-width: 0; max-width: 100%; padding: clamp(24px, 5vw, 54px); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: rgba(23, 29, 35, .88); box-shadow: var(--shadow-md); }
+.legal-card::before { display: block; width: 44px; height: 3px; margin-bottom: 24px; border-radius: 99px; background: var(--color-accent); content: ""; }
+.legal-page h1 { margin: 6px 0 12px; overflow-wrap: anywhere; font-size: clamp(1.9rem, 4vw, 2.65rem); }
+.legal-page h2 { margin: 38px 0 10px; padding-top: 4px; color: var(--color-text); font-size: 1.12rem; }
+.legal-page p, .legal-page ul { margin: 0 0 16px; color: var(--color-text-soft); }
+.legal-page ul { padding: 16px 18px 16px 40px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-sunken); }
+.legal-page li { margin-bottom: 9px; }
+.legal-page li:last-child { margin-bottom: 0; }
+.legal-page .hint { margin-bottom: 28px; color: var(--color-muted); font-size: .93rem; }
+.legal-page .back-link { display: inline-flex; margin: 0; }
+.lang-switch { display: flex; gap: 8px; margin: 0; color: var(--color-muted); font-family: var(--font-mono); font-size: 0.78rem; }
 .lang-switch a { color: inherit; }
 .lang-switch a[aria-current="page"] { color: var(--color-text); font-weight: 700; }
+.contact-card { width: min(680px, 100%); margin: 0 auto; }
+.contact-card .stacked-form { gap: 12px; margin-top: 28px; }
+.contact-card textarea { min-height: 180px; }
+.contact-card .btn-primary { align-self: flex-start; min-width: 150px; }
 
 /* Responsive behavior */
 @media (max-width: 1120px) {
@@ -536,11 +568,15 @@ dialog::backdrop { background: rgba(7, 10, 12, 0.76); backdrop-filter: blur(3px)
   .work, .work.layout-wide, .work.layout-stacked, .work.layout-compact { grid-template-columns: 1fr; }
   .resources-card { grid-column: 1; }
   .players-card { min-width: 0; }
+  .section-heading { align-items: flex-start; flex-direction: column; gap: 7px; }
+  .section-heading .hint { text-align: left; }
+  .public-nav { gap: 16px; margin-left: auto; }
 }
 @media (max-width: 640px) {
   .topbar { min-height: 58px; padding: 0 14px; }
   .topbar-nav { gap: 13px; }
   .topbar-right { max-width: 56%; }
+  .topbar:not(.public-topbar) > .wordmark { width: 30px; flex: 0 0 30px; overflow: hidden; font-size: 0; }
   .topbar-right #username-label, .lang-current #lang-current-name, .relay-pill span:not(.dot) { display: none; }
   .relay-pill { min-width: 30px; justify-content: center; padding: 4px 8px; }
   .relay-banner { padding: 10px 14px; }
@@ -574,10 +610,29 @@ dialog::backdrop { background: rgba(7, 10, 12, 0.76); backdrop-filter: blur(3px)
   .overview-signals dd + dt { margin-top: 8px; }
   .console-log { height: 44vh; min-height: 260px; font-size: 0.72rem; }
   .settings-inner, .admin-page, .health-page { width: calc(100% - 28px); padding-top: 24px; }
-  .settings-columns { grid-template-columns: 1fr; }
+  .settings-columns, .settings-col { grid-template-columns: 1fr; }
+  .settings-col #account-card { grid-column: 1; }
+  .page-header, .page-header-with-control { align-items: stretch; flex-direction: column; gap: 15px; }
+  .page-header-with-control .health-range { width: 100%; }
+  .page-header-with-control .health-range select { flex: 1; }
+  .page-section { padding: 14px; }
   .form-row { flex-wrap: wrap; }
   .form-row > * { min-width: 100%; }
   .site-footer { padding-inline: 12px; }
   .btn-primary, .btn-secondary, .icon-btn, .segment, .quick-cmd-btn, .toast-close, input[type="text"], input[type="password"], input[type="number"], input[type="email"], select { min-height: 44px; }
   .admin-users-table, .health-table { display: block; overflow-x: auto; }
+  .public-topbar { gap: 12px; }
+  .public-topbar .wordmark { flex-shrink: 0; }
+  .public-nav { min-width: 0; gap: 11px; overflow-x: auto; font-size: .78rem; }
+  .public-nav a { font-size: .76rem; white-space: nowrap; }
+  .public-back { display: none; }
+  .legal-page { width: calc(100% - 28px); padding-top: 20px; }
+  .legal-card { padding: 24px 20px; }
+  .legal-page-toolbar { margin-bottom: 12px; }
+}
+@media (max-width: 360px) {
+  .public-topbar { gap: 8px; padding-inline: 10px; }
+  .public-topbar .wordmark { width: 30px; overflow: hidden; font-size: 0; }
+  .public-nav { gap: 9px; }
+  .public-nav a { font-size: .72rem; }
 }

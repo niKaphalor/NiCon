@@ -124,6 +124,11 @@ The command center includes:
   game-ban data for newly observed SteamID64 players. Steam enrichment is
   disabled unless the Cloud API has a Steam Web API key configured.
 
+The same responsive visual system is used for authentication, server workspaces,
+settings, administration, fleet health, dialogs, and every English/German
+contact, imprint, and privacy page. The repository keeps the canonical `docs/`
+frontend and its GitHub Pages copy in the repository root byte-identical.
+
 Each server's **Overview** tab combines the relay's automatic five-minute
 RCON checks with retained 24-hour, 7-day, 30-day, and 90-day uptime/player
 graphs, sample completeness, connection time, relay overhead, and recent

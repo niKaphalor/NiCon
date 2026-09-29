@@ -12,19 +12,24 @@
 <link rel="manifest" href="site.webmanifest">
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="legal-shell">
 
-<header class="topbar">
-  <span class="wordmark"><picture><source srcset="nicon-favicon.webp" type="image/webp"><img src="nicon-favicon.png" alt="" width="22" height="22"></picture>NiCon</span>
+<header class="topbar public-topbar">
+  <a href="index.html" class="wordmark"><picture><source srcset="nicon-favicon.webp" type="image/webp"><img src="nicon-favicon.png" alt="" width="22" height="22"></picture>NiCon</a>
+  <nav class="public-nav" aria-label="Rechtliches und Support">
+    <a href="imprint.de.html">Impressum</a><a href="privacy.de.html">Datenschutz</a><a href="contact.de.html" aria-current="page">Kontakt</a>
+  </nav>
+  <a href="index.html" class="btn-secondary public-back">NiCon öffnen</a>
 </header>
 
 <main class="legal-page">
-  <a href="index.html" class="back-link link-button">← Zurück zu NiCon</a>
-  <nav class="lang-switch" aria-label="Sprache">
+  <div class="legal-page-toolbar"><a href="index.html" class="back-link link-button">← Zurück zu NiCon</a><nav class="lang-switch" aria-label="Sprache">
     <a href="contact.html" lang="en" hreflang="en">EN</a>
     <span aria-hidden="true">·</span>
     <a href="contact.de.html" lang="de" hreflang="de" aria-current="page">DE</a>
-  </nav>
+  </nav></div>
+  <article class="legal-card contact-card">
+  <span class="page-eyebrow">Support</span>
   <h1>Kontakt</h1>
   <p class="hint">
     Fragen, Fehlermeldungen oder alles andere rund um diese NiCon-Instanz —
@@ -39,6 +44,7 @@
     <button type="submit" class="btn-primary">Nachricht senden</button>
   </form>
   <p id="contact-status" class="hint form-status" hidden></p>
+  </article>
 </main>
 
 <footer class="site-footer">
@@ -46,7 +52,7 @@
   <span aria-hidden="true">·</span>
   <a href="privacy.de.html">Datenschutz</a>
   <span aria-hidden="true">·</span>
-  <a href="contact.de.html">Kontakt</a>
+  <a href="contact.de.html" aria-current="page">Kontakt</a>
 </footer>
 
 <script src="contact.js"></script>

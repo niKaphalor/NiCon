@@ -287,7 +287,13 @@
   <section id="view-settings" class="view" hidden>
     <div class="settings-page">
       <div class="settings-inner">
-        <h1 data-i18n="settings.title">Settings</h1>
+        <div class="page-header">
+          <div>
+            <span class="page-eyebrow" data-i18n="settings.eyebrow">Workspace</span>
+            <h1 data-i18n="settings.title">Settings</h1>
+            <p class="hint" data-i18n="settings.pageHint">Manage your account, security, privacy, and recent activity.</p>
+          </div>
+        </div>
 
         <div class="settings-col">
           <div id="account-card" class="card" hidden>
@@ -333,11 +339,16 @@
 
   <section id="view-admin" class="view" hidden>
     <div class="admin-page">
-      <div class="view-header">
-        <h1 data-i18n="admin.title">Admin</h1>
+      <div class="page-header">
+        <div>
+          <span class="page-eyebrow" data-i18n="admin.eyebrow">Operations</span>
+          <h1 data-i18n="admin.title">Admin</h1>
+          <p class="hint view-subhead" data-i18n="admin.subhead">Every account on this NiCon instance. Regenerating a code or deleting an account takes effect immediately — hand any regenerated code to that person yourself, there's no email to send it to.</p>
+        </div>
       </div>
-      <p class="hint view-subhead" data-i18n="admin.subhead">Every account on this NiCon instance. Regenerating a code or deleting an account takes effect immediately — hand any regenerated code to that person yourself, there's no email to send it to.</p>
-      <table class="admin-users-table">
+      <section class="page-section">
+        <div class="section-heading"><div><span class="page-eyebrow" data-i18n="admin.accountsEyebrow">Access</span><h2 data-i18n="admin.accountsTitle">Accounts</h2></div></div>
+        <div class="table-shell"><table class="admin-users-table">
         <thead>
           <tr>
             <th data-i18n="common.username">Username</th>
@@ -348,47 +359,49 @@
           </tr>
         </thead>
         <tbody id="admin-users-body"></tbody>
-      </table>
+        </table></div>
+      </section>
 
-      <div class="view-header admin-section-header">
-        <h1 data-i18n="admin.notificationsTitle">Notifications</h1>
-      </div>
-      <p class="hint view-subhead" data-i18n="admin.notificationsHint">Sent to every signed-in user, shown until they dismiss it or you delete it here.</p>
-      <form id="notification-form" class="form-row">
-        <select id="notification-type" aria-label="Notification type" data-i18n-aria-label="admin.notificationTypeLabel">
-          <option value="info" data-i18n="admin.notificationTypeInfo">Info</option>
-          <option value="success" data-i18n="admin.notificationTypeSuccess">Success</option>
-          <option value="warning" data-i18n="admin.notificationTypeWarning">Warning</option>
-          <option value="error" data-i18n="admin.notificationTypeError">Error</option>
-        </select>
-        <input id="notification-message" type="text" placeholder="Message" required aria-label="Message" data-i18n-placeholder="admin.notificationMessagePlaceholder" data-i18n-aria-label="admin.notificationMessagePlaceholder">
-        <button type="submit" class="btn-primary" data-i18n="admin.notificationSend">Send</button>
-      </form>
-      <div id="admin-notifications-list" class="admin-notifications-list"></div>
+      <section class="page-section">
+        <div class="section-heading"><div><span class="page-eyebrow" data-i18n="admin.communicationEyebrow">Communication</span><h2 data-i18n="admin.notificationsTitle">Notifications</h2></div><p class="hint" data-i18n="admin.notificationsHint">Sent to every signed-in user, shown until they dismiss it or you delete it here.</p></div>
+        <form id="notification-form" class="form-row">
+          <select id="notification-type" aria-label="Notification type" data-i18n-aria-label="admin.notificationTypeLabel">
+            <option value="info" data-i18n="admin.notificationTypeInfo">Info</option>
+            <option value="success" data-i18n="admin.notificationTypeSuccess">Success</option>
+            <option value="warning" data-i18n="admin.notificationTypeWarning">Warning</option>
+            <option value="error" data-i18n="admin.notificationTypeError">Error</option>
+          </select>
+          <input id="notification-message" type="text" placeholder="Message" required aria-label="Message" data-i18n-placeholder="admin.notificationMessagePlaceholder" data-i18n-aria-label="admin.notificationMessagePlaceholder">
+          <button type="submit" class="btn-primary" data-i18n="admin.notificationSend">Send</button>
+        </form>
+        <div id="admin-notifications-list" class="admin-notifications-list"></div>
+      </section>
 
-      <div class="view-header admin-section-header">
-        <h1 data-i18n="admin.auditLogTitle">Audit log</h1>
-      </div>
-      <p class="hint view-subhead" data-i18n="admin.auditLogHint">Admin actions and security-relevant account activity across every account on this instance.</p>
-      <div id="admin-audit-log-list" class="admin-notifications-list"></div>
+      <section class="page-section">
+        <div class="section-heading"><div><span class="page-eyebrow" data-i18n="admin.auditEyebrow">Traceability</span><h2 data-i18n="admin.auditLogTitle">Audit log</h2></div><p class="hint" data-i18n="admin.auditLogHint">Admin actions and security-relevant account activity across every account on this instance.</p></div>
+        <div id="admin-audit-log-list" class="admin-notifications-list"></div>
+      </section>
     </div>
   </section>
 
   <section id="view-health" class="view" hidden>
     <div class="health-page">
-      <div class="view-header">
-        <h1 data-i18n="health.title">Server health</h1>
+      <div class="page-header page-header-with-control">
+        <div>
+          <span class="page-eyebrow" data-i18n="health.eyebrow">Fleet monitoring</span>
+          <h1 data-i18n="health.title">Server health</h1>
+          <p class="hint view-subhead" data-i18n="health.subhead">Connection status per server: browser round trip, relay overhead, game/protocol time, and recent errors, plus a real automatic RCON connect every five minutes.</p>
+        </div>
+        <label class="health-range"><span data-i18n="health.range">Range</span>
+          <select id="health-range-select">
+            <option value="24h" data-i18n="health.range24h">24 hours</option>
+            <option value="7d" data-i18n="health.range7d">7 days</option>
+            <option value="30d" data-i18n="health.range30d">30 days</option>
+            <option value="90d" data-i18n="health.range90d">90 days</option>
+          </select>
+        </label>
       </div>
-      <p class="hint view-subhead" data-i18n="health.subhead">Connection status per server: browser round trip, relay overhead, game/protocol time, and recent errors, plus a real automatic RCON connect every five minutes.</p>
-      <label class="health-range"><span data-i18n="health.range">Range</span>
-        <select id="health-range-select">
-          <option value="24h" data-i18n="health.range24h">24 hours</option>
-          <option value="7d" data-i18n="health.range7d">7 days</option>
-          <option value="30d" data-i18n="health.range30d">30 days</option>
-          <option value="90d" data-i18n="health.range90d">90 days</option>
-        </select>
-      </label>
-      <table class="health-table">
+      <div class="table-shell"><table class="health-table">
         <thead>
           <tr>
             <th data-i18n="health.colServer">Server</th>
@@ -402,7 +415,7 @@
           </tr>
         </thead>
         <tbody id="health-body"></tbody>
-      </table>
+      </table></div>
     </div>
   </section>
 </main>

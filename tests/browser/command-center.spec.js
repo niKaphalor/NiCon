@@ -319,6 +319,47 @@ test("macros and moderation rules execute through the live console", async ({ pa
   await expect.poll(() => state.commandAudits).toContainEqual({ serverId: 1, command: "kickid 2", origin: "automatic_moderation", action: "kick", targetPlayer: "Alice" });
 });
 
+test("all public pages share the same responsive design shell", async ({ page }) => {
+  const pages = [
+    ["contact.html", "Contact"], ["contact.de.html", "Kontakt"],
+    ["imprint.html", "Imprint"], ["imprint.de.html", "Impressum"],
+    ["privacy.html", "Privacy"], ["privacy.de.html", "Datenschutz"],
+  ];
+  for (const [path, activeLabel] of pages) {
+    await page.goto(`/${path}`);
+    await expect(page.locator("body")).toHaveClass(/legal-shell/);
+    await expect(page.locator(".public-topbar .wordmark")).toBeVisible();
+    await expect(page.locator(".public-nav a[aria-current=page]")).toHaveText(activeLabel);
+    await expect(page.locator(".legal-card")).toBeVisible();
+    await expect(page.locator(".legal-page-toolbar .lang-switch")).toBeVisible();
+    await expect(page.locator(".site-footer a[aria-current=page]")).toHaveText(activeLabel);
+  }
+
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/privacy.de.html");
+  const layout = await page.evaluate(() => ({
+    bodyWidth: document.body.scrollWidth,
+    viewportWidth: window.innerWidth,
+    cardRight: document.querySelector(".legal-card").getBoundingClientRect().right,
+  }));
+  expect(layout.bodyWidth).toBeLessThanOrEqual(layout.viewportWidth);
+  expect(layout.cardRight).toBeLessThanOrEqual(layout.viewportWidth);
+});
+
+test("7 Days to Die player parser ignores the total summary", async ({ page }) => {
+  await page.goto("/index.html");
+  const empty = await page.evaluate(() => window.NICON_GAMES.sevendaystodie.parse("Total of 0 in the game\n"));
+  expect(empty).toMatchObject({ summary: "0 players online", players: [] });
+
+  const populated = await page.evaluate(() => window.NICON_GAMES.sevendaystodie.parse(
+    "0. id=171, Alice, pos=(1, 2, 3), remote=True\nTotal of 1 in the game\n"
+  ));
+  expect(populated).toMatchObject({
+    summary: "1 player online",
+    players: [{ cells: ["Alice"], id: "Alice", isAdmin: false }],
+  });
+});
+
 test("PWA is installable and its app shell works offline", async ({ page, context }) => {
   const googleFontRequests = [];
   page.on("request", (request) => {

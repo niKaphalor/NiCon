@@ -12,19 +12,24 @@
 <link rel="manifest" href="site.webmanifest">
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="legal-shell">
 
-<header class="topbar">
-  <span class="wordmark"><picture><source srcset="nicon-favicon.webp" type="image/webp"><img src="nicon-favicon.png" alt="" width="22" height="22"></picture>NiCon</span>
+<header class="topbar public-topbar">
+  <a href="index.html" class="wordmark"><picture><source srcset="nicon-favicon.webp" type="image/webp"><img src="nicon-favicon.png" alt="" width="22" height="22"></picture>NiCon</a>
+  <nav class="public-nav" aria-label="Legal and support">
+    <a href="imprint.html">Imprint</a><a href="privacy.html">Privacy</a><a href="contact.html" aria-current="page">Contact</a>
+  </nav>
+  <a href="index.html" class="btn-secondary public-back">Open NiCon</a>
 </header>
 
 <main class="legal-page">
-  <a href="index.html" class="back-link link-button">← Back to NiCon</a>
-  <nav class="lang-switch" aria-label="Language">
+  <div class="legal-page-toolbar"><a href="index.html" class="back-link link-button">← Back to NiCon</a><nav class="lang-switch" aria-label="Language">
     <a href="contact.html" lang="en" hreflang="en" aria-current="page">EN</a>
     <span aria-hidden="true">·</span>
     <a href="contact.de.html" lang="de" hreflang="de">DE</a>
-  </nav>
+  </nav></div>
+  <article class="legal-card contact-card">
+  <span class="page-eyebrow">Support</span>
   <h1>Contact</h1>
   <p class="hint">
     Questions, bug reports, or anything else about this NiCon instance —
@@ -39,6 +44,7 @@
     <button type="submit" class="btn-primary">Send message</button>
   </form>
   <p id="contact-status" class="hint form-status" hidden></p>
+  </article>
 </main>
 
 <footer class="site-footer">
@@ -46,7 +52,7 @@
   <span aria-hidden="true">·</span>
   <a href="privacy.html">Privacy</a>
   <span aria-hidden="true">·</span>
-  <a href="contact.html">Contact</a>
+  <a href="contact.html" aria-current="page">Contact</a>
 </footer>
 
 <script src="contact.js"></script>

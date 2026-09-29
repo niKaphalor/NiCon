@@ -93,6 +93,11 @@ window.NICON_I18N_STRINGS.de = {
   admin: {
     navLabel: "Admin",
     title: "Admin",
+    eyebrow: "Betrieb",
+    accountsEyebrow: "Zugriff",
+    accountsTitle: "Konten",
+    communicationEyebrow: "Kommunikation",
+    auditEyebrow: "Nachvollziehbarkeit",
     backToServers: "← Server",
     subhead: "Alle Konten auf dieser NiCon-Instanz. Ein Code neu generieren oder ein Konto löschen wirkt sofort — einen neu generierten Code musst du der Person selbst geben, es gibt keine E-Mail zum Versenden.",
     colCreated: "Erstellt",
@@ -119,6 +124,7 @@ window.NICON_I18N_STRINGS.de = {
   health: {
     navLabel: "Zustand",
     title: "Serverzustand",
+    eyebrow: "Flottenüberwachung",
     subhead: "Verbindungsstatus je Server: wann er zuletzt online war, der Browser-Roundtrip der letzten Spielerlisten-Abfrage und der letzte Fehler — dazu alle 5 Minuten ein echter automatischer RCON-Connect. Relay-Overhead wird getrennt von Spiel-/Protokollzeit und Internetlatenz ausgewiesen.",
     colServer: "Server",
     colStatus: "Status",
@@ -311,6 +317,8 @@ window.NICON_I18N_STRINGS.de = {
   settings: {
     navLabel: "Einstellungen",
     title: "Einstellungen",
+    eyebrow: "Arbeitsbereich",
+    pageHint: "Konto, Sicherheit, Datenschutz und letzte Aktivitäten verwalten.",
     privacyKicker: "Datenschutz",
     privacyForDetails: ".",
     accountKicker: "Konto",

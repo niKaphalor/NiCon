@@ -92,6 +92,11 @@ window.NICON_I18N_STRINGS.en = {
   admin: {
     navLabel: "Admin",
     title: "Admin",
+    eyebrow: "Operations",
+    accountsEyebrow: "Access",
+    accountsTitle: "Accounts",
+    communicationEyebrow: "Communication",
+    auditEyebrow: "Traceability",
     backToServers: "← Servers",
     subhead: "Every account on this NiCon instance. Regenerating a code or deleting an account takes effect immediately — hand any regenerated code to that person yourself, there's no email to send it to.",
     colCreated: "Created",
@@ -118,6 +123,7 @@ window.NICON_I18N_STRINGS.en = {
   health: {
     navLabel: "Health",
     title: "Server health",
+    eyebrow: "Fleet monitoring",
     subhead: "Connection status per server: when it last came online, the browser round trip of its most recent player-list check, and its last error — plus an automated real RCON connect every 5 minutes. Relay overhead is reported separately from game/protocol time and Internet latency.",
     colServer: "Server",
     colStatus: "Status",
@@ -310,6 +316,8 @@ window.NICON_I18N_STRINGS.en = {
   settings: {
     navLabel: "Settings",
     title: "Settings",
+    eyebrow: "Workspace",
+    pageHint: "Manage your account, security, privacy, and recent activity.",
     privacyKicker: "Privacy",
     privacyForDetails: " for details.",
     accountKicker: "Account",

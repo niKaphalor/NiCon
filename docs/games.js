@@ -332,8 +332,34 @@ function parseLoosePlayerLines(text) {
   return players.length ? { columns: ["name"], summary: players.length + " players online", players: players } : null;
 }
 
+// 7 Days to Die's `lp` response ends with a summary such as
+// "Total of 0 in the game". It is not a player row. Actual rows start
+// with an ordinal and expose the entity id followed by the display name:
+//   0. id=171, PlayerName, pos=(...), ...
+// A dedicated parser also lets a valid empty result stay a successful
+// zero-player response instead of looking like an unknown output format.
+function parseSevenDaysPlayers(text) {
+  var totalMatch = text.match(/(?:^|\n)\s*Total of\s+(\d+)\s+in the game\.?\s*(?:\n|$)/i);
+  var players = [];
+  text.split("\n").forEach(function (rawLine) {
+    var line = rawLine.trim();
+    var match = line.match(/^\d+[.)]\s*id=(\d+)\s*,\s*([^,]+?)\s*,/i);
+    if (!match) return;
+    var name = match[2].replace(/^name=/i, "").trim();
+    if (!name) return;
+    players.push({ cells: [name], id: name, isAdmin: false });
+  });
+  if (!totalMatch && !players.length) return null;
+  var total = totalMatch ? Number(totalMatch[1]) : players.length;
+  return {
+    columns: ["name"],
+    summary: total + " player" + (total === 1 ? "" : "s") + " online",
+    players: players,
+  };
+}
+
 Object.assign(window.NICON_GAMES, {
-  sevendaystodie: { label: "7 Days to Die", protocol: "telnet", command: "lp", parse: parseLoosePlayerLines,
+  sevendaystodie: { label: "7 Days to Die", protocol: "telnet", command: "lp", parse: parseSevenDaysPlayers,
     kick: function (p) { return "kick " + p.id; }, ban: function (p) { return "ban add " + p.id + " 100 years Banned by admin"; },
     commands: ["lp", "say", "kick", "ban", "saveworld", "shutdown", "getgamepref"] },
   eightythree: { label: "83", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status"] },
