@@ -191,7 +191,13 @@ try {
         'game' => "Garry's Mod",
     ], $aliceToken);
     assert_test($status === 200 && ($updated['name'] ?? '') === 'Edited GMod' && ($updated['port'] ?? 0) === 28017, 'profile update failed');
-    assert_test(($updated['query_protocol'] ?? '') === 'disabled' && ($updated['query_port'] ?? 'not-null') === null, 'query configuration update failed');
+    // ?? treats an existing-but-null value the same as a missing key, so
+    // "$updated['query_port'] ?? 'not-null'" would evaluate to 'not-null'
+    // even when the field is correctly null — the exact success case this
+    // is meant to verify. array_key_exists + a direct read sidesteps that.
+    assert_test(($updated['query_protocol'] ?? '') === 'disabled'
+        && array_key_exists('query_port', $updated) && $updated['query_port'] === null,
+        'query configuration update failed');
 
     $pdo->prepare("INSERT INTO server_health_samples (server_id, online, player_current, player_max, source) VALUES (?, TRUE, 2, 20, 'relay'), (?, FALSE, 3, 20, 'a2s')")
         ->execute([$serverId, $serverId]);
