@@ -31,12 +31,37 @@ deployment:
 The WebSocket smoke test validates TLS and the protocol upgrade. It does not
 authenticate, connect to a game server, or execute an RCON command.
 
-## Hosting operations still requiring control-panel access
+## Hosting operations (Hetzner control panel)
 
-These checks cannot be inferred from public endpoints and must be confirmed
-inside the Hetzner hosting account:
+Confirmed by the operator on 2026-09-29:
 
-- apply the current `webspace/schema.sql` to the production MariaDB database;
-- deploy the current `webspace/` directory;
-- configure `/usr/bin/php …/webspace/cron/sample_nitrado.php` to run every
-  five minutes and confirm a successful execution in the cron log.
+- current `webspace/schema.sql` applied to the production MariaDB database;
+- current `webspace/` directory deployed;
+- `/usr/bin/php …/webspace/cron/sample_nitrado.php` scheduled every five
+  minutes via the Hetzner cron job manager;
+- `NICON_ENCRYPTION_KEY` (relay `.env`) and `encryption_key_base64`
+  (`webspace/config.local.php`) confirmed identical.
+
+## Authenticated smoke tests (real Nitrado server)
+
+Executed by the operator against a live Nitrado-backed server:
+
+| Check | Result |
+| --- | --- |
+| Nitrado sync (`POST /api/nitrado/sync`) | Passed — re-sync updates existing servers rather than duplicating |
+| Status bar with real Nitrado data | Passed — status/players/map/version reflect the live service |
+| Audit persistence | Passed — sync and power actions appear in account activity |
+| Nitrado power: stop | Passed |
+| Nitrado power: restart | Passed |
+| Nitrado power: start | **Failed** — `unexpected status 500 from /services/<id>/gameservers/games/start` |
+
+The failing `start` action calls the same endpoint and parameter Nitrado's
+own official PHP SDK uses for `startGame($game)`
+([source](https://github.com/nitrado/NitrAPI-PHP/blob/master/lib/Nitrapi/Services/Gameservers/Gameserver.php)),
+so this is not a request-shape bug on NiCon's side — the 500 originates in
+Nitrado's backend for this service/game combination. `nicon_nitrado_request()`
+previously discarded the response body on error; it now surfaces Nitrado's
+own error message (see `nicon_nitrado_error_detail()` in
+`webspace/handlers/nitrado_sync.php`) so the next failure is diagnosable
+instead of a bare status code. Re-test `start` once that fix is deployed and
+record Nitrado's actual error text here.

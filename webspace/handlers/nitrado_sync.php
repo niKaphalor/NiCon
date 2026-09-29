@@ -85,6 +85,23 @@ function nicon_nitrado_cache_invalidate(string $token): void
 // — it's only raw RCON TCP ports that get blocked (see the README's
 // Hetzner section). GET powers sync; POST powers the explicit server
 // start/stop/restart actions below.
+// Nitrado's error envelope usually carries a human-readable reason under
+// "message" (sometimes nested as message.message/message.error_id); surface
+// it instead of just the bare HTTP status, or the raw body as a fallback,
+// so a failure like the games/start 500 actually says why.
+function nicon_nitrado_error_detail(string $body): string
+{
+    $decoded = json_decode($body, true);
+    $message = is_array($decoded) ? ($decoded['message'] ?? null) : null;
+    if (is_array($message)) {
+        $message = $message['message'] ?? $message['error_id'] ?? json_encode($message);
+    }
+    if (!is_string($message) || $message === '') {
+        $message = substr(trim($body), 0, 200);
+    }
+    return $message !== '' ? " ($message)" : '';
+}
+
 function nicon_nitrado_request(string $token, string $method, string $path, array $params = []): array
 {
     $ch = curl_init(nicon_nitrado_base_url() . $path);
@@ -124,12 +141,12 @@ function nicon_nitrado_request(string $token, string $method, string $path, arra
         throw new RuntimeException('nitrado API token is invalid or expired');
     }
     if ($status < 200 || $status >= 300) {
-        throw new RuntimeException("unexpected status $status from $path");
+        throw new RuntimeException("unexpected status $status from $path" . nicon_nitrado_error_detail($body));
     }
 
     $env = json_decode($body, true);
     if (!is_array($env) || ($env['status'] ?? '') !== 'success') {
-        throw new RuntimeException("nitrado reported an error for $path");
+        throw new RuntimeException("nitrado reported an error for $path" . nicon_nitrado_error_detail($body));
     }
     $data = $env['data'] ?? [];
     return is_array($data) ? $data : [];
