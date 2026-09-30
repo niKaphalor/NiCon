@@ -135,6 +135,13 @@ func runServer() {
 	// against a cycle still running into the next tick (a lot of servers,
 	// or several slow/unresponsive ones) overlapping with itself.
 	const healthCheckInterval = 5 * time.Minute
+	// Shared by both this loop and the public-info one below: they're two
+	// independent tickers (each fires its own immediate first run at
+	// startup) probing possibly-overlapping servers, so without a shared
+	// pool the real worst-case concurrent outbound connections/DB writes is
+	// 2×healthCheckConcurrency, not healthCheckConcurrency as a comment
+	// here used to claim.
+	outboundProbeSem := make(chan struct{}, healthCheckConcurrency)
 	var healthCheckRunning int32
 	runHealthChecksOnce := func() {
 		if !atomic.CompareAndSwapInt32(&healthCheckRunning, 0, 1) {
@@ -142,7 +149,7 @@ func runServer() {
 			return
 		}
 		defer atomic.StoreInt32(&healthCheckRunning, 0)
-		runHealthChecks(context.Background(), logger, st)
+		runHealthChecks(context.Background(), logger, st, outboundProbeSem)
 	}
 	go runHealthChecksOnce() // don't wait a full interval after a fresh start for first results
 	healthTicker := time.NewTicker(healthCheckInterval)
@@ -187,7 +194,7 @@ func runServer() {
 			return
 		}
 		defer atomic.StoreInt32(&publicInfoCheckRunning, 0)
-		runPublicInfoChecks(context.Background(), logger, st)
+		runPublicInfoChecks(context.Background(), logger, st, outboundProbeSem)
 	}
 	go runPublicInfoChecksOnce()
 	publicInfoTicker := time.NewTicker(publicInfoCheckInterval)
@@ -216,22 +223,25 @@ func runServer() {
 	}
 }
 
-// healthCheckConcurrency bounds how many servers get checked at once —
-// each protocol's dial has its own timeout (5-45s depending on protocol),
-// so checking a large list fully sequentially could take a while; this
-// caps how many connections (and, transiently, open RCON sessions on
-// other people's game servers) exist at once instead of firing them all
-// simultaneously.
+// healthCheckConcurrency bounds how many outbound probes — across BOTH the
+// RCON health-check loop and the public-info loop combined, via the shared
+// semaphore each is called with (see runServer's outboundProbeSem) — run
+// at once. Each protocol's dial has its own timeout (3-45s depending on
+// protocol), so checking a large list fully sequentially could take a
+// while; this caps how many connections (and, transiently, open RCON
+// sessions on other people's game servers) exist at once instead of firing
+// them all simultaneously, and keeps the two independent loops from
+// doubling that cap between them just because they happen to tick close
+// together.
 const healthCheckConcurrency = 5
 
-func runHealthChecks(ctx context.Context, logger *log.Logger, st *store.Store) {
+func runHealthChecks(ctx context.Context, logger *log.Logger, st *store.Store, sem chan struct{}) {
 	servers, err := st.ListServersForHealthCheck(ctx)
 	if err != nil {
 		logger.Printf("health check: list servers: %v", err)
 		return
 	}
 
-	sem := make(chan struct{}, healthCheckConcurrency)
 	var wg sync.WaitGroup
 	for _, srv := range servers {
 		srv := srv
@@ -252,17 +262,17 @@ func runHealthChecks(ctx context.Context, logger *log.Logger, st *store.Store) {
 // runPublicInfoChecks probes every server with an enabled public query
 // configuration (see internal/relay's PublicInfoCheck),
 // regardless of whether it has a stored RCON password — see
-// ListServersForPublicInfoCheck. Shares runHealthChecks' concurrency
-// bound: it's the same kind of "one connection attempt per server" fan-out,
-// just against a different (and possibly overlapping) server set.
-func runPublicInfoChecks(ctx context.Context, logger *log.Logger, st *store.Store) {
+// ListServersForPublicInfoCheck. sem is the same channel runHealthChecks
+// was called with — see healthCheckConcurrency's comment for why sharing
+// it (not just the constant that used to size two separate channels)
+// matters.
+func runPublicInfoChecks(ctx context.Context, logger *log.Logger, st *store.Store, sem chan struct{}) {
 	servers, err := st.ListServersForPublicInfoCheck(ctx)
 	if err != nil {
 		logger.Printf("public info check: list servers: %v", err)
 		return
 	}
 
-	sem := make(chan struct{}, healthCheckConcurrency)
 	var wg sync.WaitGroup
 	for _, srv := range servers {
 		srv := srv

@@ -162,6 +162,17 @@ func Open(dsn string, encryptionKey []byte) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
+	// Unbounded by default (Go's own default MaxIdleConns is just 2), and
+	// the relay now runs two independent 5-minute background loops on top
+	// of ordinary foreground WS command traffic (see main.go's
+	// runHealthChecks/runPublicInfoChecks) — a burst of concurrent
+	// goroutines each doing one write routinely exceeds an idle pool of 2,
+	// so connections get closed and re-opened (fresh TCP+auth) every burst
+	// instead of reused. These bounds keep both worst-case open connections
+	// and idle-churn in check without needing to be exact.
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(5 * time.Minute)
 	if err := db.Ping(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("ping database: %w", err)
