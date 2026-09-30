@@ -9,6 +9,10 @@
 *
 !go.mod
 !go.sum
-!main.go
+!*.go
 !internal
 !internal/**
+
+# `!*.go` (not just !main.go): package main is more than one file — backoff.go
+# was left out of the build context once and the image failed to compile
+# ("undefined: newProbeBackoff"). CI now builds the image to catch that.
