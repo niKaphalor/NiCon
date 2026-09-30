@@ -265,18 +265,18 @@ function nicon_supported_game(string $label): ?array
     return null;
 }
 
+// nicon_nitrado_query_protocol always returns 'auto': the actual
+// a2s/minecraft/disabled decision (including the Minecraft and ARK:
+// Survival Ascended special cases) is made in exactly one place now,
+// internal/relay/publicinfo.go's EffectivePublicQueryProtocol — kept there,
+// not duplicated here, after an earlier version of this function hardcoded
+// its own copy of that same game list and the two silently drifted apart
+// (a Nitrado-synced Rust/Arma/DayZ server got A2S sampling this way while a
+// manually-added one of the same game, left on "auto", didn't). Writing
+// 'auto' unconditionally means every server gets the same answer
+// regardless of how it was added.
 function nicon_nitrado_query_protocol(array $game): string
 {
-    if ($game['name'] === 'Minecraft') return 'minecraft';
-    // ARK: Survival Ascended (unlike the older Evolved) does not reliably
-    // expose a working Steam/A2S query port in practice — confirmed
-    // unreachable on every candidate port, including the one Nitrado's own
-    // API reports, both from the relay's network and an independent one.
-    // Default new syncs to disabled rather than repeating that dead end.
-    if ($game['name'] === 'ARK: Survival Ascended') return 'disabled';
-    if ($game['protocol'] === 'source' || in_array($game['name'], ['Rust', 'Arma 2', 'Arma 3', 'Arma Reforger', 'DayZ'], true)) {
-        return 'a2s';
-    }
     return 'auto';
 }
 

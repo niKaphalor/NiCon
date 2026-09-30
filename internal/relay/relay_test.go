@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/niKaphalor/NiCon/internal/auth"
 	"github.com/niKaphalor/NiCon/internal/store"
@@ -45,6 +46,36 @@ func newTestRelay(t *testing.T) http.Handler {
 	logger := log.New(io.Discard, "", 0)
 	rel := New(logger, []string{testOrigin}, st, auth.New(st))
 	return rel.Routes()
+}
+
+// TestQueryTestAllowed needs no database — it exercises the in-memory
+// rate limiter directly (see relay.go), the same way the a2s/minecraft
+// query tests need no live game server.
+func TestQueryTestAllowed(t *testing.T) {
+	rel := &Relay{queryTestLog: make(map[int64][]time.Time)}
+	for i := 0; i < queryTestLimit; i++ {
+		if !rel.queryTestAllowed(1) {
+			t.Fatalf("request %d: expected allowed within the limit", i+1)
+		}
+	}
+	if rel.queryTestAllowed(1) {
+		t.Fatal("expected the request beyond queryTestLimit to be denied")
+	}
+	if !rel.queryTestAllowed(2) {
+		t.Fatal("a different user's own limit must be independent")
+	}
+}
+
+func TestQueryTestAllowedWindowExpires(t *testing.T) {
+	rel := &Relay{queryTestLog: make(map[int64][]time.Time)}
+	old := time.Now().Add(-queryTestWindow - time.Second)
+	rel.queryTestLog[1] = make([]time.Time, queryTestLimit)
+	for i := range rel.queryTestLog[1] {
+		rel.queryTestLog[1][i] = old
+	}
+	if !rel.queryTestAllowed(1) {
+		t.Fatal("expired entries outside the window should not count against the limit")
+	}
 }
 
 func TestHealthz(t *testing.T) {

@@ -8,8 +8,8 @@ import (
 
 // PublicInfoCheck performs one passive, unauthenticated status probe
 // against srv, selected independently from its authenticated RCON
-// transport. "auto" preserves the old Source/Minecraft behaviour, while
-// explicit modes also support A2S beside WebRCON, BattlEye, or Telnet.
+// transport — see EffectivePublicQueryProtocol for exactly how "auto"
+// resolves, including for WebRCON/BattlEye games that also answer A2S.
 // Used by main.go's periodic public-info loop, independent of
 // whether srv has a stored RCON password (see HealthCheck for the
 // password-gated, full-RCON-connect equivalent this sits alongside, not
@@ -45,9 +45,28 @@ func PublicInfoCheck(srv store.Server) (online bool, players, maxPlayers *int, e
 	return true, &p, &m, nil
 }
 
+// a2sAutoGames lists games whose usual RCON protocol isn't "source" but
+// that are known to also answer A2S_INFO on their game port. This is the
+// single source of truth for that list — webspace/handlers/nitrado_sync.php
+// used to hardcode the same list to assign query_protocol="a2s" directly at
+// sync time, bypassing "auto" entirely, so a Nitrado-synced Rust/Arma/DayZ
+// server got A2S sampling while a manually-added one of the same game,
+// left on "auto", silently didn't (same game, different outcome purely by
+// add path). Nitrado sync now always writes "auto" and leaves this list as
+// the only place the decision is made, for every server regardless of how
+// it was added.
+var a2sAutoGames = map[string]bool{
+	"Rust":          true,
+	"Arma 2":        true,
+	"Arma 3":        true,
+	"Arma Reforger": true,
+	"DayZ":          true,
+}
+
 // EffectivePublicQueryProtocol resolves the backwards-compatible auto mode.
-// It intentionally does not guess support for non-Source games: those must
-// opt into A2S explicitly or be populated from provider metadata.
+// It intentionally does not guess support for every non-Source game: one
+// not listed here or given "source" as its RCON protocol must opt into A2S
+// explicitly (or be disabled), rather than have it assumed.
 func EffectivePublicQueryProtocol(srv store.Server) string {
 	switch srv.QueryProtocol {
 	case "a2s", "minecraft", "disabled":
@@ -65,7 +84,7 @@ func EffectivePublicQueryProtocol(srv store.Server) string {
 		if srv.Game == "ARK: Survival Ascended" {
 			return "disabled"
 		}
-		if srv.Protocol == "source" {
+		if srv.Protocol == "source" || a2sAutoGames[srv.Game] {
 			return "a2s"
 		}
 	}

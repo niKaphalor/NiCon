@@ -1,6 +1,18 @@
 <?php
 declare(strict_types=1);
 
+// NICON_MAX_SERVERS_PER_ACCOUNT bounds manual server creation (not Nitrado
+// sync, which is inherently bounded by however many services the caller
+// actually rents from Nitrado). Without a cap, an account could create an
+// unbounded number of rows pointing at arbitrary third-party host:port
+// pairs, each of which the relay's public-info loop then probes with UDP
+// traffic forever, every five minutes — see internal/relay/publicinfo.go.
+// This doesn't eliminate that surface on its own (an on-demand "test
+// query" also exists, rate-limited separately by the relay itself), but it
+// bounds the standing, automatic part of it to one account's own share,
+// the same way NICON_MAX_COMMAND_TEMPLATES bounds command templates.
+const NICON_MAX_SERVERS_PER_ACCOUNT = 50;
+
 function nicon_game_is_allowed(string $game): bool
 {
     if ($game === '') return true; // generic console, not a game integration
@@ -15,19 +27,27 @@ function nicon_game_is_allowed(string $game): bool
     ], true);
 }
 
-function nicon_query_config(array $req): array
+// nicon_query_config returns null (after already sending the 400 itself)
+// on invalid input, the same way every other per-field validation in this
+// file signals failure — the caller must check for null and return
+// immediately, exactly like the nicon_game_is_allowed check right above
+// each call site. This used to call exit() directly instead, which works
+// (each request is its own process) but was the one place in this file
+// that didn't let its caller unwind normally — see git history for why
+// that was flagged and changed.
+function nicon_query_config(array $req): ?array
 {
     $protocol = strtolower(trim((string) ($req['query_protocol'] ?? 'auto')));
     if (!in_array($protocol, ['auto', 'a2s', 'minecraft', 'disabled'], true)) {
         nicon_send_error('unsupported query protocol', 400);
-        exit;
+        return null;
     }
     $rawPort = $req['query_port'] ?? null;
     if ($rawPort === null || $rawPort === '') return [$protocol, null];
     $port = filter_var($rawPort, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]);
     if ($port === false) {
         nicon_send_error('query port must be between 1 and 65535', 400);
-        exit;
+        return null;
     }
     return [$protocol, (int) $port];
 }
@@ -231,7 +251,9 @@ function nicon_handle_create_server(int $userId): void
     $port = (int) ($req['port'] ?? 0);
     $password = (string) ($req['password'] ?? '');
     $protocol = (string) ($req['protocol'] ?? '') ?: 'source';
-    [$queryProtocol, $queryPort] = nicon_query_config($req);
+    $queryConfig = nicon_query_config($req);
+    if ($queryConfig === null) return; // nicon_query_config already sent the error
+    [$queryProtocol, $queryPort] = $queryConfig;
     $game = trim((string) ($req['game'] ?? ''));
     if (!nicon_game_is_allowed($game)) {
         nicon_send_error('unsupported game', 400);
@@ -256,6 +278,12 @@ function nicon_handle_create_server(int $userId): void
     }
 
     $pdo = nicon_db();
+    $countStmt = $pdo->prepare('SELECT COUNT(*) FROM servers WHERE user_id = ?');
+    $countStmt->execute([$userId]);
+    if ((int) $countStmt->fetchColumn() >= NICON_MAX_SERVERS_PER_ACCOUNT) {
+        nicon_send_error('you already have the maximum of ' . NICON_MAX_SERVERS_PER_ACCOUNT . ' servers — remove one first', 400);
+        return;
+    }
     $pdo->prepare('
         INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -280,7 +308,9 @@ function nicon_handle_update_server(int $userId, int $serverId): void
     $host = trim((string) ($req['host'] ?? ''));
     $port = (int) ($req['port'] ?? 0);
     $protocol = strtolower(trim((string) ($req['protocol'] ?? '')));
-    [$queryProtocol, $queryPort] = nicon_query_config($req);
+    $queryConfig = nicon_query_config($req);
+    if ($queryConfig === null) return; // nicon_query_config already sent the error
+    [$queryProtocol, $queryPort] = $queryConfig;
     $game = trim((string) ($req['game'] ?? ''));
     if (!nicon_game_is_allowed($game)) {
         nicon_send_error('unsupported game', 400);

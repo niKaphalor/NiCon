@@ -20,6 +20,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -35,6 +36,19 @@ import (
 // one account's own share.
 const maxConnsPerUser = 20
 
+// queryTestLimit/queryTestWindow bound how often one account can trigger
+// an on-demand "query_test" (ws.go) — an outbound A2S/Minecraft-Query UDP
+// probe against a caller-supplied host:port, independent of any saved
+// server or RCON credential. Without this, a single authenticated session
+// could otherwise generate unlimited outbound UDP traffic toward an
+// arbitrary third-party host just by repeating the request; 10/minute
+// matches the existing nitrado-power rate limit's shape (see
+// webspace/handlers/nitrado_sync.php).
+const (
+	queryTestLimit  = 10
+	queryTestWindow = time.Minute
+)
+
 type Relay struct {
 	log            *log.Logger
 	allowedOrigins map[string]bool
@@ -44,6 +58,9 @@ type Relay struct {
 
 	connsMu     sync.Mutex
 	connsByUser map[int64]int
+
+	queryTestMu  sync.Mutex
+	queryTestLog map[int64][]time.Time
 }
 
 func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.Auth) *Relay {
@@ -51,9 +68,36 @@ func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.
 	for _, o := range allowedOrigins {
 		origins[o] = true
 	}
-	rel := &Relay{log: logger, allowedOrigins: origins, store: st, auth: au, connsByUser: make(map[int64]int)}
+	rel := &Relay{
+		log: logger, allowedOrigins: origins, store: st, auth: au,
+		connsByUser:  make(map[int64]int),
+		queryTestLog: make(map[int64][]time.Time),
+	}
 	rel.upgrader = websocket.Upgrader{CheckOrigin: rel.checkOrigin}
 	return rel
+}
+
+// queryTestAllowed reports whether userID may run another query_test right
+// now, recording this attempt if so. A fixed sliding window over the last
+// queryTestWindow, kept in memory per relay process (this doesn't need to
+// survive a restart or be shared across instances — see maxConnsPerUser
+// for the same reasoning applied to connection count).
+func (rel *Relay) queryTestAllowed(userID int64) bool {
+	rel.queryTestMu.Lock()
+	defer rel.queryTestMu.Unlock()
+	now := time.Now()
+	var kept []time.Time
+	for _, t := range rel.queryTestLog[userID] {
+		if now.Sub(t) < queryTestWindow {
+			kept = append(kept, t)
+		}
+	}
+	if len(kept) >= queryTestLimit {
+		rel.queryTestLog[userID] = kept
+		return false
+	}
+	rel.queryTestLog[userID] = append(kept, now)
+	return true
 }
 
 // acquireConn reserves one of userID's concurrent connection slots,

@@ -365,6 +365,10 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 			_ = writeJSON(wsMessage{Type: "test_result", OK: true})
 
 		case "query_test":
+			if !rel.queryTestAllowed(userID) {
+				_ = writeJSON(wsMessage{Type: "query_test_result", OK: false, Message: "too many status query tests — try again shortly"})
+				continue
+			}
 			queryPort := msg.Port
 			online, players, maxPlayers, queryErr := PublicInfoCheck(store.Server{
 				Host: msg.Host, Port: msg.Port, QueryProtocol: msg.QueryProtocol, QueryPort: &queryPort,

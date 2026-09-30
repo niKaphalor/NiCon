@@ -176,6 +176,35 @@ try {
     ], $aliceToken);
     assert_test($status === 400, 'games outside NiCon\'s supported-game list must be rejected');
 
+    [$status] = request_json($base, 'POST', '/api/servers', [
+        'name' => 'Bad query protocol', 'host' => '127.0.0.1', 'port' => 28098,
+        'password' => 'secret', 'protocol' => 'source', 'query_protocol' => 'udp-shotgun', 'game' => '',
+    ], $aliceToken);
+    assert_test($status === 400, 'an unrecognized query_protocol value must be rejected');
+
+    [$status] = request_json($base, 'POST', '/api/servers', [
+        'name' => 'Bad query port', 'host' => '127.0.0.1', 'port' => 28097,
+        'password' => 'secret', 'protocol' => 'source', 'query_port' => 70000, 'game' => '',
+    ], $aliceToken);
+    assert_test($status === 400, 'a query_port outside 1-65535 must be rejected');
+
+    // Per-account server cap (NICON_MAX_SERVERS_PER_ACCOUNT in servers.php):
+    // seed directly rather than via 49 real POSTs, then confirm the real
+    // API path actually rejects the one that would exceed it.
+    $capUserIdStmt = $pdo->prepare('SELECT id FROM users WHERE username = ?');
+    $capUserIdStmt->execute([$alice]);
+    $capUserId = (int) $capUserIdStmt->fetchColumn();
+    $seedStmt = $pdo->prepare("INSERT INTO servers (user_id, name, host, port, protocol, game, source) VALUES (?, 'Seed', '127.0.0.1', 28020, 'source', '', 'manual')");
+    for ($i = 0; $i < 49; $i++) { // + the one real server already created above = 50, the cap
+        $seedStmt->execute([$capUserId]);
+    }
+    [$status] = request_json($base, 'POST', '/api/servers', [
+        'name' => 'One too many', 'host' => '127.0.0.1', 'port' => 28099,
+        'password' => 'secret', 'protocol' => 'source', 'game' => '',
+    ], $aliceToken);
+    assert_test($status === 400, 'the per-account server cap must be enforced');
+    $pdo->prepare("DELETE FROM servers WHERE user_id = ? AND name = 'Seed'")->execute([$capUserId]);
+
     [$status] = request_json($base, 'PUT', "/api/servers/$serverId", [
         'name' => 'Stolen', 'host' => '127.0.0.1', 'port' => 1, 'protocol' => 'source', 'game' => "Garry's Mod",
     ], $bobToken);
@@ -221,7 +250,12 @@ try {
     foreach ($synced as $candidate) if (($candidate['source'] ?? '') === 'nitrado') $nitradoServer = $candidate;
     assert_test(is_array($nitradoServer), 'Nitrado server missing from sync response');
     assert_test(($nitradoServer['game_icon_url'] ?? '') === 'https://assets.nitrado.net/gmod-64.png', 'Nitrado icon URL missing');
-    assert_test(($nitradoServer['query_protocol'] ?? '') === 'a2s' && ($nitradoServer['query_port'] ?? 0) === 27015, 'Nitrado query metadata missing');
+    // 'auto', not 'a2s': the a2s/minecraft/disabled decision now lives in
+    // exactly one place (internal/relay's EffectivePublicQueryProtocol),
+    // not duplicated in nicon_nitrado_query_protocol() — see that
+    // function's doc comment for why. query_port still comes straight from
+    // Nitrado's own reported value regardless.
+    assert_test(($nitradoServer['query_protocol'] ?? '') === 'auto' && ($nitradoServer['query_port'] ?? 0) === 27015, 'Nitrado query metadata missing');
 
     [$status, $nitradoStatus] = request_json($base, 'GET', '/api/servers/' . $nitradoServer['id'] . '/nitrado-status', null, $aliceToken);
     assert_test($status === 200 && ($nitradoStatus['players'] ?? null) === 3, 'Nitrado status lookup failed');
