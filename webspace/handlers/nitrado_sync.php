@@ -309,7 +309,12 @@ function nicon_nitrado_query_port(array $gameserver): ?int
 function nicon_handle_nitrado_sync(int $userId): void
 {
     $req = nicon_json_body();
-    $token = (string) ($req['token'] ?? '');
+    $token = nicon_body_string($req, 'token');
+    if ($token === null) return;
+    if (strlen($token) > NICON_MAX_NITRADO_TOKEN_BYTES) {
+        nicon_send_error('token is too long (max ' . NICON_MAX_NITRADO_TOKEN_BYTES . ' bytes)', 400);
+        return;
+    }
     $pdo = nicon_db();
 
     if ($token !== '') {
@@ -323,7 +328,7 @@ function nicon_handle_nitrado_sync(int $userId): void
             // Its cache entries have a hard maximum lifetime of 60 seconds.
         }
         $pdo->prepare('UPDATE users SET nitrado_token_enc = ? WHERE id = ?')
-            ->execute([nicon_encrypt_password($token), $userId]);
+            ->execute([nicon_encrypt_password($token, NICON_MAX_NITRADO_TOKEN_BYTES), $userId]);
     } else {
         $stmt = $pdo->prepare('SELECT nitrado_token_enc FROM users WHERE id = ?');
         $stmt->execute([$userId]);

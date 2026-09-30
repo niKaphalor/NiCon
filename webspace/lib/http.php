@@ -84,8 +84,41 @@ function nicon_json_body(): array
         nicon_send_error('request body too large', 413);
         exit;
     }
-    $data = json_decode($raw ?: '', true);
-    return is_array($data) ? $data : [];
+    // An empty body is fine (many POST/DELETE endpoints take none). A
+    // non-empty body that isn't a JSON object/array is a client error, not
+    // something to silently treat as "no fields" and then fail on a
+    // confusing "X is required" downstream.
+    if ($raw === '' || trim($raw) === '') {
+        return [];
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        nicon_send_error('request body must be valid JSON', 400);
+        exit;
+    }
+    return $data;
+}
+
+function nicon_char_length(string $value): int
+{
+    return function_exists('mb_strlen') ? mb_strlen($value, 'UTF-8') : strlen($value);
+}
+
+// nicon_body_string reads $req[$key] as a string. A field that is present
+// but not a string (an array/object/number sent where text belongs) is
+// rejected with a 400 instead of being coerced or triggering a PHP
+// "Array to string" notice. Returns null after sending that error.
+function nicon_body_string(array $req, string $key, string $default = ''): ?string
+{
+    $value = $req[$key] ?? $default;
+    if (is_string($value)) {
+        return $value;
+    }
+    if (is_int($value) || is_float($value) || $value === null) {
+        return (string) ($value ?? $default);
+    }
+    nicon_send_error("$key must be a string", 400);
+    return null;
 }
 
 function nicon_send_json($data, int $status = 200): void

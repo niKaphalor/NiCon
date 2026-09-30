@@ -576,11 +576,33 @@
   var confirmDialogMessage = document.getElementById("confirm-dialog-message");
   var confirmDialogCancel = document.getElementById("confirm-dialog-cancel");
   var confirmDialogOk = document.getElementById("confirm-dialog-ok");
+  var confirmDialogPassword = document.getElementById("confirm-dialog-password");
   var pendingConfirmResolve = null;
+  var pendingConfirmNeedsPassword = false;
 
   function showConfirm(message) {
     confirmDialogMessage.textContent = message;
+    confirmDialogPassword.hidden = true;
+    confirmDialogPassword.value = "";
+    pendingConfirmNeedsPassword = false;
     confirmDialog.showModal();
+    return new Promise(function (resolve) {
+      pendingConfirmResolve = resolve;
+    });
+  }
+
+  // Step-up variant of showConfirm(): the same dialog plus a password
+  // field. Resolves to the typed password (never an empty string), or
+  // null if cancelled. Destructive and credential-level actions ask for
+  // the current password again so a stolen or unattended session alone
+  // can't trigger them — the API enforces this too (current_password).
+  function showPasswordConfirm(message) {
+    confirmDialogMessage.textContent = message;
+    confirmDialogPassword.hidden = false;
+    confirmDialogPassword.value = "";
+    pendingConfirmNeedsPassword = true;
+    confirmDialog.showModal();
+    confirmDialogPassword.focus();
     return new Promise(function (resolve) {
       pendingConfirmResolve = resolve;
     });
@@ -588,12 +610,22 @@
 
   confirmDialogCancel.addEventListener("click", function () { confirmDialog.close(); });
   confirmDialogOk.addEventListener("click", function () {
+    var password = confirmDialogPassword.value;
+    if (pendingConfirmNeedsPassword && password === "") {
+      confirmDialogPassword.focus();
+      return;
+    }
     // Resolve before close() — the 'close' handler below would otherwise
     // also see a pending resolver and settle it a second time as false.
     var resolve = pendingConfirmResolve;
+    var needsPassword = pendingConfirmNeedsPassword;
     pendingConfirmResolve = null;
+    confirmDialogPassword.value = "";
     confirmDialog.close();
-    if (resolve) resolve(true);
+    if (resolve) resolve(needsPassword ? password : true);
+  });
+  confirmDialogPassword.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); confirmDialogOk.click(); }
   });
   confirmDialog.addEventListener("click", function (e) {
     if (e.target === confirmDialog) confirmDialog.close(); // backdrop click = cancel
@@ -602,8 +634,10 @@
   // Escape — as a single "still pending means it wasn't confirmed" fallback.
   confirmDialog.addEventListener("close", function () {
     var resolve = pendingConfirmResolve;
+    var needsPassword = pendingConfirmNeedsPassword;
     pendingConfirmResolve = null;
-    if (resolve) resolve(false);
+    confirmDialogPassword.value = "";
+    if (resolve) resolve(needsPassword ? null : false);
   });
 
   function sessionExpired() {
@@ -877,11 +911,15 @@
   // --- account deletion (self-service, Art. 17 GDPR) ---
 
   deleteAccountBtn.addEventListener("click", function () {
-    showConfirm(I18N.t("settings.deleteAccountConfirm")).then(function (ok) {
-      if (!ok) return;
-      apiFetch("/api/account", { method: "DELETE" })
+    showPasswordConfirm(I18N.t("settings.deleteAccountConfirm")).then(function (password) {
+      if (!password) return;
+      apiFetch("/api/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current_password: password }),
+      })
         .then(function (r) {
-          if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.failedToDeleteAccount"));
+          if (!r.ok && r.status !== 204) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || I18N.t("errors.failedToDeleteAccount")); });
           clearAuthState();
           disconnectAllConsoles();
           servers = [];
@@ -1663,15 +1701,22 @@
       regenBtn.className = "btn-secondary";
       regenBtn.textContent = I18N.t("admin.regenerateCode");
       regenBtn.addEventListener("click", function () {
-        apiFetch("/api/admin/users/" + u.id + "/recovery-code", { method: "POST" })
-          .then(function (r) {
-            if (!r.ok) throw new Error(I18N.t("errors.adminRegenerateFailed"));
-            return r.json();
+        showPasswordConfirm(I18N.t("admin.confirmRegenerate", { username: u.username })).then(function (password) {
+          if (!password) return;
+          apiFetch("/api/admin/users/" + u.id + "/recovery-code", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ current_password: password }),
           })
-          .then(function (data) {
-            showRecoveryCodeModal(data.recovery_code, function () { /* stays on the admin view */ });
-          })
-          .catch(function (err) { showToast(err.message); });
+            .then(function (r) {
+              if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || I18N.t("errors.adminRegenerateFailed")); });
+              return r.json();
+            })
+            .then(function (data) {
+              showRecoveryCodeModal(data.recovery_code, function () { /* stays on the admin view */ });
+            })
+            .catch(function (err) { showToast(err.message); });
+        });
       });
       actionsTd.appendChild(regenBtn);
 
@@ -1680,11 +1725,15 @@
       deleteBtn.className = "btn-secondary btn-danger";
       deleteBtn.textContent = I18N.t("admin.delete");
       deleteBtn.addEventListener("click", function () {
-        showConfirm(I18N.t("admin.confirmDelete", { username: u.username })).then(function (ok) {
-          if (!ok) return;
-          apiFetch("/api/admin/users/" + u.id, { method: "DELETE" })
+        showPasswordConfirm(I18N.t("admin.confirmDelete", { username: u.username })).then(function (password) {
+          if (!password) return;
+          apiFetch("/api/admin/users/" + u.id, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ current_password: password }),
+          })
             .then(function (r) {
-              if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.adminDeleteFailed"));
+              if (!r.ok && r.status !== 204) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || I18N.t("errors.adminDeleteFailed")); });
               loadAdminUsers();
             })
             .catch(function (err) { showToast(err.message); });

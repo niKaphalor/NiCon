@@ -18,8 +18,9 @@ const NICON_LOGIN_RATE_WINDOW = 900;       // 15 minutes
 function nicon_handle_login(): void
 {
     $req = nicon_json_body();
-    $username = (string) ($req['username'] ?? '');
-    $password = (string) ($req['password'] ?? '');
+    $username = nicon_body_string($req, 'username');
+    $password = nicon_body_string($req, 'password');
+    if ($username === null || $password === null) return;
 
     $ipLimited = !nicon_rate_limit_allow('login', NICON_LOGIN_RATE_LIMIT, NICON_LOGIN_RATE_WINDOW);
     $userLimited = $username !== ''
@@ -34,6 +35,10 @@ function nicon_handle_login(): void
 
     if ($username === '' || $password === '') {
         nicon_send_error('username and password are required', 400);
+        return;
+    }
+    if (strlen($password) > NICON_MAX_LOGIN_PASSWORD_BYTES) {
+        nicon_send_error('invalid username or password', 401);
         return;
     }
 

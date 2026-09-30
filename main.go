@@ -354,8 +354,8 @@ func runAddUser(args []string) {
 	if string(pw1) != string(pw2) {
 		log.Fatal("passwords didn't match")
 	}
-	if len(pw1) < 8 {
-		log.Fatal("password must be at least 8 characters")
+	if err := auth.ValidatePassword(string(pw1)); err != nil {
+		log.Fatal(err)
 	}
 
 	hash, err := auth.HashPassword(string(pw1))

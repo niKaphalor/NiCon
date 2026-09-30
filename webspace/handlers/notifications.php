@@ -2,6 +2,9 @@
 declare(strict_types=1);
 
 const NICON_NOTIFICATION_TYPES = ['info', 'success', 'warning', 'error'];
+// A banner shown to every user — a few sentences, well under the TEXT
+// column's 64 KiB, so an admin typo can't paste a document into everyone's UI.
+const NICON_MAX_NOTIFICATION_CHARS = 2000;
 
 // nicon_notification_response shapes a row the same way for the
 // user-facing list and the admin management list — nothing in a
@@ -29,11 +32,17 @@ function nicon_handle_list_notifications(int $userId): void
 function nicon_handle_admin_create_notification(int $adminId): void
 {
     $req = nicon_json_body();
-    $type = (string) ($req['type'] ?? 'info');
-    $message = trim((string) ($req['message'] ?? ''));
+    $type = nicon_body_string($req, 'type', 'info');
+    $message = nicon_body_string($req, 'message');
+    if ($type === null || $message === null) return;
+    $message = trim($message);
 
     if ($message === '') {
         nicon_send_error('message is required', 400);
+        return;
+    }
+    if (nicon_char_length($message) > NICON_MAX_NOTIFICATION_CHARS) {
+        nicon_send_error('message is too long (max ' . NICON_MAX_NOTIFICATION_CHARS . ' characters)', 400);
         return;
     }
     if (!in_array($type, NICON_NOTIFICATION_TYPES, true)) {

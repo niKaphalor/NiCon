@@ -15,6 +15,13 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config.php';
 
+// Ciphertext = 12-byte nonce + plaintext + 16-byte GCM tag, so a plaintext
+// fits a VARBINARY(N) column only up to N - 28 bytes.
+const NICON_CIPHERTEXT_OVERHEAD_BYTES = 28;
+const NICON_MAX_SERVER_PASSWORD_BYTES = 512 - NICON_CIPHERTEXT_OVERHEAD_BYTES;   // servers.password_enc
+const NICON_MAX_NITRADO_TOKEN_BYTES = 2048 - NICON_CIPHERTEXT_OVERHEAD_BYTES;    // users.nitrado_token_enc
+const NICON_MAX_ENCRYPTED_PLAINTEXT_BYTES = NICON_MAX_NITRADO_TOKEN_BYTES;       // absolute ceiling for either
+
 const NICON_RECOVERY_CODE_LENGTH = 20;
 const NICON_RECOVERY_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L
 
@@ -38,10 +45,18 @@ function nicon_encryption_key(): string
 // nicon_encrypt_password returns the same wire format Go's encryptor
 // produces: nonce || ciphertext || tag. Returns null for an empty
 // password (matches Go's store.encryptPasswordOrNil: "not set yet").
-function nicon_encrypt_password(string $plaintext): ?string
+function nicon_encrypt_password(string $plaintext, int $maxPlaintextBytes = NICON_MAX_ENCRYPTED_PLAINTEXT_BYTES): ?string
 {
     if ($plaintext === '') {
         return null;
+    }
+    // servers.password_enc is VARBINARY(512) and users.nitrado_token_enc
+    // VARBINARY(2048); handlers validate against the per-column constants
+    // first so clients get a 400. This only stops an unchecked caller from
+    // hitting a database error (or, in non-strict SQL modes, truncation
+    // that would silently corrupt the ciphertext).
+    if (strlen($plaintext) > $maxPlaintextBytes) {
+        throw new InvalidArgumentException('plaintext too long to store');
     }
     $nonce = random_bytes(12);
     $tag = '';

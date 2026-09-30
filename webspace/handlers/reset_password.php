@@ -22,14 +22,18 @@ function nicon_handle_reset_password(): void
     $req = nicon_json_body();
     $username = (string) ($req['username'] ?? '');
     $recoveryCode = (string) ($req['recovery_code'] ?? '');
-    $newPassword = (string) ($req['new_password'] ?? '');
+    $newPassword = nicon_body_string($req, 'new_password');
+    if ($newPassword === null) return;
 
     if ($username === '' || $recoveryCode === '' || $newPassword === '') {
         nicon_send_error('username, recovery_code, and new_password are required', 400);
         return;
     }
-    if (strlen($newPassword) < NICON_MIN_PASSWORD_LENGTH) {
-        nicon_send_error('password must be at least 8 characters', 400);
+    // Cheap structural checks up front; the username-dependent and
+    // breach-lookup checks run after the recovery code has been verified.
+    if (nicon_char_length($newPassword) < NICON_MIN_PASSWORD_LENGTH || strlen($newPassword) > NICON_MAX_PASSWORD_BYTES) {
+        $policyError = nicon_password_policy_error($newPassword);
+        nicon_send_error($policyError ?? 'invalid password', 400);
         return;
     }
 
@@ -47,6 +51,12 @@ function nicon_handle_reset_password(): void
     $validCode = nicon_verify_password(nicon_normalize_recovery_code($recoveryCode), $hash);
     if (!$user || !$user['recovery_code_hash'] || !$validCode) {
         nicon_send_error('invalid username or recovery code', 401);
+        return;
+    }
+
+    $policyError = nicon_password_policy_error($newPassword, $username);
+    if ($policyError !== null) {
+        nicon_send_error($policyError, 400);
         return;
     }
 

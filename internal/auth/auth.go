@@ -17,7 +17,9 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -41,6 +43,34 @@ type Auth struct {
 
 func New(st *store.Store) *Auth {
 	return &Auth{store: st}
+}
+
+// Password policy, identical to webspace/lib/auth.php (keep in sync).
+//
+// MinPasswordLength (characters) is NIST SP 800-63B-4's floor for
+// single-factor passwords. MaxPasswordBytes is bcrypt's hard input limit:
+// PHP silently truncates longer input while Go's bcrypt refuses it, so the
+// two sides used to disagree — one byte limit, enforced wherever a password
+// is set, removes that.
+const (
+	MinPasswordLength = 15
+	MaxPasswordBytes  = 72
+)
+
+// ValidatePassword reports why password may not be set, or nil if it is fine.
+func ValidatePassword(password string) error {
+	runes := utf8.RuneCountInString(password)
+	if runes < MinPasswordLength {
+		return fmt.Errorf("password must be at least %d characters", MinPasswordLength)
+	}
+	if len(password) > MaxPasswordBytes {
+		return fmt.Errorf("password must be at most %d bytes (about 64 characters; non-ASCII characters take more than one byte)", MaxPasswordBytes)
+	}
+	first, _ := utf8.DecodeRuneInString(password)
+	if strings.Count(password, string(first)) == runes {
+		return errors.New("password must not be a single repeated character")
+	}
+	return nil
 }
 
 // HashPassword is used by the `adduser` CLI command; it never runs as part
