@@ -447,6 +447,41 @@ test("FAQ is a main-navigation view of the app, not a legal page", async ({ page
   await expect(page.locator("#faq-list .faq-item").first()).toContainText("Frage eins");
 });
 
+test("Settings, Health, FAQ and Admin share one page container; Settings and Admin use two columns", async ({ page }) => {
+  await installBackend(page, []);
+  await login(page);
+
+  // Show one view at a time by toggling visibility directly: this measures
+  // layout only (Admin would otherwise need an admin session).
+  const show = (view) => page.evaluate((id) => {
+    for (const v of ["view-app", "view-settings", "view-admin", "view-health", "view-faq"]) document.getElementById(v).hidden = v !== id;
+  }, view);
+  const headingLeft = (view) => page.evaluate((id) => Math.round(document.querySelector(`#${id} h1`).getBoundingClientRect().left), view);
+  const columnCount = (view) => page.evaluate((id) => {
+    const lefts = Array.from(document.querySelectorAll(`#${id} .page-column`)).map((c) => Math.round(c.getBoundingClientRect().left));
+    return new Set(lefts).size;
+  }, view);
+
+  const lefts = new Set();
+  for (const view of ["view-settings", "view-health", "view-faq", "view-admin"]) {
+    await show(view);
+    lefts.add(await headingLeft(view));
+  }
+  // No horizontal jump when switching between these pages.
+  expect(lefts.size).toBe(1);
+
+  // Two columns on a desktop viewport, one on a phone.
+  for (const view of ["view-settings", "view-admin"]) {
+    await show(view);
+    expect(await columnCount(view)).toBe(2);
+  }
+  await page.setViewportSize({ width: 390, height: 800 });
+  for (const view of ["view-settings", "view-admin"]) {
+    await show(view);
+    expect(await columnCount(view)).toBe(1);
+  }
+});
+
 test("signed in, FAQ sits between Settings and Admin and Servers returns to the console", async ({ page }) => {
   await installBackend(page, []);
   await login(page);
