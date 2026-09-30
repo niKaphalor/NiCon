@@ -121,8 +121,8 @@
           <p class="hint"><span data-i18n="register.subheadBefore">Only your username and a password hash are stored — see what that means in the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a>.</p>
           <form id="register-form" class="stacked-form">
             <input id="register-username" type="text" placeholder="Username (3–32 characters)" required autocomplete="username" minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.\-]+" aria-label="Username" data-i18n-placeholder="register.usernamePlaceholder" data-i18n-aria-label="common.username">
-            <input id="register-password" type="password" placeholder="Password (min. 8 characters)" required autocomplete="new-password" minlength="8" aria-label="Password" data-i18n-placeholder="register.passwordPlaceholder" data-i18n-aria-label="common.password">
-            <input id="register-password-confirm" type="password" placeholder="Confirm password" required autocomplete="new-password" minlength="8" aria-label="Confirm password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
+            <input id="register-password" type="password" placeholder="Password (min. 15 characters)" required autocomplete="new-password" minlength="15" aria-label="Password" data-i18n-placeholder="register.passwordPlaceholder" data-i18n-aria-label="common.password">
+            <input id="register-password-confirm" type="password" placeholder="Confirm password" required autocomplete="new-password" minlength="15" aria-label="Confirm password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
             <label class="checkbox-row">
               <input type="checkbox" id="register-consent" required>
               <span><span data-i18n="register.consentBefore">I've read the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a> <span data-i18n="register.consentAfter">and agree to it.</span></span>
@@ -311,8 +311,8 @@
 
             <form id="change-password-form" class="stacked-form">
               <input id="password-current-password-input" type="password" placeholder="Current password" required autocomplete="current-password" aria-label="Current password" data-i18n-placeholder="settings.currentPasswordPlaceholder" data-i18n-aria-label="settings.currentPasswordPlaceholder">
-              <input id="new-password-input" type="password" placeholder="New password (min. 8 characters)" required autocomplete="new-password" minlength="8" aria-label="New password" data-i18n-placeholder="reset.newPasswordPlaceholder" data-i18n-aria-label="reset.newPasswordPlaceholder">
-              <input id="new-password-confirm-input" type="password" placeholder="Confirm new password" required autocomplete="new-password" minlength="8" aria-label="Confirm new password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
+              <input id="new-password-input" type="password" placeholder="New password (min. 15 characters)" required autocomplete="new-password" minlength="15" aria-label="New password" data-i18n-placeholder="reset.newPasswordPlaceholder" data-i18n-aria-label="reset.newPasswordPlaceholder">
+              <input id="new-password-confirm-input" type="password" placeholder="Confirm new password" required autocomplete="new-password" minlength="15" aria-label="Confirm new password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
               <button type="submit" class="btn-secondary" data-i18n="settings.changePasswordButton">Change password</button>
             </form>
             <p id="change-password-error" class="hint login-error" hidden></p>
@@ -495,8 +495,8 @@
   <form id="reset-form" class="stacked-form">
     <input id="reset-username" type="text" placeholder="Username" required autocomplete="username" aria-label="Username" data-i18n-placeholder="common.username" data-i18n-aria-label="common.username">
     <input id="reset-code" type="text" placeholder="Recovery code" required autocomplete="off" aria-label="Recovery code" data-i18n-placeholder="reset.codePlaceholder" data-i18n-aria-label="reset.codePlaceholder">
-    <input id="reset-new-password" type="password" placeholder="New password (min. 8 characters)" required autocomplete="new-password" minlength="8" aria-label="New password" data-i18n-placeholder="reset.newPasswordPlaceholder" data-i18n-aria-label="reset.newPasswordPlaceholder">
-    <input id="reset-new-password-confirm" type="password" placeholder="Confirm new password" required autocomplete="new-password" minlength="8" aria-label="Confirm new password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
+    <input id="reset-new-password" type="password" placeholder="New password (min. 15 characters)" required autocomplete="new-password" minlength="15" aria-label="New password" data-i18n-placeholder="reset.newPasswordPlaceholder" data-i18n-aria-label="reset.newPasswordPlaceholder">
+    <input id="reset-new-password-confirm" type="password" placeholder="Confirm new password" required autocomplete="new-password" minlength="15" aria-label="Confirm new password" data-i18n-placeholder="register.confirmPasswordPlaceholder" data-i18n-aria-label="register.confirmPasswordPlaceholder">
     <button type="submit" class="btn-primary" data-i18n="reset.submit">Reset password</button>
   </form>
   <p id="reset-error" class="hint login-error" hidden></p>
@@ -699,6 +699,7 @@
 
 <dialog id="confirm-dialog" class="confirm-dialog">
   <p id="confirm-dialog-message"></p>
+  <input id="confirm-dialog-password" type="password" hidden required autocomplete="current-password" placeholder="Current password" aria-label="Current password" data-i18n-placeholder="settings.currentPasswordPlaceholder" data-i18n-aria-label="settings.currentPasswordPlaceholder">
   <div class="confirm-dialog-actions">
     <button type="button" id="confirm-dialog-cancel" class="btn-secondary" data-i18n="common.cancel">Cancel</button>
     <button type="button" id="confirm-dialog-ok" class="btn-primary" data-i18n="common.confirm">Confirm</button>

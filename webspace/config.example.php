@@ -39,6 +39,14 @@ return [
     // is written or viewed. The default policy is six months.
     'audit_retention_days' => 180,
 
+    // Reject new passwords found in known data breaches, via the Have I
+    // Been Pwned range API (k-anonymity: only the first 5 characters of the
+    // password's SHA-1 leave this server, never the password). Off by
+    // default because it is an outbound request to a third party on every
+    // password change — if you turn it on, mention it in your privacy
+    // policy. An unreachable service never blocks a registration.
+    'password_breach_check' => false,
+
     // Origins allowed to call this API — the GitHub Pages URL, plus
     // localhost for local frontend development.
     'allowed_origins' => [

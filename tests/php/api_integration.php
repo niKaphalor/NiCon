@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+const NICON_TEST_MAX_SERVER_PASSWORD = 512 - 28; // mirrors NICON_MAX_SERVER_PASSWORD_BYTES
+
 function fail_test(string $message): never
 {
     fwrite(STDERR, "FAIL: $message\n");
@@ -51,7 +53,9 @@ function start_php_server(string $router, int $port, array $extraEnv = []): arra
     return [$process, $log];
 }
 
-function request_json(string $baseUrl, string $method, string $path, ?array $body = null, string $token = ''): array
+// $body may be an array (sent as JSON) or a raw string (sent verbatim, for
+// malformed-JSON tests).
+function request_json(string $baseUrl, string $method, string $path, array|string|null $body = null, string $token = ''): array
 {
     $ch = curl_init($baseUrl . $path);
     $headers = ['Accept: application/json'];
@@ -63,7 +67,7 @@ function request_json(string $baseUrl, string $method, string $path, ?array $bod
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 5,
     ]);
-    if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
+    if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, is_string($body) ? $body : json_encode($body));
     $raw = curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
@@ -120,6 +124,9 @@ try {
         'NICON_PHP_TEST_DB_PASS' => getenv('NICON_PHP_TEST_DB_PASS') ?: '',
         'NICON_ENCRYPTION_KEY' => $key,
         'NICON_NITRADO_API_BASE_URL' => "http://127.0.0.1:$nitradoPort",
+        // php -S is single-threaded by default; the last-admin race test
+        // below needs genuinely concurrent requests.
+        'PHP_CLI_SERVER_WORKERS' => '4',
     ]);
     $processes[] = $apiProcess;
     $logs[] = $apiLog;
@@ -342,6 +349,142 @@ try {
     assert_test(!in_array('expired_test_entry', $actions, true), 'expired audit entry was not removed');
     assert_test((int) $pdo->query("SELECT COUNT(*) FROM audit_log WHERE action = 'expired_test_entry'")->fetchColumn() === 0, 'expired audit entry remained in the database');
     assert_test((int) $pdo->query("SELECT COUNT(*) FROM rcon_audit_log WHERE command = 'old'")->fetchColumn() === 0, 'expired RCON audit entry remained in the database');
+
+    // ---- password policy, input validation --------------------------------
+    $pdo->exec('DELETE FROM rate_limits');
+    [$status, $body] = request_json($base, 'POST', '/api/register', [
+        'username' => "it_short_$suffix", 'password' => str_repeat('x1', 7), 'consent_accepted' => true, // 14 chars
+    ]);
+    assert_test($status === 400 && str_contains($body['error'] ?? '', '15'), 'a 14-character password must be rejected on registration');
+    [$status, $body] = request_json($base, 'POST', '/api/register', [
+        'username' => "it_long_$suffix", 'password' => str_repeat('ab', 37), 'consent_accepted' => true, // 74 bytes
+    ]);
+    assert_test($status === 400 && str_contains($body['error'] ?? '', '72'), 'a password over 72 bytes must be rejected on registration');
+    [$status, $body] = request_json($base, 'POST', '/api/register', [
+        'username' => "it_same_$suffix", 'password' => str_repeat('a', 20), 'consent_accepted' => true,
+    ]);
+    assert_test($status === 400, 'a single repeated character must be rejected');
+    assert_test((int) $pdo->query("SELECT COUNT(*) FROM users WHERE username LIKE 'it\_%\_$suffix' AND username NOT IN ('$alice', '$bob')")->fetchColumn() === 0, 'rejected registrations must not create users');
+
+    [$status, $body] = request_json($base, 'POST', '/api/login', 'this is not json');
+    assert_test($status === 400 && str_contains($body['error'] ?? '', 'JSON'), 'malformed JSON must be a 400');
+    [$status] = request_json($base, 'POST', '/api/login', '"just a string"');
+    assert_test($status === 400, 'a JSON scalar body must be a 400');
+    [$status] = request_json($base, 'POST', '/api/login', ['username' => ['x'], 'password' => 'whatever-whatever']);
+    assert_test($status !== 500, 'a non-string field must not crash the API');
+
+    [$status, $body] = request_json($base, 'POST', '/api/servers', [
+        'name' => 'Too long password', 'host' => '127.0.0.1', 'port' => 28016, 'protocol' => 'source', 'game' => '',
+        'password' => str_repeat('p', NICON_TEST_MAX_SERVER_PASSWORD + 1),
+    ], $aliceToken);
+    assert_test($status === 400 && str_contains($body['error'] ?? '', 'too long'), 'an over-long RCON password must be a 400, not a database error');
+    [$status] = request_json($base, 'PUT', "/api/servers/$serverId/password", ['password' => str_repeat('p', NICON_TEST_MAX_SERVER_PASSWORD + 1)], $aliceToken);
+    assert_test($status === 400, 'an over-long replacement RCON password must be a 400');
+    [$status] = request_json($base, 'PUT', "/api/servers/$serverId/password", ['password' => str_repeat('p', NICON_TEST_MAX_SERVER_PASSWORD)], $aliceToken);
+    assert_test($status === 204, 'a maximum-length RCON password must still fit the column');
+    [$status] = request_json($base, 'POST', '/api/nitrado/sync', ['token' => str_repeat('t', 2021)], $aliceToken);
+    assert_test($status === 400, 'an over-long Nitrado token must be a 400');
+    [$status] = request_json($base, 'POST', '/api/admin/notifications', ['type' => 'info', 'message' => str_repeat('m', 2001)], $aliceToken);
+    assert_test($status === 400, 'an over-long notification must be a 400');
+
+    // ---- change password -------------------------------------------------
+    $bobPassword = 'integration-password';
+    $bobNewPassword = 'a-brand-new-integration-secret';
+    [$status] = request_json($base, 'PUT', '/api/account/password', ['current_password' => 'wrong', 'new_password' => $bobNewPassword], $bobToken);
+    assert_test($status === 403, 'change password with a wrong current password must be 403');
+    [$status] = request_json($base, 'PUT', '/api/account/password', ['current_password' => $bobPassword, 'new_password' => 'short-one'], $bobToken);
+    assert_test($status === 400, 'change password must apply the policy');
+    [$status] = request_json($base, 'PUT', '/api/account/password', ['current_password' => $bobPassword, 'new_password' => $bobNewPassword], $bobToken);
+    assert_test($status === 204, 'valid password change failed');
+    $bobPassword = $bobNewPassword;
+    [$status] = request_json($base, 'POST', '/api/login', ['username' => $bob, 'password' => 'integration-password']);
+    assert_test($status === 401, 'the old password must stop working');
+    [$status, $bobLogin] = request_json($base, 'POST', '/api/login', ['username' => $bob, 'password' => $bobPassword]);
+    assert_test($status === 200, 'the new password must work');
+    $bobToken = $bobLogin['token'];
+
+    // ---- step-up authentication -----------------------------------------
+    [$status] = request_json($base, 'DELETE', '/api/account', null, $bobToken);
+    assert_test($status === 400, 'account deletion without a password must be refused');
+    [$status] = request_json($base, 'DELETE', '/api/account', ['current_password' => 'nope-nope-nope-nope'], $bobToken);
+    assert_test($status === 403, 'account deletion with a wrong password must be refused');
+    assert_test((int) $pdo->query("SELECT COUNT(*) FROM users WHERE username = '$bob'")->fetchColumn() === 1, 'a refused deletion must not delete');
+
+    $bobIdStmt = $pdo->prepare('SELECT id FROM users WHERE username = ?');
+    $bobIdStmt->execute([$bob]);
+    $bobId = (int) $bobIdStmt->fetchColumn();
+    [$status] = request_json($base, 'DELETE', "/api/admin/users/$bobId", null, $aliceToken);
+    assert_test($status === 400, 'admin user deletion without the admin password must be refused');
+    [$status] = request_json($base, 'DELETE', "/api/admin/users/$bobId", ['current_password' => 'nope-nope-nope-nope'], $aliceToken);
+    assert_test($status === 403, 'admin user deletion with a wrong password must be refused');
+    [$status] = request_json($base, 'POST', "/api/admin/users/$bobId/recovery-code", null, $aliceToken);
+    assert_test($status === 400, 'recovery-code regeneration without the admin password must be refused');
+    [$status, $regen] = request_json($base, 'POST', "/api/admin/users/$bobId/recovery-code", ['current_password' => 'integration-password'], $aliceToken);
+    assert_test($status === 200 && is_string($regen['recovery_code'] ?? null), 'recovery-code regeneration with the password failed');
+
+    // ---- admin session age ------------------------------------------------
+    $pdo->prepare('UPDATE sessions SET created_at = DATE_SUB(NOW(), INTERVAL 9 HOUR) WHERE token = ?')->execute([hash('sha256', $aliceToken)]);
+    [$status] = request_json($base, 'GET', '/api/admin/users', null, $aliceToken);
+    assert_test($status === 401, 'an admin session older than 8 hours must be refused');
+    [$status] = request_json($base, 'GET', '/api/servers', null, $aliceToken);
+    assert_test($status === 200, 'the same old session must keep working for ordinary endpoints');
+    [$status, $aliceLogin] = request_json($base, 'POST', '/api/login', ['username' => $alice, 'password' => 'integration-password']);
+    assert_test($status === 200, 'alice re-login failed');
+    $aliceToken = $aliceLogin['token'];
+
+    // ---- last-admin race ---------------------------------------------------
+    // Unlocked, "count the admins, then delete" let two concurrent deletions
+    // both see "another admin exists" and remove every admin. Deterministic
+    // reproduction: a second connection plays the competing deletion and
+    // holds the admin rows locked, mid-transaction. The API request must
+    // wait for that transaction instead of deciding on stale data, and once
+    // the competitor has removed the other admin it must refuse to remove
+    // the last one.
+    $pdo->prepare('UPDATE users SET is_admin = 0 WHERE username NOT IN (?, ?)')->execute([$alice, $bob]);
+    $pdo->prepare('UPDATE users SET is_admin = 1 WHERE username IN (?, ?)')->execute([$alice, $bob]);
+    $aliceIdStmt->execute([$alice]);
+    $aliceId = (int) $aliceIdStmt->fetchColumn();
+
+    $competitor = new PDO($dsn, getenv('NICON_PHP_TEST_DB_USER') ?: '', getenv('NICON_PHP_TEST_DB_PASS') ?: '', [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    ]);
+    $competitor->beginTransaction();
+    $competitor->query('SELECT id FROM users WHERE is_admin = 1 ORDER BY id FOR UPDATE')->fetchAll();
+
+    $multi = curl_multi_init();
+    $ch = curl_init("$base/api/admin/users/$bobId"); // alice deletes bob
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST => 'DELETE',
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $aliceToken],
+        CURLOPT_POSTFIELDS => json_encode(['current_password' => 'integration-password']),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 30,
+    ]);
+    curl_multi_add_handle($multi, $ch);
+    $deadline = microtime(true) + 1.5; // give the request ample time to (wrongly) finish
+    do {
+        curl_multi_exec($multi, $running);
+        if ($running) curl_multi_select($multi, 0.1);
+    } while ($running && microtime(true) < $deadline);
+    assert_test($running > 0, 'the admin delete must wait for the transaction holding the admin rows');
+    assert_test((int) $pdo->query("SELECT COUNT(*) FROM users WHERE id = $bobId")->fetchColumn() === 1, 'the admin delete must not have removed anyone yet');
+
+    // The competing deletion removes alice and commits: bob is now the last admin.
+    $competitor->exec("DELETE FROM users WHERE id = $aliceId");
+    $competitor->commit();
+    do {
+        curl_multi_exec($multi, $running);
+        if ($running) curl_multi_select($multi, 0.1);
+    } while ($running);
+    $raceStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_multi_remove_handle($multi, $ch);
+    curl_multi_close($multi);
+    assert_test($raceStatus === 400, "deleting the last remaining admin must be refused (got $raceStatus)");
+    assert_test((int) $pdo->query("SELECT COUNT(*) FROM users WHERE id = $bobId AND is_admin = 1")->fetchColumn() === 1, 'the last admin must survive');
+
+    // ... and cannot remove their own account either.
+    [$status, $body] = request_json($base, 'DELETE', '/api/account', ['current_password' => $bobPassword], $bobToken);
+    assert_test($status === 400 && str_contains($body['error'] ?? '', 'only remaining admin'), 'the last admin must not be able to delete their own account');
 
     fwrite(STDOUT, "PASS: PHP API integration suite\n");
 } finally {

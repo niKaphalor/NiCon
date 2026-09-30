@@ -311,7 +311,12 @@ function nicon_handle_create_server(int $userId): void
     $name = trim((string) ($req['name'] ?? ''));
     $host = trim((string) ($req['host'] ?? ''));
     $port = (int) ($req['port'] ?? 0);
-    $password = (string) ($req['password'] ?? '');
+    $password = nicon_body_string($req, 'password');
+    if ($password === null) return;
+    if (strlen($password) > NICON_MAX_SERVER_PASSWORD_BYTES) {
+        nicon_send_error('password is too long (max ' . NICON_MAX_SERVER_PASSWORD_BYTES . ' bytes)', 400);
+        return;
+    }
     $protocol = (string) ($req['protocol'] ?? '') ?: 'source';
     $queryConfig = nicon_query_config($req);
     if ($queryConfig === null) return; // nicon_query_config already sent the error
@@ -359,7 +364,7 @@ function nicon_handle_create_server(int $userId): void
         $pdo->prepare('
             INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ')->execute([$userId, $name, $host, $port, nicon_encrypt_password($password), $protocol, $queryProtocol, $queryPort, $game, 'manual']);
+        ')->execute([$userId, $name, $host, $port, nicon_encrypt_password($password, NICON_MAX_SERVER_PASSWORD_BYTES), $protocol, $queryProtocol, $queryPort, $game, 'manual']);
         $id = (int) $pdo->lastInsertId();
         $pdo->commit();
     } catch (Throwable $e) {
@@ -449,9 +454,14 @@ function nicon_handle_update_server(int $userId, int $serverId): void
 function nicon_handle_set_server_password(int $userId, int $serverId): void
 {
     $req = nicon_json_body();
-    $password = (string) ($req['password'] ?? '');
+    $password = nicon_body_string($req, 'password');
+    if ($password === null) return;
     if ($password === '') {
         nicon_send_error('password is required', 400);
+        return;
+    }
+    if (strlen($password) > NICON_MAX_SERVER_PASSWORD_BYTES) {
+        nicon_send_error('password is too long (max ' . NICON_MAX_SERVER_PASSWORD_BYTES . ' bytes)', 400);
         return;
     }
 
@@ -465,7 +475,7 @@ function nicon_handle_set_server_password(int $userId, int $serverId): void
     }
 
     $stmt = $pdo->prepare('UPDATE servers SET password_enc = ?, health_ok = NULL, health_checked_at = NULL, health_latency_ms = NULL, health_error = NULL WHERE id = ? AND user_id = ?');
-    $stmt->execute([nicon_encrypt_password($password), $serverId, $userId]);
+    $stmt->execute([nicon_encrypt_password($password, NICON_MAX_SERVER_PASSWORD_BYTES), $serverId, $userId]);
     if ($stmt->rowCount() === 0) {
         nicon_send_error('404 page not found', 404);
         return;

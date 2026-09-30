@@ -110,10 +110,12 @@ function nicon_handle_delete_nitrado_token(int $userId): void
 // cascade with it via ON DELETE CASCADE.
 function nicon_handle_delete_account(int $userId): void
 {
+    // Step-up: a valid session alone must not be enough to erase an
+    // account irreversibly (stolen token, unattended browser tab).
+    if (!nicon_require_current_password($userId, nicon_json_body())) {
+        return;
+    }
     $pdo = nicon_db();
-    $stmt = $pdo->prepare('SELECT username FROM users WHERE id = ?');
-    $stmt->execute([$userId]);
-    $username = $stmt->fetchColumn();
 
     try {
         $token = nicon_nitrado_saved_token($pdo, $userId);
@@ -123,14 +125,24 @@ function nicon_handle_delete_account(int $userId): void
         // can no longer be decrypted; any orphaned cache expires quickly.
     }
 
-    // Logged before, not after, deleting the row: audit_log.user_id has a
-    // foreign key on users.id, so inserting a row pointing at $userId
-    // after that user no longer exists would fail outright. The FK's own
-    // ON DELETE SET NULL (see schema.sql) nulls it out the moment the
-    // DELETE below commits — detail is what keeps this row readable after
-    // that ("someone named X deleted their account"), not user_id.
-    nicon_audit_log($userId, 'account_deleted', null, $username !== false ? $username : null);
-    $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$userId]);
+    // Logged before, not after, deleting the row (inside the guarded
+    // delete's transaction): audit_log.user_id has a foreign key on
+    // users.id, so inserting a row pointing at $userId after that user no
+    // longer exists would fail outright. The FK's own ON DELETE SET NULL
+    // (see schema.sql) nulls it out the moment the DELETE commits — detail
+    // is what keeps this row readable after that ("someone named X
+    // deleted their account"), not user_id.
+    $result = nicon_delete_user_guarded($userId, static function (string $username) use ($userId): void {
+        nicon_audit_log($userId, 'account_deleted', null, $username);
+    });
+    if ($result === 'last_admin') {
+        nicon_send_error('cannot delete the only remaining admin account — make another account an admin first', 400);
+        return;
+    }
+    if ($result === 'not_found') {
+        nicon_send_error('account not found', 404);
+        return;
+    }
     http_response_code(204);
 }
 
@@ -139,8 +151,8 @@ function nicon_handle_delete_account(int $userId): void
 // recovery-code flow for when you don't. Requires the current password
 // (not just a valid session) so a moment of unattended access to an
 // unlocked browser tab can't be used to lock the real owner out.
-const NICON_ACCOUNT_CREDENTIAL_RATE_LIMIT = 10;  // per account, per window
-const NICON_ACCOUNT_CREDENTIAL_RATE_WINDOW = 900; // 15 minutes
+// (NICON_ACCOUNT_CREDENTIAL_RATE_* live in lib/auth.php — shared with the
+// other endpoints that ask for the current password.)
 
 function nicon_handle_change_password(int $userId): void
 {
@@ -157,24 +169,29 @@ function nicon_handle_change_password(int $userId): void
     }
 
     $req = nicon_json_body();
-    $currentPassword = (string) ($req['current_password'] ?? '');
-    $newPassword = (string) ($req['new_password'] ?? '');
+    $currentPassword = nicon_body_string($req, 'current_password');
+    $newPassword = nicon_body_string($req, 'new_password');
+    if ($currentPassword === null || $newPassword === null) return;
 
     if ($currentPassword === '' || $newPassword === '') {
         nicon_send_error('current_password and new_password are required', 400);
         return;
     }
-    if (strlen($newPassword) < NICON_MIN_PASSWORD_LENGTH) {
-        nicon_send_error('password must be at least 8 characters', 400);
-        return;
-    }
 
     $pdo = nicon_db();
-    $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = ?');
+    $stmt = $pdo->prepare('SELECT username, password_hash FROM users WHERE id = ?');
     $stmt->execute([$userId]);
-    $hash = $stmt->fetchColumn();
-    if ($hash === false || !nicon_verify_password($currentPassword, $hash)) {
-        nicon_send_error('current password is incorrect', 401);
+    $account = $stmt->fetch();
+    $hash = $account ? $account['password_hash'] : false;
+    if ($hash === false || strlen($currentPassword) > NICON_MAX_LOGIN_PASSWORD_BYTES || !nicon_verify_password($currentPassword, $hash)) {
+        nicon_send_error('current password is incorrect', 403);
+        return;
+    }
+    // After the current-password check, so the policy (and the optional
+    // breach lookup) can't be used by someone without that password.
+    $policyError = nicon_password_policy_error($newPassword, (string) $account['username']);
+    if ($policyError !== null) {
+        nicon_send_error($policyError, 400);
         return;
     }
 
@@ -229,7 +246,7 @@ function nicon_handle_change_username(int $userId): void
     $stmt->execute([$userId]);
     $hash = $stmt->fetchColumn();
     if ($hash === false || !nicon_verify_password($currentPassword, $hash)) {
-        nicon_send_error('current password is incorrect', 401);
+        nicon_send_error('current password is incorrect', 403);
         return;
     }
 

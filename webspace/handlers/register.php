@@ -18,7 +18,8 @@ function nicon_handle_register(): void
 
     $req = nicon_json_body();
     $username = trim((string) ($req['username'] ?? ''));
-    $password = (string) ($req['password'] ?? '');
+    $password = nicon_body_string($req, 'password');
+    if ($password === null) return;
     $consent = (bool) ($req['consent_accepted'] ?? false);
 
     if ($username === '' || $password === '') {
@@ -33,8 +34,9 @@ function nicon_handle_register(): void
         nicon_send_error('username must be 3-32 characters: letters, numbers, underscore, hyphen, or dot', 400);
         return;
     }
-    if (strlen($password) < NICON_MIN_PASSWORD_LENGTH) {
-        nicon_send_error('password must be at least 8 characters', 400);
+    $policyError = nicon_password_policy_error($password, $username);
+    if ($policyError !== null) {
+        nicon_send_error($policyError, 400);
         return;
     }
 

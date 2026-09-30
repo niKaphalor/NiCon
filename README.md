@@ -437,8 +437,19 @@ Once deployed, it serves the same JSON API the relay used to (except
   session check — a regular account gets 403, not just a UI that happens
   to hide the button. Listing returns only username/created-at/role/
   server-count per account, never password or recovery-code hashes, or
-  any of that account's server details. Deleting the instance's last
-  remaining admin account is refused — there's no HTTP way to grant admin
+  any of that account's server details. Admin actions also require a
+  session at most 8 hours old (older ones get 401 on `/admin/*` and must
+  sign in again; ordinary endpoints keep the normal 7-day lifetime), and
+  the two destructive ones — `DELETE /admin/users/{id}` and
+  `POST /admin/users/{id}/recovery-code` — need the admin's own
+  `current_password` in the JSON body, as does `DELETE /account`
+  (step-up authentication: a stolen or unattended session alone can't
+  delete accounts or mint recovery codes). A wrong password answers 403,
+  not 401, so the frontend doesn't mistake it for an expired session; the
+  attempts share `PUT /account/password`'s rate limit. Deleting the
+  instance's last remaining admin account is refused (race-free: the admin
+  rows are locked in one transaction, so two admins deleting each other at
+  the same moment can't both succeed) — there's no HTTP way to grant admin
   (see [Admin panel](#admin-panel) below), so losing the last one would
   need command-line database access to recover from.
 - **Contact form** (`POST /contact`): no login required — this is the
@@ -645,8 +656,11 @@ blocked by the browser.
 
 Anyone who can reach the frontend can create their own account from the
 **Create one** link on the sign-in screen — registration is open by
-default. Signing up requires a username (3–32 characters), a password (min
-8 characters), and checking a box confirming the
+default. Signing up requires a username (3–32 characters), a password (15
+to 72 bytes — 15 is NIST SP 800-63B-4's floor for single-factor passwords,
+72 is bcrypt's input limit, so longer input would be silently cut off in
+PHP and rejected in Go; the same rule applies to changing or resetting a
+password and to the `adduser` CLI), and checking a box confirming the
 [privacy policy](docs/privacy.html) has been read; it logs you in
 immediately afterward. **Settings → Export my data** downloads a JSON copy
 of everything stored under the account — servers, command templates,

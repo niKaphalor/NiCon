@@ -34,32 +34,25 @@ function nicon_handle_admin_delete_user(int $adminId, int $targetId): void
         return;
     }
 
-    $pdo = nicon_db();
-    $stmt = $pdo->prepare('SELECT username, is_admin FROM users WHERE id = ?');
-    $stmt->execute([$targetId]);
-    $target = $stmt->fetch();
-    if (!$target) {
-        nicon_send_error('404 page not found', 404);
+    // Step-up: the ADMIN's own password, on top of the (max 8 h old) session.
+    if (!nicon_require_current_password($adminId, nicon_json_body())) {
         return;
     }
-    // Deleting the last admin would lock everyone out of this instance's
-    // admin panel with no way back in short of a direct database edit.
-    if ($target['is_admin']) {
-        $adminCount = (int) $pdo->query('SELECT COUNT(*) FROM users WHERE is_admin = 1')->fetchColumn();
-        if ($adminCount <= 1) {
-            nicon_send_error('cannot delete the only remaining admin account', 400);
-            return;
-        }
-    }
 
-    // Logged before, not after, deleting: audit_log.target_user_id has a
-    // foreign key on users.id, same reasoning as account.php's
-    // account_deleted — inserting a row pointing at $targetId after that
-    // row is gone would fail outright.
-    nicon_audit_log($adminId, 'admin_user_deleted', $targetId, $target['username']);
-    $stmt = $pdo->prepare('DELETE FROM users WHERE id = ?');
-    $stmt->execute([$targetId]);
-    if ($stmt->rowCount() === 0) {
+    // Deleting the last admin would lock everyone out of this instance's
+    // admin panel with no way back in short of a direct database edit;
+    // nicon_delete_user_guarded makes that check race-free. It also logs
+    // before deleting (audit_log.target_user_id has a foreign key on
+    // users.id, so an entry pointing at $targetId can't be written once
+    // that row is gone).
+    $result = nicon_delete_user_guarded($targetId, static function (string $username) use ($adminId, $targetId): void {
+        nicon_audit_log($adminId, 'admin_user_deleted', $targetId, $username);
+    });
+    if ($result === 'last_admin') {
+        nicon_send_error('cannot delete the only remaining admin account', 400);
+        return;
+    }
+    if ($result === 'not_found') {
         nicon_send_error('404 page not found', 404);
         return;
     }
@@ -73,6 +66,11 @@ function nicon_handle_admin_delete_user(int $adminId, int $targetId): void
 // — there's no email address on file to send it to.
 function nicon_handle_admin_regenerate_recovery_code(int $adminId, int $targetId): void
 {
+    // Step-up, same as deleting a user: a fresh recovery code is a full
+    // account-takeover primitive for the target account.
+    if (!nicon_require_current_password($adminId, nicon_json_body())) {
+        return;
+    }
     $code = nicon_generate_recovery_code();
     $hash = nicon_hash_password(nicon_normalize_recovery_code($code));
 
