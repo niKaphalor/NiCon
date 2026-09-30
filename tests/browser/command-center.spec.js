@@ -247,7 +247,7 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   await page.locator("#manual-query-protocol").selectOption("a2s");
   await page.locator("#manual-query-port").fill("26900");
   await page.locator("#manual-query-test-btn").click();
-  await expect(page.locator("#manual-test-status")).toContainText("3 / 20");
+  await expect(page.locator("#manual-query-test-status")).toContainText("3 / 20");
   await page.locator("#manual-form button[type=submit]").click();
   await expect(page.locator(".server-row", { hasText: "Manual 7DTD" })).toBeVisible();
   expect(state.servers.find((item) => item.name === "Manual 7DTD")).toMatchObject({ game: "7 Days to Die", protocol: "telnet", query_protocol: "a2s", query_port: 26900 });
