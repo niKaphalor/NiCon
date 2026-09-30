@@ -442,3 +442,23 @@ test("PWA is installable and its app shell works offline", async ({ page, contex
   await expect(page.locator("#view-login")).toBeVisible();
   await context.setOffline(false);
 });
+
+test("public status panel shows a distinct message when query checks are disabled", async ({ page }) => {
+  // Regression test for a real support case: before this, a server with
+  // query_protocol="disabled" (e.g. ARK: Survival Ascended, which doesn't
+  // reliably answer A2S — see docs/compatibility.md) showed the exact same
+  // "no data yet" text as a server that just hadn't been sampled, which
+  // made a real timeout confusing to diagnose. It must also not fetch
+  // health-history at all for a disabled server — the value is already
+  // known client-side.
+  let healthHistoryRequested = false;
+  await installBackend(page, [server({ id: 1, has_password: false, query_protocol: "disabled" })]);
+  await page.route("**/api/servers/1/health-history**", (route) => {
+    healthHistoryRequested = true;
+    route.continue();
+  });
+  await login(page);
+  await page.locator(".server-row", { hasText: "GMod Alpha" }).click();
+  await expect(page.locator("#password-public-status-values")).toHaveText("Public status checks are turned off for this server.");
+  expect(healthHistoryRequested).toBe(false);
+});

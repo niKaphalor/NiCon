@@ -239,6 +239,9 @@ window.NICON_I18N_STRINGS.de = {
     status: "Status", map: "Welt", version: "Version", noRules: "Keine Wortfilter eingerichtet.",
     statusStarted: "Gestartet", statusStopped: "Gestoppt", statusRestarting: "Wird neu gestartet", statusUnknown: "Unbekannt",
     resourcesLoading: "Nitrado-Status wird geladen…", resourcesUnavailable: "Nitrado-Status ist nicht verfügbar.",
+    publicStatusAriaLabel: "Öffentlicher Serverstatus", publicStatusLoading: "Öffentlicher Status wird geladen…",
+    publicStatusUnavailable: "Noch keine öffentlichen Statusdaten.", publicStatusFetchFailed: "Öffentlicher Status konnte nicht geladen werden.",
+    publicStatusDisabled: "Öffentliche Statusabfragen sind für diesen Server deaktiviert.",
   },
   quickCommands: {
     groupAriaLabel: "Schnellbefehle",

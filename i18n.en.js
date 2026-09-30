@@ -238,6 +238,9 @@ window.NICON_I18N_STRINGS.en = {
     status: "Status", map: "World", version: "Version", noRules: "No word filters configured.",
     statusStarted: "Started", statusStopped: "Stopped", statusRestarting: "Restarting", statusUnknown: "Unknown",
     resourcesLoading: "Loading Nitrado status…", resourcesUnavailable: "Nitrado status is unavailable.",
+    publicStatusAriaLabel: "Public server status", publicStatusLoading: "Loading public status…",
+    publicStatusUnavailable: "No public status data yet.", publicStatusFetchFailed: "Public status check failed to load.",
+    publicStatusDisabled: "Public status checks are turned off for this server.",
   },
   quickCommands: {
     groupAriaLabel: "Quick commands",

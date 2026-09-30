@@ -182,6 +182,7 @@
   var manualTestBtn = document.getElementById("manual-test-btn");
   var manualQueryTestBtn = document.getElementById("manual-query-test-btn");
   var manualTestStatus = document.getElementById("manual-test-status");
+  var manualQueryTestStatus = document.getElementById("manual-query-test-status");
   var manualGameSelect = document.getElementById("manual-game");
   var manualQueryProtocol = document.getElementById("manual-query-protocol");
   var manualQueryPort = document.getElementById("manual-query-port");
@@ -887,6 +888,7 @@
   function openAddModal() {
     loadAccountInfo();
     manualTestStatus.hidden = true;
+    manualQueryTestStatus.hidden = true;
     addModal.showModal();
   }
 
@@ -1224,6 +1226,18 @@
     manualTestStatus.hidden = false;
   }
 
+  // Its own status line, not shared with setManualTestStatus above — "Test
+  // connection" and "Test status query" are two unrelated checks (RCON vs.
+  // public query), and sharing one line made a stale result briefly read as
+  // belonging to the wrong test (the Edit-Server modal already gives its
+  // own query test a dedicated line; this matches that).
+  function setManualQueryTestStatus(text, isError) {
+    manualQueryTestStatus.textContent = text;
+    manualQueryTestStatus.classList.toggle("is-error", !!isError);
+    manualQueryTestStatus.classList.toggle("is-success", !isError);
+    manualQueryTestStatus.hidden = false;
+  }
+
   function runQueryTest(options) {
     var host = options.host.value.trim();
     var port = optionalPort(options.queryPort) || parseInt(options.rconPort.value, 10);
@@ -1272,7 +1286,7 @@
       host: document.getElementById("manual-host"), rconPort: document.getElementById("manual-port"),
       rconProtocol: document.getElementById("manual-protocol"), game: manualGameSelect,
       queryProtocol: manualQueryProtocol, queryPort: manualQueryPort, button: manualQueryTestBtn,
-      setStatus: setManualTestStatus,
+      setStatus: setManualQueryTestStatus,
     });
   });
 
@@ -1377,6 +1391,7 @@
         renderContent();
         manualForm.reset();
         manualTestStatus.hidden = true;
+        manualQueryTestStatus.hidden = true;
         addModal.close();
       })
       .catch(function (err) { showToast(I18N.t("errors.couldNotAddServer", { message: err.message })); });
@@ -2527,7 +2542,16 @@
   // "unavailable" line rather than an empty box.
   function renderPublicStatus(server) {
     passwordPublicStatus.hidden = false;
-    passwordPublicStatusValues.textContent = I18N.t("phase2.resourcesLoading");
+    // "disabled" is known client-side already (it's on the server object
+    // itself) — no need to fetch just to say so, and it avoids this
+    // collapsing into the same "no data yet" text as a server that simply
+    // hasn't been sampled yet, which is exactly the ambiguity that made a
+    // real ARK: Survival Ascended timeout confusing to diagnose.
+    if (server.query_protocol === "disabled") {
+      passwordPublicStatusValues.textContent = I18N.t("phase2.publicStatusDisabled");
+      return;
+    }
+    passwordPublicStatusValues.textContent = I18N.t("phase2.publicStatusLoading");
     apiFetch("/api/servers/" + server.id + "/health-history?range=24h")
       .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error("status unavailable")); })
       .then(function (history) {
@@ -2536,7 +2560,7 @@
         var latest = samples.length ? samples[samples.length - 1] : null;
         passwordPublicStatusValues.innerHTML = "";
         if (!latest) {
-          passwordPublicStatusValues.textContent = I18N.t("phase2.resourcesUnavailable");
+          passwordPublicStatusValues.textContent = I18N.t("phase2.publicStatusUnavailable");
           return;
         }
         var items = [
@@ -2555,7 +2579,7 @@
         });
       })
       .catch(function () {
-        if (selectedServerId === server.id && !server.has_password) passwordPublicStatusValues.textContent = I18N.t("phase2.resourcesUnavailable");
+        if (selectedServerId === server.id && !server.has_password) passwordPublicStatusValues.textContent = I18N.t("phase2.publicStatusFetchFailed");
       });
   }
 

@@ -163,7 +163,7 @@
 
         <div id="content-password" class="card password-card" hidden>
           <div class="card-title" id="password-server-name"></div>
-          <div id="password-public-status" class="public-status-strip" aria-label="Public server status" data-i18n-aria-label="phase2.nitradoResources" hidden>
+          <div id="password-public-status" class="public-status-strip" aria-label="Public server status" data-i18n-aria-label="phase2.publicStatusAriaLabel" hidden>
             <div id="password-public-status-values" class="public-status-values" aria-live="polite"></div>
           </div>
           <div id="password-power-actions" class="password-power-actions" hidden></div>
@@ -558,8 +558,11 @@
       <p class="hint" data-i18n="addModal.queryHint">Public status checks are independent from RCON. If empty, the RCON port is used.</p>
       <div class="form-row">
         <button type="button" id="manual-test-btn" class="btn-secondary" data-i18n="addModal.testConnection">Test connection</button>
+        <span id="manual-test-status" class="hint form-status" aria-live="polite" hidden></span>
+      </div>
+      <div class="form-row">
         <button type="button" id="manual-query-test-btn" class="btn-secondary" data-i18n="addModal.testQuery">Test status query</button>
-        <span id="manual-test-status" class="hint form-status" hidden></span>
+        <span id="manual-query-test-status" class="hint form-status" aria-live="polite" hidden></span>
       </div>
       <button type="submit" class="btn-primary" data-i18n="addModal.addServerSubmit">Add server</button>
     </form>
@@ -630,7 +633,7 @@
     <p class="hint" data-i18n="addModal.queryHint">Public status checks are independent from RCON. If empty, the RCON port is used.</p>
     <div class="form-row">
       <button type="button" id="edit-server-query-test-btn" class="btn-secondary" data-i18n="addModal.testQuery">Test status query</button>
-      <span id="edit-server-query-test-status" class="hint form-status" hidden></span>
+      <span id="edit-server-query-test-status" class="hint form-status" aria-live="polite" hidden></span>
     </div>
     <input id="edit-server-password" type="password" autocomplete="off" data-i18n-placeholder="editServer.passwordPlaceholder" data-i18n-aria-label="editServer.passwordPlaceholder" placeholder="New RCON password (leave blank to keep current)" aria-label="New RCON password">
     <p id="edit-server-error" class="hint login-error" hidden></p>
