@@ -32,6 +32,8 @@ async function installBackend(page, initialServers = []) {
     rules: [],
     commands: [],
     commandAudits: [],
+    pagedAuditTotal: 0, // >0: /api/audit-log answers with the paginated shape
+    auditRequests: [],
     connectedServerIds: [],
     sockets: [],
     nextServerId: 100,
@@ -95,6 +97,16 @@ async function installBackend(page, initialServers = []) {
     }
     if (method === "PUT" && /^\/api\/servers\/\d+\/password$/.test(path)) return route.fulfill({ status: 204 });
     if (method === "GET" && path === "/api/account") return json({ username: "operator", nitrado_token_saved: false });
+    if (method === "GET" && path === "/api/audit-log" && state.pagedAuditTotal && url.searchParams.has("page")) {
+      const pageNo = Number(url.searchParams.get("page"));
+      const perPage = Number(url.searchParams.get("per_page"));
+      state.auditRequests.push({ page: pageNo, perPage });
+      const items = [];
+      for (let i = (pageNo - 1) * perPage; i < Math.min(pageNo * perPage, state.pagedAuditTotal); i++) {
+        items.push({ kind: "account", action: "login_success", actor_username: `user${i}`, target_username: null, detail: null, created_at: new Date(Date.now() + i).toISOString() });
+      }
+      return json({ items, page: pageNo, per_page: perPage, total: state.pagedAuditTotal, total_pages: Math.ceil(state.pagedAuditTotal / perPage) });
+    }
     if (method === "GET" && path === "/api/audit-log") return json(state.commandAudits.map((entry, index) => ({
       kind: "rcon",
       action: "rcon_command",
@@ -480,6 +492,49 @@ test("Settings, Health, FAQ and Admin share one page container; Settings and Adm
     await show(view);
     expect(await columnCount(view)).toBe(1);
   }
+});
+
+test("log lists are paginated with server-side pages", async ({ page }) => {
+  const state = await installBackend(page, []);
+  state.pagedAuditTotal = 23; // 10 per page -> 3 pages
+  await login(page);
+  await page.locator("#nav-settings-btn").click();
+
+  const rows = page.locator("#activity-list .admin-notification-row");
+  const pager = page.locator("#activity-list + .pager");
+  await expect(rows).toHaveCount(10);
+  await expect(rows.first()).toContainText("user0");
+  await expect(pager).toContainText("Page 1 of 3");
+  await expect(pager).toContainText("23 entries");
+  await expect(pager.getByRole("button", { name: /Previous/ })).toBeDisabled();
+
+  await pager.getByRole("button", { name: /Next/ }).click();
+  await expect(rows.first()).toContainText("user10");
+  await expect(pager).toContainText("Page 2 of 3");
+
+  await pager.getByRole("button", { name: /Next/ }).click();
+  await expect(rows).toHaveCount(3);
+  await expect(rows.first()).toContainText("user20");
+  await expect(pager.getByRole("button", { name: /Next/ })).toBeDisabled();
+
+  await pager.getByRole("button", { name: /Previous/ }).click();
+  await expect(pager).toContainText("Page 2 of 3");
+  expect(state.auditRequests.map((r) => r.page)).toEqual(expect.arrayContaining([1, 2, 3]));
+  expect(state.auditRequests.every((r) => r.perPage === 10)).toBe(true);
+
+});
+
+test("an API that predates pagination (one plain array) is still paged in the UI", async ({ page }) => {
+  const state = await installBackend(page, []);
+  state.commandAudits = Array.from({ length: 23 }, (_, i) => ({ serverId: 1, command: `cmd${i}`, origin: "manual", action: "command" }));
+  await login(page);
+  await page.locator("#nav-settings-btn").click();
+  await expect(page.locator("#activity-list .admin-notification-row")).toHaveCount(10);
+  const pager = page.locator("#activity-list + .pager");
+  await expect(pager).toContainText("Page 1 of 3");
+  await pager.getByRole("button", { name: /Next/ }).click();
+  await pager.getByRole("button", { name: /Next/ }).click();
+  await expect(page.locator("#activity-list .admin-notification-row")).toHaveCount(3);
 });
 
 test("signed in, FAQ sits between Settings and Admin and Servers returns to the console", async ({ page }) => {

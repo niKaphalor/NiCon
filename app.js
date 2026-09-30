@@ -55,7 +55,12 @@
   var nitradoPowerPending = {};
   var selectedServerId = null;
   var activeServerTab = "console";
-  var lastActivityLog = [];
+  var AUDIT_PER_PAGE = 25;     // admin audit log
+  var ACTIVITY_PER_PAGE = 10;  // own activity and the per-server audit list (narrower cards)
+  var activityPage = 1;
+  var adminAuditPage = 1;
+  var serverAuditPage = 1;
+  var serverAuditServerId = null;
 
   // --- element refs ---
 
@@ -1982,25 +1987,94 @@
     });
   }
 
-  function loadActivity() {
-    return apiFetch("/api/audit-log", { method: "GET" })
-      .then(function (r) { return r.ok ? r.json() : []; })
-      .then(function (list) {
-        lastActivityLog = list || [];
-        renderAuditLogList(activityList, lastActivityLog, "settings.activityEmpty");
-        var server = findServer(selectedServerId);
-        if (server) renderServerAudit(server);
+  // --- log pagination ---
+  // Every log list is shown a page at a time. The audit endpoints paginate
+  // server-side ({items, page, per_page, total, total_pages}); an API that
+  // predates that answers with one plain array instead, which is paginated
+  // here so the UI behaves the same against either.
+
+  function fetchLogPage(path, page, perPage, extraQuery, clientFilter) {
+    var query = "page=" + page + "&per_page=" + perPage + (extraQuery ? "&" + extraQuery : "");
+    return apiFetch(path + "?" + query, { method: "GET" })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || "request failed"); });
+        return r.json();
+      })
+      .then(function (data) {
+        if (!Array.isArray(data)) return data;
+        var all = clientFilter ? data.filter(clientFilter) : data;
+        var totalPages = Math.max(1, Math.ceil(all.length / perPage));
+        var current = Math.min(page, totalPages);
+        return { items: all.slice((current - 1) * perPage, current * perPage), page: current, per_page: perPage, total: all.length, total_pages: totalPages };
+      });
+  }
+
+  // renderPager fills `host` with "‹ Previous · Page 2 of 7 · 163 entries · Next ›".
+  // A single page needs no pager, so the host is hidden then.
+  function renderPager(host, data, onPage) {
+    host.textContent = "";
+    if (!data || !(data.total_pages > 1)) { host.hidden = true; return; }
+    host.hidden = false;
+    host.setAttribute("aria-label", I18N.t("pager.label"));
+
+    var prev = document.createElement("button");
+    prev.type = "button";
+    prev.className = "btn-secondary";
+    prev.textContent = "‹ " + I18N.t("pager.previous");
+    prev.disabled = data.page <= 1;
+    prev.addEventListener("click", function () { onPage(data.page - 1); });
+
+    var status = document.createElement("span");
+    status.className = "pager-status";
+    status.setAttribute("aria-live", "polite");
+    status.textContent = I18N.t("pager.status", { page: data.page, pages: data.total_pages }) + " · " + I18N.t("pager.entries", { count: data.total });
+
+    var next = document.createElement("button");
+    next.type = "button";
+    next.className = "btn-secondary";
+    next.textContent = I18N.t("pager.next") + " ›";
+    next.disabled = data.page >= data.total_pages;
+    next.addEventListener("click", function () { onPage(data.page + 1); });
+
+    host.appendChild(prev);
+    host.appendChild(status);
+    host.appendChild(next);
+  }
+
+  // The pager sits right below its list; created on first use.
+  function pagerHostFor(listEl) {
+    var host = listEl.nextElementSibling;
+    if (!host || !host.classList.contains("pager")) {
+      host = document.createElement("div");
+      host.className = "pager";
+      host.setAttribute("role", "group");
+      listEl.parentNode.insertBefore(host, listEl.nextSibling);
+    }
+    return host;
+  }
+
+  function loadActivity(page) {
+    if (page) activityPage = page;
+    return fetchLogPage("/api/audit-log", activityPage, ACTIVITY_PER_PAGE)
+      .then(function (data) {
+        // Entries expire, so the last page can vanish underneath us.
+        if (!data.items.length && data.page > 1) return loadActivity(Math.max(1, data.total_pages));
+        activityPage = data.page;
+        renderAuditLogList(activityList, data.items, "settings.activityEmpty");
+        renderPager(pagerHostFor(activityList), data, loadActivity);
       })
       .catch(function () { /* the rest of settings still works without this */ });
   }
 
-  function loadAdminAuditLog() {
-    return apiFetch("/api/admin/audit-log", { method: "GET" })
-      .then(function (r) {
-        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t)); });
-        return r.json();
+  function loadAdminAuditLog(page) {
+    if (page) adminAuditPage = page;
+    return fetchLogPage("/api/admin/audit-log", adminAuditPage, AUDIT_PER_PAGE)
+      .then(function (data) {
+        if (!data.items.length && data.page > 1) return loadAdminAuditLog(Math.max(1, data.total_pages));
+        adminAuditPage = data.page;
+        renderAuditLogList(adminAuditLogList, data.items, "admin.auditLogEmpty");
+        renderPager(pagerHostFor(adminAuditLogList), data, loadAdminAuditLog);
       })
-      .then(function (list) { renderAuditLogList(adminAuditLogList, list || [], "admin.auditLogEmpty"); })
       .catch(function (err) { showToast(err.message); });
   }
 
@@ -2745,10 +2819,7 @@
     Object.keys(panels).forEach(function (key) { panels[key].hidden = key !== activeServerTab; });
     if (activeServerTab === "overview") renderServerOverview(server);
     if (activeServerTab === "players") renderPlayersInto(serverPlayersList, consoles[server.id]);
-    if (activeServerTab === "audit") {
-      renderServerAudit(server);
-      loadActivity();
-    }
+    if (activeServerTab === "audit") loadServerAudit(server);
   }
 
   serverTabs.addEventListener("click", function (event) {
@@ -2856,11 +2927,26 @@
     signals.appendChild(list); serverOverviewContent.appendChild(signals);
   }
 
-  function renderServerAudit(server) {
-    var filtered = lastActivityLog.filter(function (entry) {
+  function loadServerAudit(server, page) {
+    if (serverAuditServerId !== server.id) { serverAuditServerId = server.id; serverAuditPage = 1; }
+    if (page) serverAuditPage = page;
+    // Only used when the API predates ?server_id= and sent everything.
+    var sameServer = function (entry) {
       return entry.kind === "rcon" && (Number(entry.server_id) === Number(server.id) || (!entry.server_id && entry.server_name === server.name));
-    });
-    renderAuditLogList(serverAuditList, filtered, "workspace.auditEmpty");
+    };
+    return fetchLogPage("/api/audit-log", serverAuditPage, ACTIVITY_PER_PAGE, "server_id=" + encodeURIComponent(server.id), sameServer)
+      .then(function (data) {
+        if (serverAuditServerId !== server.id) return; // the user switched servers meanwhile
+        if (!data.items.length && data.page > 1) return loadServerAudit(server, Math.max(1, data.total_pages));
+        serverAuditPage = data.page;
+        renderAuditLogList(serverAuditList, data.items, "workspace.auditEmpty");
+        renderPager(pagerHostFor(serverAuditList), data, function (p) { loadServerAudit(server, p); });
+      })
+      .catch(function () { /* the audit tab simply stays as it was */ });
+  }
+
+  function renderServerAudit(server) {
+    loadServerAudit(server);
   }
 
   function setServerBackground(server) {
@@ -3878,6 +3964,8 @@
     c.historyDraft = "";
   }
 
+  var COMMAND_HISTORY_PER_PAGE = 10;
+
   function renderCommandHistory(c) {
     cmdHistoryPanel.innerHTML = "";
     var entries = c && c.history ? c.history : [];
@@ -3888,11 +3976,14 @@
       cmdHistoryPanel.appendChild(hint);
       return;
     }
+    var totalPages = Math.max(1, Math.ceil(entries.length / COMMAND_HISTORY_PER_PAGE));
+    var historyPage = Math.min(Math.max(1, c.historyPage || 1), totalPages);
+    c.historyPage = historyPage;
     // Most recently sent first. .forEach() (not a for-loop reusing one
     // `var`) so each button's click handler closes over its own `command`
     // — a shared `var` across loop iterations would make every button
     // recall whichever entry the loop last visited, not the one clicked.
-    entries.slice().reverse().forEach(function (command) {
+    entries.slice().reverse().slice((historyPage - 1) * COMMAND_HISTORY_PER_PAGE, historyPage * COMMAND_HISTORY_PER_PAGE).forEach(function (command) {
       var btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = command;
@@ -3907,6 +3998,15 @@
       });
       cmdHistoryPanel.appendChild(btn);
     });
+
+    var pagerHost = document.createElement("div");
+    pagerHost.className = "pager";
+    pagerHost.setAttribute("role", "group");
+    cmdHistoryPanel.appendChild(pagerHost);
+    renderPager(pagerHost, { page: historyPage, total_pages: totalPages, total: entries.length }, function (p) {
+      c.historyPage = p;
+      renderCommandHistory(c);
+    });
   }
 
   cmdHistoryBtn.addEventListener("click", function () {
@@ -3914,7 +4014,11 @@
     cmdTemplatesPanel.hidden = true; // only one of History/Templates open at a time
     moderationRulesPanel.hidden = true;
     cmdHistoryPanel.hidden = !wasHidden;
-    if (wasHidden) renderCommandHistory(consoles[selectedServerId]);
+    if (wasHidden) {
+      var historyConsole = consoles[selectedServerId];
+      if (historyConsole) historyConsole.historyPage = 1; // reopen at the newest commands
+      renderCommandHistory(historyConsole);
+    }
   });
 
   // Shell-style Up/Down recall: Up steps backward through this console's

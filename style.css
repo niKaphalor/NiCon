@@ -496,6 +496,13 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .health-summary { display: block; white-space: nowrap; font-weight: 600; }
 .health-completeness { display: block; color: var(--color-muted); font-size: .7rem; white-space: nowrap; }
 .admin-notifications-list { display: flex; flex-direction: column; gap: 8px; }
+/* Shared pager for every log list (audit logs, command history). */
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
+.pager[hidden] { display: none; }
+.pager .btn-secondary { min-height: 32px; padding: .35rem .8rem; font-size: .8rem; }
+.pager .btn-secondary:disabled { opacity: .4; cursor: not-allowed; }
+.pager-status { color: var(--color-muted); font-size: .78rem; text-align: center; }
+.cmd-history-panel .pager { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--color-border); }
 .page-section > .form-row + .admin-notifications-list { margin-top: 14px; }
 .admin-notification-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--color-border); border-left: 3px solid var(--color-accent); border-radius: var(--radius-md); background: var(--color-surface); }
 .admin-notification-row.type-success { border-left-color: var(--color-success); }

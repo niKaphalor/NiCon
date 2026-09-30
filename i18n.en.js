@@ -13,6 +13,13 @@ window.NICON_I18N_STRINGS.en = {
     faq: "FAQ",
     language: "Language",
   },
+  pager: {
+    label: "Pagination",
+    previous: "Previous",
+    next: "Next",
+    status: "Page {{page}} of {{pages}}",
+    entries: "{{count}} entries",
+  },
   faq: {
     eyebrow: "Help",
     title: "Frequently asked questions",

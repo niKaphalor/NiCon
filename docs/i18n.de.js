@@ -14,6 +14,13 @@ window.NICON_I18N_STRINGS.de = {
     faq: "FAQ",
     language: "Sprache",
   },
+  pager: {
+    label: "Seitennavigation",
+    previous: "Zurück",
+    next: "Weiter",
+    status: "Seite {{page}} von {{pages}}",
+    entries: "{{count}} Einträge",
+  },
   faq: {
     eyebrow: "Hilfe",
     title: "Häufig gestellte Fragen",

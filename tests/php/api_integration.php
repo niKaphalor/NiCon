@@ -350,6 +350,55 @@ try {
     assert_test((int) $pdo->query("SELECT COUNT(*) FROM audit_log WHERE action = 'expired_test_entry'")->fetchColumn() === 0, 'expired audit entry remained in the database');
     assert_test((int) $pdo->query("SELECT COUNT(*) FROM rcon_audit_log WHERE command = 'old'")->fetchColumn() === 0, 'expired RCON audit entry remained in the database');
 
+    // ---- audit-log pagination ---------------------------------------------
+    $insertRcon = $pdo->prepare("INSERT INTO rcon_audit_log
+        (user_id, server_id, username, server_name, command, action, origin, success)
+        VALUES (?, ?, ?, 'Edited GMod', ?, 'command', 'manual', 1)");
+    for ($i = 1; $i <= 4; $i++) {
+        $insertRcon->execute([$aliceId, $serverId, $alice, "page-test-$i"]);
+    }
+
+    [$status, $legacy] = request_json($base, 'GET', '/api/audit-log', null, $aliceToken);
+    assert_test($status === 200 && is_array($legacy) && array_is_list($legacy) && count($legacy) >= 6, 'without pagination parameters the audit log stays a plain array');
+
+    [$status, $page1] = request_json($base, 'GET', '/api/audit-log?page=1&per_page=3', null, $aliceToken);
+    assert_test($status === 200 && count($page1['items'] ?? []) === 3 && $page1['page'] === 1 && $page1['per_page'] === 3, 'first audit page has the wrong shape');
+    $total = (int) $page1['total'];
+    assert_test($total === count($legacy), "audit total ($total) must equal the number of entries (" . count($legacy) . ')');
+    assert_test($page1['total_pages'] === (int) ceil($total / 3), 'audit total_pages is wrong');
+
+    $collected = [];
+    for ($pageNo = 1; $pageNo <= $page1['total_pages']; $pageNo++) {
+        [$status, $pageData] = request_json($base, 'GET', "/api/audit-log?page=$pageNo&per_page=3", null, $aliceToken);
+        assert_test($status === 200, "audit page $pageNo failed");
+        foreach ($pageData['items'] as $item) $collected[] = $item;
+    }
+    assert_test(json_encode($collected) === json_encode($legacy), 'walking every page must reproduce the full, identically ordered list without gaps or duplicates');
+
+    [$status, $beyond] = request_json($base, 'GET', '/api/audit-log?page=999&per_page=3', null, $aliceToken);
+    assert_test($status === 200 && $beyond['items'] === [] && $beyond['total'] === $total, 'a page past the end must be empty, not an error');
+    [$status, $clamped] = request_json($base, 'GET', '/api/audit-log?page=0&per_page=100000', null, $aliceToken);
+    assert_test($status === 200 && $clamped['page'] === 1 && $clamped['per_page'] === 100, 'page and per_page must be clamped');
+
+    [$status, $perServer] = request_json($base, 'GET', "/api/audit-log?server_id=$serverId&page=1&per_page=100", null, $aliceToken);
+    assert_test($status === 200 && $perServer['total'] >= 5, 'the per-server audit filter lost entries');
+    foreach ($perServer['items'] as $item) {
+        assert_test($item['kind'] === 'rcon' && $item['server_id'] === $serverId, 'the per-server audit filter must only return that server\'s console commands');
+    }
+    [$status, $foreign] = request_json($base, 'GET', "/api/audit-log?server_id=$serverId&page=1&per_page=100", null, $bobToken);
+    assert_test($status === 200 && $foreign['total'] === 0 && $foreign['items'] === [], 'another user must not see a server\'s audit entries');
+
+    [$status, $adminPage] = request_json($base, 'GET', '/api/admin/audit-log?page=1&per_page=2', null, $aliceToken);
+    assert_test($status === 200 && count($adminPage['items']) === 2 && $adminPage['total'] >= $total, 'admin audit log pagination failed');
+    $accountItems = array_values(array_filter($adminPage['items'], static fn(array $i): bool => $i['kind'] === 'account'));
+    assert_test($accountItems === [] || array_key_exists('ip_address', $accountItems[0]), 'the admin view keeps the IP address');
+    [$status] = request_json($base, 'GET', '/api/admin/audit-log?page=1', null, $bobToken);
+    assert_test($status === 403, 'audit log pagination must not bypass the admin check');
+    [$status, $ownPage] = request_json($base, 'GET', '/api/audit-log?page=1&per_page=100', null, $aliceToken);
+    foreach ($ownPage['items'] as $item) {
+        assert_test(!array_key_exists('ip_address', $item), 'a user\'s own activity must never expose IP addresses');
+    }
+
     // ---- password policy, input validation --------------------------------
     $pdo->exec('DELETE FROM rate_limits');
     [$status, $body] = request_json($base, 'POST', '/api/register', [
