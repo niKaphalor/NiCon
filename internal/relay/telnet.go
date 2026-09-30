@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,7 +32,7 @@ type telnetConn struct {
 }
 
 func dialTelnet(host string, port int, password string) (*telnetConn, error) {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), 5*time.Second)
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, strconv.Itoa(port)), 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("telnet: %w", err)
 	}

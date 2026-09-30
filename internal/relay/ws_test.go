@@ -2,7 +2,10 @@ package relay
 
 import "testing"
 
+// TestIsBlockedMetadataHost keeps the original metadata-host cases, now
+// exercised through resolveTarget (the guard connectGame/PublicInfoCheck use).
 func TestIsBlockedMetadataHost(t *testing.T) {
+	withPolicy(t, TargetPolicy{})
 	cases := []struct {
 		host    string
 		blocked bool
@@ -15,20 +18,27 @@ func TestIsBlockedMetadataHost(t *testing.T) {
 		{"[fd00:ec2::254]", true},          // as it'd arrive bracketed in a host:port pair
 		{"fd00:ec2::254", true},
 
-		// Deliberately NOT blocked — localhost/private/LAN game servers are
-		// the documented primary use case, only the specific metadata
-		// endpoints above are denied.
+		// Deliberately NOT blocked in the default (self-hosted) policy —
+		// localhost/private/LAN game servers are the documented primary use
+		// case. Hosted mode blocks these; see netguard_test.go.
 		{"127.0.0.1", false},
 		{"localhost", false},
 		{"192.168.1.50", false},
 		{"10.0.0.5", false},
 		{"example.com", false},
-		{"169.254.169.253", false}, // one bit off from a real blocked address
+
+		// Was "not blocked" when only the exact metadata IPs were denied;
+		// all of 169.254.0.0/16 (link-local) is refused now.
+		{"169.254.169.253", true},
 	}
 
 	for _, c := range cases {
-		if got := isBlockedMetadataHost(c.host); got != c.blocked {
-			t.Errorf("isBlockedMetadataHost(%q) = %v, want %v", c.host, got, c.blocked)
+		if c.host == "example.com" {
+			continue // needs real DNS; resolution errors are not a "blocked" verdict
+		}
+		_, err := resolveTarget(c.host)
+		if got := err != nil; got != c.blocked {
+			t.Errorf("resolveTarget(%q) blocked = %v (err=%v), want %v", c.host, got, err, c.blocked)
 		}
 	}
 }

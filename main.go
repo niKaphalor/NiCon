@@ -77,10 +77,23 @@ func runServer() {
 	addr := fs.String("addr", "localhost:8765", "address to listen on")
 	allowOrigin := fs.String("allow-origin", "https://nikaphalor.github.io,http://localhost:8765",
 		"comma-separated list of origins allowed to open a WebSocket (or call /healthz)")
+	blockPrivate := fs.Bool("block-private-targets", envBool("NICON_BLOCK_PRIVATE_TARGETS"),
+		"hosted mode: refuse loopback/private/CGNAT game-server addresses (default: $NICON_BLOCK_PRIVATE_TARGETS; cloud metadata and link-local addresses are always refused)")
+	targetAllow := fs.String("target-allowlist", os.Getenv("NICON_TARGET_ALLOWLIST"),
+		"comma-separated CIDRs/IPs still allowed when -block-private-targets is set, e.g. 192.168.1.0/24 (default: $NICON_TARGET_ALLOWLIST)")
 	dsn, encKey := dbFlags(fs)
 	fs.Parse(os.Args[1:])
 
 	logger := log.New(os.Stdout, "", log.LstdFlags)
+
+	allow, err := relay.ParseTargetAllowlist(*targetAllow)
+	if err != nil {
+		logger.Fatalf("-target-allowlist: %v", err)
+	}
+	relay.SetTargetPolicy(relay.TargetPolicy{BlockPrivate: *blockPrivate, Allow: allow})
+	if *blockPrivate {
+		logger.Printf("hosted mode: private/loopback targets blocked (%d allowlist entries)", len(allow))
+	}
 
 	st := openStore(*dsn, *encKey)
 	defer st.Close()
@@ -142,6 +155,7 @@ func runServer() {
 	// 2×healthCheckConcurrency, not healthCheckConcurrency as a comment
 	// here used to claim.
 	outboundProbeSem := make(chan struct{}, healthCheckConcurrency)
+	healthBackoff := newProbeBackoff()
 	var healthCheckRunning int32
 	runHealthChecksOnce := func() {
 		if !atomic.CompareAndSwapInt32(&healthCheckRunning, 0, 1) {
@@ -149,7 +163,7 @@ func runServer() {
 			return
 		}
 		defer atomic.StoreInt32(&healthCheckRunning, 0)
-		runHealthChecks(context.Background(), logger, st, outboundProbeSem)
+		runHealthChecks(context.Background(), logger, st, outboundProbeSem, healthBackoff, healthCheckInterval)
 	}
 	go runHealthChecksOnce() // don't wait a full interval after a fresh start for first results
 	healthTicker := time.NewTicker(healthCheckInterval)
@@ -187,6 +201,7 @@ func runServer() {
 	// for Nitrado-synced servers (webspace/handlers/servers.php) — this
 	// just gives every other server the same live data.
 	const publicInfoCheckInterval = 5 * time.Minute
+	publicInfoBackoff := newProbeBackoff()
 	var publicInfoCheckRunning int32
 	runPublicInfoChecksOnce := func() {
 		if !atomic.CompareAndSwapInt32(&publicInfoCheckRunning, 0, 1) {
@@ -194,7 +209,7 @@ func runServer() {
 			return
 		}
 		defer atomic.StoreInt32(&publicInfoCheckRunning, 0)
-		runPublicInfoChecks(context.Background(), logger, st, outboundProbeSem)
+		runPublicInfoChecks(context.Background(), logger, st, outboundProbeSem, publicInfoBackoff, publicInfoCheckInterval)
 	}
 	go runPublicInfoChecksOnce()
 	publicInfoTicker := time.NewTicker(publicInfoCheckInterval)
@@ -241,22 +256,27 @@ func runServer() {
 // sized independently and drifting out of sync if either value changes.
 const healthCheckConcurrency = store.MaxOpenConns / 5
 
-func runHealthChecks(ctx context.Context, logger *log.Logger, st *store.Store, sem chan struct{}) {
+func runHealthChecks(ctx context.Context, logger *log.Logger, st *store.Store, sem chan struct{}, backoff *probeBackoff, interval time.Duration) {
 	servers, err := st.ListServersForHealthCheck(ctx)
 	if err != nil {
 		logger.Printf("health check: list servers: %v", err)
 		return
 	}
+	backoff.prune(serverIDs(servers))
 
 	var wg sync.WaitGroup
 	for _, srv := range servers {
 		srv := srv
+		if !backoff.due(srv.ID) {
+			continue // repeatedly unreachable — see probeBackoff
+		}
 		wg.Add(1)
 		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
 			ok, latencyMs, errMsg := relay.HealthCheck(srv)
+			backoff.record(srv.ID, ok, interval)
 			if err := st.UpdateServerHealth(ctx, srv.ID, ok, latencyMs, errMsg); err != nil {
 				logger.Printf("health check: update server %d: %v", srv.ID, err)
 			}
@@ -272,22 +292,27 @@ func runHealthChecks(ctx context.Context, logger *log.Logger, st *store.Store, s
 // was called with — see healthCheckConcurrency's comment for why sharing
 // it (not just the constant that used to size two separate channels)
 // matters.
-func runPublicInfoChecks(ctx context.Context, logger *log.Logger, st *store.Store, sem chan struct{}) {
+func runPublicInfoChecks(ctx context.Context, logger *log.Logger, st *store.Store, sem chan struct{}, backoff *probeBackoff, interval time.Duration) {
 	servers, err := st.ListServersForPublicInfoCheck(ctx)
 	if err != nil {
 		logger.Printf("public info check: list servers: %v", err)
 		return
 	}
+	backoff.prune(serverIDs(servers))
 
 	var wg sync.WaitGroup
 	for _, srv := range servers {
 		srv := srv
+		if !backoff.due(srv.ID) {
+			continue // repeatedly unreachable — see probeBackoff
+		}
 		wg.Add(1)
 		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
 			online, players, maxPlayers, _ := relay.PublicInfoCheck(srv)
+			backoff.record(srv.ID, online, interval)
 			source := "a2s"
 			if relay.EffectivePublicQueryProtocol(srv) == "minecraft" {
 				source = "mcquery"
@@ -430,4 +455,20 @@ func runSetAdmin(args []string) {
 	} else {
 		fmt.Printf("%q is now an admin\n", username)
 	}
+}
+
+func serverIDs(servers []store.Server) map[int64]bool {
+	ids := make(map[int64]bool, len(servers))
+	for _, srv := range servers {
+		ids[srv.ID] = true
+	}
+	return ids
+}
+
+func envBool(name string) bool {
+	switch strings.ToLower(os.Getenv(name)) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
 }

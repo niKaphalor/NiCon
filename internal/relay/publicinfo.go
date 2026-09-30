@@ -18,9 +18,11 @@ import (
 // own query port is itself a meaningful (negative) sample, not something
 // to silently skip.
 func PublicInfoCheck(srv store.Server) (online bool, players, maxPlayers *int, err error) {
-	if isBlockedMetadataHost(srv.Host) {
-		return false, nil, nil, errors.New("this host is not allowed")
+	pinned, err := resolveTarget(srv.Host)
+	if err != nil {
+		return false, nil, nil, err
 	}
+	srv.Host = pinned
 	queryProtocol := EffectivePublicQueryProtocol(srv)
 	queryPort := srv.Port
 	if srv.QueryPort != nil {

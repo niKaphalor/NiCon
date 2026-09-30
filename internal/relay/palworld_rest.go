@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -36,7 +37,7 @@ type palworldRestConn struct {
 
 func dialPalworldRest(host string, port int, password string) (*palworldRestConn, error) {
 	c := &palworldRestConn{
-		baseURL:  fmt.Sprintf("http://%s:%d/v1/api", host, port),
+		baseURL:  "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/v1/api",
 		password: password,
 		client:   &http.Client{Timeout: 10 * time.Second},
 	}
