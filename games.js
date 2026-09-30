@@ -476,6 +476,13 @@ window.NICON_GAMES.minecraft.backgroundImage = window.NICON_GAMES.minecraft.head
 // renderSupportedGamesList). Current official logo (used since 2021),
 // hotlinked from Wikipedia's own hosted copy of it, not stored here.
 window.NICON_GAMES.minecraft.logoImage = "https://upload.wikimedia.org/wikipedia/en/b/be/Minecraft_game_logo_2023.png";
+// Same wordmark for the server-view header corner (renderHead() in app.js)
+// — deliberately NOT Nitrado's "minecraftbedrock" header art below: Bedrock
+// and Java are different products with incompatible protocols, and NiCon's
+// "Minecraft" (Source-RCON's `list` command) is Java Edition only. Bedrock
+// isn't implemented here at all, so branding this with Bedrock's own art
+// would misrepresent what's actually being managed.
+window.NICON_GAMES.minecraft.headerLogoImage = window.NICON_GAMES.minecraft.logoImage;
 
 // Nitrado's own web interface bundles a per-game header background and a
 // matching wordmark logo, hotlinked here the same way Steam's art is — for
@@ -483,10 +490,9 @@ window.NICON_GAMES.minecraft.logoImage = "https://upload.wikimedia.org/wikipedia
 // in app.js), not the supported-games tile art above (game.logoImage is
 // that tile overlay, Minecraft-only today; headerLogoImage below is a
 // separate field so this doesn't also start showing a tile logo for these
-// 17 games). Nitrado's own slugs are idiosyncratic (csgo rather than cs2,
-// dayzstandalone rather than dayz, arksa/arkse abbreviated,
-// minecraftbedrock the only Minecraft edition with one) and don't cover
-// every game NiCon supports — confirmed by directly requesting each
+// games). Nitrado's own slugs are idiosyncratic (csgo rather than cs2,
+// dayzstandalone rather than dayz, arksa/arkse abbreviated) and don't
+// cover every game NiCon supports — confirmed by directly requesting each
 // candidate slug; a game absent from this list 404s there and keeps its
 // Steam-based background (and no header logo) from the loop above instead
 // of guessing further. `?version=<hash>` is Nitrado's own cache-busting
@@ -503,7 +509,10 @@ var nitradoBackgroundSlugs = {
   soulmask: "soulmask",
   mordhau: "mordhau",
   insurgency: "insurgency",
-  minecraft: "minecraftbedrock",
+  // Deliberately no "minecraft" entry: Nitrado's only art here is for
+  // Bedrock, a different, unimplemented product (see the comment on
+  // window.NICON_GAMES.minecraft.headerLogoImage above) — keeps its own
+  // Mojang key-art background and Wikipedia wordmark logo instead.
   dayz: "dayzstandalone",
   armareforger: "armareforger",
   gmod: "garrysmod",
