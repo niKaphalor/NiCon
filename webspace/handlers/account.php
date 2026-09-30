@@ -51,27 +51,9 @@ function nicon_handle_export_account_data(int $userId): void
     $rulesStmt->execute([$userId]);
     $moderationRules = array_map('nicon_moderation_rule_response', $rulesStmt->fetchAll());
 
-    $accountRowsStmt = $pdo->prepare('
-        SELECT a.action, a.detail, a.created_at, actor.username AS actor_username, target.username AS target_username
-        FROM audit_log a
-        LEFT JOIN users actor ON actor.id = a.user_id
-        LEFT JOIN users target ON target.id = a.target_user_id
-        WHERE a.user_id = ? OR a.target_user_id = ?
-        ORDER BY a.created_at DESC
-        LIMIT ' . NICON_EXPORT_ACTIVITY_LIMIT
-    );
-    $accountRowsStmt->execute([$userId, $userId]);
-    $accountRows = array_map(static function (array $row): array {
-        return [
-            'kind' => 'account',
-            'action' => $row['action'],
-            'detail' => $row['detail'],
-            'actor_username' => $row['actor_username'],
-            'target_username' => $row['target_username'],
-            'created_at' => gmdate('Y-m-d\TH:i:s\Z', strtotime($row['created_at'])),
-        ];
-    }, $accountRowsStmt->fetchAll());
-    $activity = nicon_merge_audit_rows($accountRows, nicon_rcon_audit_rows($userId, NICON_EXPORT_ACTIVITY_LIMIT), NICON_EXPORT_ACTIVITY_LIMIT);
+    // One UNION ALL ... ORDER BY ... LIMIT in the database (same query the
+    // paginated audit log uses) instead of two big reads merged in PHP.
+    [$activity] = nicon_audit_fetch($userId, null, NICON_EXPORT_ACTIVITY_LIMIT, 0, false);
 
     nicon_send_json([
         'exported_at' => gmdate('Y-m-d\TH:i:s\Z'),

@@ -7,12 +7,20 @@ declare(strict_types=1);
 // account's server details).
 function nicon_handle_admin_list_users(int $adminId): void
 {
+    // ?page=/?per_page= paginate (25 per page by default); without them the
+    // whole list is returned as before.
+    $paging = nicon_page_params(25);
+    $limit = '';
+    if ($paging !== null) {
+        [$page, $perPage] = $paging;
+        $limit = ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) (($page - 1) * $perPage);
+    }
     $stmt = nicon_db()->query('
         SELECT u.id, u.username, u.created_at, u.is_admin, COUNT(s.id) AS server_count
         FROM users u
         LEFT JOIN servers s ON s.user_id = u.id
         GROUP BY u.id, u.username, u.created_at, u.is_admin
-        ORDER BY u.created_at DESC');
+        ORDER BY u.created_at DESC, u.id DESC' . $limit);
 
     $users = array_map(static function (array $row): array {
         return [
@@ -24,7 +32,12 @@ function nicon_handle_admin_list_users(int $adminId): void
         ];
     }, $stmt->fetchAll());
 
-    nicon_send_json($users);
+    if ($paging === null) {
+        nicon_send_json($users);
+        return;
+    }
+    $total = (int) nicon_db()->query('SELECT COUNT(*) FROM users')->fetchColumn();
+    nicon_send_json(nicon_page_payload($users, $page, $perPage, $total));
 }
 
 function nicon_handle_admin_delete_user(int $adminId, int $targetId): void

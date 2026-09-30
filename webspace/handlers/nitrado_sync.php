@@ -58,7 +58,6 @@ function nicon_nitrado_cache_get(string $token, string $path): ?array
 function nicon_nitrado_cache_put(string $token, string $path, array $data): void
 {
     $pdo = nicon_db();
-    $pdo->prepare('DELETE FROM nitrado_cache WHERE expires_at <= UTC_TIMESTAMP()')->execute();
     $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     $expiresAt = gmdate('Y-m-d H:i:s', time() + nicon_nitrado_cache_ttl());
     $pdo->prepare('

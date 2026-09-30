@@ -10,6 +10,7 @@ if (PHP_SAPI !== 'cli') {
 
 require_once dirname(__DIR__) . '/lib/config.php';
 require_once dirname(__DIR__) . '/lib/db.php';
+require_once dirname(__DIR__) . '/lib/maintenance.php';
 require_once dirname(__DIR__) . '/lib/crypto.php';
 require_once dirname(__DIR__) . '/handlers/nitrado_sync.php';
 
@@ -48,5 +49,7 @@ foreach ($stmt as $row) {
         fwrite(STDERR, 'server ' . (int) $row['id'] . ': ' . $e->getMessage() . PHP_EOL);
     }
 }
-$pdo->exec("DELETE FROM server_health_samples WHERE sampled_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 90 DAY)");
-fwrite(STDOUT, "sampled $inserted Nitrado server(s)\n");
+// Housekeeping (audit retention, expired caches, rate-limit windows, health
+// samples past 90 days) runs here, in batches, instead of in web requests.
+$cleaned = nicon_run_maintenance(200, true);
+fwrite(STDOUT, "sampled $inserted Nitrado server(s); cleaned " . json_encode($cleaned) . "\n");

@@ -146,7 +146,12 @@ for fleet-level comparison.
 For uninterrupted Nitrado player history, schedule
 `php webspace/cron/sample_nitrado.php` every five minutes in the hosting
 control panel; the command reuses the shared 30–60-second Nitrado cache and
-removes samples older than 90 days.
+also runs the housekeeping (`webspace/lib/maintenance.php`): expired audit
+entries, expired cache and rate-limit rows, and health samples older than 90
+days are deleted there in batches of 1,000 rows, not during web requests.
+Installations without that cron still get a little of it done by a small
+random fraction of requests (`maintenance_probability`, default 2 %, one
+batch per table; `0` disables it).
 On Hetzner Webhosting, open **Settings → Cron Job Manager → Advanced view**
 for the hosting account and add (with the actual FTP login/path):
 
@@ -370,8 +375,14 @@ Once deployed, it serves the same JSON API the relay used to (except
   explicitly allow-listed supported games (empty is allowed, for a plain
   unparsed console). `GET /servers/{id}/health-history` (`range` one of
   `24h`/`7d`/`30d`/`90d`) returns per-sample online/latency/player data
-  plus aggregate uptime%, sample completeness%, and average/peak players
-  — fed by the relay's own RCON health check, the Nitrado sampling cron,
+  plus aggregate uptime%, sample completeness%, and average/peak players.
+  `24h` returns the raw samples; `7d`/`30d` (hourly buckets) and `90d`
+  (daily buckets) are condensed in SQL — a 90-day range is roughly 26,000
+  samples per source, none of which are loaded into PHP any more — and add
+  `resolution_seconds` and a per-bucket `online_ratio` (the Health charts
+  colour a partly-down bucket amber). The statistics are the same as before
+  (per 5-minute slot, relay over other sources for availability, Nitrado over
+  query over browser for players). Fed by the relay's own RCON health check, the Nitrado sampling cron,
   the relay's passive A2S/Minecraft-Query loop (see [Relay](#relay)), and
   `POST /servers/{id}/player-sample` itself, which lets the frontend
   report a live client-observed count (rate-limited to once per 4 minutes
@@ -440,7 +451,12 @@ Once deployed, it serves the same JSON API the relay used to (except
   commands. Without `page`/`per_page` the response is the old plain array
   (newest 100 / 200), so a frontend cached from before still works. The UI
   pages every log list (own activity and per-server audit: 10 per page, admin
-  audit log: 25, console command history: 10).
+  audit log: 25, console command history: 10). The admin lists (`GET /admin/users`, `GET /admin/faq`,
+  `GET /notifications`) take the same `?page=`/`?per_page=` parameters (without
+  them they return the full list as before — everyone's notification bell needs
+  it) and the UI pages them (accounts 25, notifications 10, FAQ 10). The
+  account export now reads its activity section with one `UNION ALL` query
+  instead of two reads merged in PHP.
 - **Admin** (`GET /admin/users`, `DELETE /admin/users/{id}`,
   `POST /admin/users/{id}/recovery-code`): each checks the authenticated
   caller's own `is_admin` flag before doing anything, on top of the usual
@@ -490,9 +506,15 @@ moved to the [Cloud API](#cloud-api-webspace) above. It needs the same
 MariaDB database and encryption key as that API. Live WebSocket requests
 only read sessions and server credentials, while the relay's background
 health loop performs a real authenticated connection check every five
-minutes and writes `health_*` results back to the server row.
+minutes and writes `health_*` results back to the server row. That loop is a
+scheduler (`scheduler.go`), not a batch: every server has its own due time,
+the first probes after a start are spread over a minute, later ones are due
+five minutes (±10 % jitter) after the previous one *finished*, one probe per
+server is in flight at most, a slow server never delays the others, and all
+probes share one bounded worker pool. Servers that keep failing back off (see
+"Hosted mode" above).
 
-A second, independent loop on the same five-minute interval probes every
+A second, independent scheduler on the same interval probes every
 server whose separate public-query configuration is enabled — no RCON
 password required, so it also covers servers that don't have one saved
 yet. `query_protocol` supports `auto`, `a2s`, `minecraft`, and `disabled`;

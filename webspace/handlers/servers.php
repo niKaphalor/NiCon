@@ -86,9 +86,7 @@ function nicon_health_history_cache_get(int $serverId, string $range): ?array
 function nicon_health_history_cache_put(int $serverId, string $range, array $data): void
 {
     $pdo = nicon_db();
-    // Opportunistic cleanup, same reasoning as nitrado_cache_put in
-    // nitrado_sync.php: no persistent PHP process to run this on a timer.
-    $pdo->prepare('DELETE FROM health_history_cache WHERE expires_at <= UTC_TIMESTAMP()')->execute();
+    // Expired rows are removed by lib/maintenance.php, not on every write.
     $expiresAt = gmdate('Y-m-d H:i:s', time() + NICON_HEALTH_HISTORY_CACHE_TTL);
     $pdo->prepare('
         INSERT INTO health_history_cache (server_id, range_key, response_json, expires_at)
@@ -123,6 +121,19 @@ function nicon_handle_server_health_history(int $userId, int $serverId): void
     }
 
     $days = $ranges[$range];
+    $expected = $days * 24 * 12;
+
+    // 24 hours: at most a few hundred rows, sent as they are (chart + the
+    // "latest sample" the status panel reads). Longer ranges would be tens of
+    // thousands of rows per source (90 days of 5-minute samples is 25,920), so
+    // they are condensed in SQL — never loaded row by row into PHP.
+    if ($days > 1) {
+        $response = nicon_health_history_aggregated($pdo, $serverId, $range, $days, $expected);
+        nicon_health_history_cache_put($serverId, $range, $response);
+        nicon_send_json($response);
+        return;
+    }
+
     $stmt = $pdo->prepare("
         SELECT sampled_at, online, latency_ms, player_current, player_max, source
         FROM server_health_samples
@@ -166,7 +177,6 @@ function nicon_handle_server_health_history(int $userId, int $serverId): void
     $playersCount = count($playerValues);
     $playersTotal = array_sum($playerValues);
     $playersPeak = $playersCount ? max($playerValues) : null;
-    $expected = $ranges[$range] * 24 * 12;
     $response = [
         'range' => $range,
         'uptime_percent' => $availabilityCount ? round($online * 100 / $availabilityCount, 2) : null,
@@ -177,6 +187,114 @@ function nicon_handle_server_health_history(int $userId, int $serverId): void
     ];
     nicon_health_history_cache_put($serverId, $range, $response);
     nicon_send_json($response);
+}
+
+// nicon_health_history_aggregated answers the 7d/30d/90d ranges with the same
+// statistics the raw path computes, but derived in SQL, plus a condensed
+// series: hourly buckets for 7d/30d, daily buckets for 90d.
+//
+// Statistics are per 5-minute bucket with a source priority, exactly as in
+// the raw path: availability takes the relay's own check over any other
+// source and ignores browser ("client") samples; player counts prefer Nitrado
+// over A2S/Minecraft query over the browser over anything else. (Where a
+// 5-minute bucket holds two rows of the SAME priority, SQL takes the online /
+// higher one instead of the first — irrelevant with one sampler per source.)
+//
+// Response extras: resolution_seconds, and per sample online_ratio (share of
+// the bucket's 5-minute slots that were online). `online` stays a boolean
+// (ratio >= 0.5) for consumers that only know that. A bucket with player
+// data but no availability data carries source "client", which every
+// consumer already excludes from availability charts.
+function nicon_health_history_aggregated(PDO $pdo, int $serverId, string $range, int $days, int $expected): array
+{
+    $bucketSeconds = $days > 30 ? 86400 : 3600;
+    $slots = intdiv($bucketSeconds, 300);
+    $epoch = "TIMESTAMPDIFF(SECOND, '1970-01-01 00:00:00', sampled_at) DIV 300";
+    $since = 'sampled_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ' . (int) $days . ' DAY)';
+
+    $availability = $pdo->prepare("
+        SELECT slot DIV $slots AS bkt, COUNT(*) AS n, SUM(pk % 2) AS up, AVG(lat) AS lat
+        FROM (
+            SELECT $epoch AS slot,
+                   MAX((CASE WHEN source = 'relay' THEN 20 ELSE 10 END) * 2 + online) AS pk,
+                   AVG(CASE WHEN source = 'relay' AND online = 1 THEN latency_ms END) AS lat
+            FROM server_health_samples
+            WHERE server_id = ? AND $since AND source <> 'client'
+            GROUP BY slot
+        ) slots
+        GROUP BY bkt ORDER BY bkt
+    ");
+    $availability->execute([$serverId]);
+
+    $players = $pdo->prepare("
+        SELECT slot DIV $slots AS bkt, COUNT(*) AS n, SUM(pk % 1000000) AS total, MAX(pk % 1000000) AS peak, MAX(pmax) AS pmax
+        FROM (
+            SELECT $epoch AS slot,
+                   MAX((CASE source WHEN 'nitrado' THEN 40 WHEN 'a2s' THEN 30 WHEN 'mcquery' THEN 30 WHEN 'client' THEN 20 ELSE 10 END) * 1000000 + player_current) AS pk,
+                   MAX(player_max) AS pmax
+            FROM server_health_samples
+            WHERE server_id = ? AND $since AND player_current IS NOT NULL
+            GROUP BY slot
+        ) slots
+        GROUP BY bkt ORDER BY bkt
+    ");
+    $players->execute([$serverId]);
+
+    $series = [];
+    $availabilityCount = 0;
+    $onlineCount = 0;
+    foreach ($availability as $row) {
+        $n = (int) $row['n'];
+        $up = (int) $row['up'];
+        $availabilityCount += $n;
+        $onlineCount += $up;
+        $series[(int) $row['bkt']] = [
+            'online_ratio' => round($up / $n, 3),
+            'latency_ms' => $row['lat'] === null ? null : (int) round((float) $row['lat']),
+        ];
+    }
+    $playersCount = 0;
+    $playersTotal = 0;
+    $playersPeak = null;
+    $playerSeries = [];
+    foreach ($players as $row) {
+        $n = (int) $row['n'];
+        $playersCount += $n;
+        $playersTotal += (int) $row['total'];
+        $playersPeak = max($playersPeak ?? 0, (int) $row['peak']);
+        $playerSeries[(int) $row['bkt']] = [
+            'players' => (int) round((int) $row['total'] / $n),
+            'players_max' => $row['pmax'] === null ? null : (int) $row['pmax'],
+        ];
+    }
+
+    $samples = [];
+    $buckets = array_unique(array_merge(array_keys($series), array_keys($playerSeries)));
+    sort($buckets);
+    foreach ($buckets as $bkt) {
+        $a = $series[$bkt] ?? null;
+        $p = $playerSeries[$bkt] ?? null;
+        $ratio = $a === null ? 1.0 : $a['online_ratio'];
+        $samples[] = [
+            'at' => gmdate('Y-m-d\TH:i:s\Z', $bkt * $bucketSeconds),
+            'online' => $ratio >= 0.5,
+            'online_ratio' => $ratio,
+            'latency_ms' => $a['latency_ms'] ?? null,
+            'players' => $p['players'] ?? null,
+            'players_max' => $p['players_max'] ?? null,
+            'source' => $a === null ? 'client' : 'aggregate',
+        ];
+    }
+
+    return [
+        'range' => $range,
+        'resolution_seconds' => $bucketSeconds,
+        'uptime_percent' => $availabilityCount ? round($onlineCount * 100 / $availabilityCount, 2) : null,
+        'sample_completeness_percent' => round(min(100, $availabilityCount * 100 / $expected), 2),
+        'players_average' => $playersCount ? round($playersTotal / $playersCount, 1) : null,
+        'players_peak' => $playersPeak,
+        'samples' => $samples,
+    ];
 }
 
 function nicon_handle_server_player_sample(int $userId, int $serverId): void

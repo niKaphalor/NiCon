@@ -32,6 +32,8 @@ async function installBackend(page, initialServers = []) {
     rules: [],
     commands: [],
     commandAudits: [],
+    admin: false,       // true: the operator account is an admin
+    adminUsersTotal: 30,
     pagedAuditTotal: 0, // >0: /api/audit-log answers with the paginated shape
     auditRequests: [],
     connectedServerIds: [],
@@ -72,7 +74,7 @@ async function installBackend(page, initialServers = []) {
 
     if (method === "GET" && (path === "/api/healthz" || path === "/healthz")) return json({ ok: true });
     if (method === "POST" && path === "/api/login") {
-      if (body.username === "operator" && body.password === "correct horse") return json({ token: "browser-token", is_admin: false });
+      if (body.username === "operator" && body.password === "correct horse") return json({ token: "browser-token", is_admin: !!state.admin });
       return json({ error: "invalid username or password" }, 401);
     }
     if (method === "POST" && path === "/api/logout") return route.fulfill({ status: 204 });
@@ -128,6 +130,21 @@ async function installBackend(page, initialServers = []) {
         ? [{ question: "Frage eins", answer: "Antwort eins" }, { question: "Frage zwei", answer: "Antwort zwei" }]
         : [{ question: "Question one", answer: "Answer one" }, { question: "Question two", answer: "Answer two" }]);
     }
+    if (method === "GET" && path === "/api/admin/users") {
+      const all = Array.from({ length: state.adminUsersTotal }, (_, i) => ({
+        id: i + 1, username: `account${i}`, created_at: "2026-09-01T10:00:00Z", is_admin: i === 0, server_count: i % 3,
+      }));
+      if (!url.searchParams.has("page")) return json(all);
+      const pageNo = Number(url.searchParams.get("page"));
+      const perPage = Number(url.searchParams.get("per_page"));
+      return json({ items: all.slice((pageNo - 1) * perPage, pageNo * perPage), page: pageNo, per_page: perPage, total: all.length, total_pages: Math.ceil(all.length / perPage) });
+    }
+    // An admin FAQ endpoint that ignores pagination and sends one plain array.
+    if (method === "GET" && path === "/api/admin/faq") return json(Array.from({ length: 14 }, (_, i) => ({
+      id: i + 1, question_de: `Frage ${i}`, answer_de: "Antwort", question_en: `Question ${i}`, answer_en: "Answer",
+      sort_order: i, is_published: true, updated_at: "2026-09-01T10:00:00Z",
+    })));
+    if (method === "GET" && path === "/api/admin/audit-log") return json([]);
     if (method === "GET" && path === "/api/notifications") return json([]);
     if (method === "GET" && path === "/api/command-templates") return json(state.templates);
     if (method === "POST" && path === "/api/command-templates") {
@@ -535,6 +552,32 @@ test("an API that predates pagination (one plain array) is still paged in the UI
   await pager.getByRole("button", { name: /Next/ }).click();
   await pager.getByRole("button", { name: /Next/ }).click();
   await expect(page.locator("#activity-list .admin-notification-row")).toHaveCount(3);
+});
+
+test("admin lists are paginated (server-side pages for users, client-side for an API that sends everything)", async ({ page }) => {
+  const state = await installBackend(page, []);
+  state.admin = true;
+  await login(page);
+  await page.locator("#admin-nav-btn").click();
+  await expect(page.locator("#view-admin")).toBeVisible();
+
+  const userRows = page.locator("#admin-users-body tr");
+  const userPager = page.locator("#view-admin .table-shell + .pager");
+  await expect(userRows).toHaveCount(25);
+  await expect(userPager).toContainText("Page 1 of 2");
+  await expect(userPager).toContainText("30 entries");
+  await userPager.getByRole("button", { name: /Next/ }).click();
+  await expect(userRows).toHaveCount(5);
+  await expect(userRows.first()).toContainText("account25");
+  await userPager.getByRole("button", { name: /Previous/ }).click();
+  await expect(userRows).toHaveCount(25);
+
+  const faqRows = page.locator("#admin-faq-list .faq-admin-row");
+  const faqPager = page.locator("#admin-faq-list + .pager");
+  await expect(faqRows).toHaveCount(10);
+  await expect(faqPager).toContainText("Page 1 of 2");
+  await faqPager.getByRole("button", { name: /Next/ }).click();
+  await expect(faqRows).toHaveCount(4);
 });
 
 test("signed in, FAQ sits between Settings and Admin and Servers returns to the console", async ({ page }) => {

@@ -39,6 +39,13 @@ return [
     // is written or viewed. The default policy is six months.
     'audit_retention_days' => 180,
 
+    // Housekeeping (expired audit rows, caches, rate-limit windows) is done
+    // by webspace/cron/sample_nitrado.php every time it runs. Installations
+    // without that cron fall back to doing a little of it during ordinary
+    // requests: this is the chance (0-1) that a request does one small batch.
+    // 0 turns the fallback off.
+    'maintenance_probability' => 0.02,
+
     // Reject new passwords found in known data breaches, via the Have I
     // Been Pwned range API (k-anonymity: only the first 5 characters of the
     // password's SHA-1 leave this server, never the password). Off by
