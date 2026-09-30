@@ -253,8 +253,8 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   expect(state.servers.find((item) => item.name === "Manual 7DTD")).toMatchObject({ game: "7 Days to Die", protocol: "telnet", query_protocol: "a2s", query_port: 26900 });
 
   await page.locator(".server-row", { hasText: "Manual 7DTD" }).click();
-  await expect(page.locator("#content")).toHaveAttribute("style", /apps\/251570\/page_bg_generated_v6b\.jpg/);
-  await expect.poll(() => page.locator("#head").evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).toContain("apps/251570/page_bg_generated_v6b.jpg");
+  await expect(page.locator("#content")).toHaveAttribute("style", /apps\/251570\/page_bg_raw\.jpg/);
+  await expect.poll(() => page.locator("#head").evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).toContain("apps/251570/page_bg_raw.jpg");
   await expect(page.locator('[data-server-tab="console"]')).toHaveAttribute("aria-selected", "true");
   await page.locator("#head .server-actions-menu summary").click();
   await page.locator("#head .server-menu-action", { hasText: "Edit" }).click();
