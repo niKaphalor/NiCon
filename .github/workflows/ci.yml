@@ -168,6 +168,18 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
+  # The relay image is what actually gets deployed, and .dockerignore is an
+  # allowlist: a new root-level .go file once went missing from the build
+  # context, which no other job noticed (`go build` on the checkout is fine).
+  docker-build:
+    name: Build the relay Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: docker build
+        run: docker build -t nicon-relay:ci .
+
   browser:
     name: Browser end-to-end tests
     runs-on: ubuntu-latest
