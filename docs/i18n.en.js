@@ -403,9 +403,11 @@ window.NICON_I18N_STRINGS.en = {
     nitradoActionSent: "Nitrado {{action}} request sent.",
   },
   welcome: {
+    eyebrow: "Get started",
     title: "Welcome to NiCon",
     gamesTitle: "Supported games",
-    gamesHint: "The top badge shows what the server needs; the bottom badge shows whether the integration has been tested against a live server.",
+    gamesHint: "Each game shows what the server needs and whether the integration has been tested against a live server.",
+    gamesCount: "{{count}} games",
     tested: "Live tested",
     untested: "Not live tested",
     integration: {

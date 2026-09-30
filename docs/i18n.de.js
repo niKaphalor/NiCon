@@ -406,7 +406,9 @@ window.NICON_I18N_STRINGS.de = {
   welcome: {
     title: "Willkommen bei NiCon",
     gamesTitle: "Unterstützte Spiele",
-    gamesHint: "Die obere Markierung zeigt, was du am Server einrichten musst; die untere, ob die Integration bereits live gegen einen echten Server getestet wurde.",
+    eyebrow: "Los geht’s",
+    gamesHint: "Jedes Spiel zeigt, was du am Server einrichten musst und ob die Integration bereits live gegen einen echten Server getestet wurde.",
+    gamesCount: "{{count}} Spiele",
     tested: "Live getestet",
     untested: "Nicht live getestet",
     integration: {
