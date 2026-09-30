@@ -14,8 +14,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -140,39 +138,31 @@ func runServer() {
 	}()
 
 	// Active, server-side health checking: a real RCON connect attempt
-	// against every stored server with a password set, every
+	// against every stored server with a password set, roughly every
 	// healthCheckInterval, regardless of whether any browser has that
 	// server's console open. Results land in servers.health_* (see
 	// internal/store/store.go's migrations) for the Cloud API to serve
-	// alongside the rest of a server's data. healthCheckRunning guards
-	// against a cycle still running into the next tick (a lot of servers,
-	// or several slow/unresponsive ones) overlapping with itself.
+	// alongside the rest of a server's data.
+	//
+	// Each server has its own due time (see probeScheduler): probes are spread
+	// out with jitter instead of firing in one batch, a slow server never
+	// holds up the others, and unreachable servers back off (probeBackoff).
 	const healthCheckInterval = 5 * time.Minute
-	// Shared by both this loop and the public-info one below: they're two
-	// independent tickers (each fires its own immediate first run at
-	// startup) probing possibly-overlapping servers, so without a shared
-	// pool the real worst-case concurrent outbound connections/DB writes is
-	// 2×healthCheckConcurrency, not healthCheckConcurrency as a comment
-	// here used to claim.
+	// One worker pool shared by this scheduler and the public-info one below,
+	// so the real worst-case number of concurrent outbound connections/DB
+	// writes is healthCheckConcurrency, not twice that.
 	outboundProbeSem := make(chan struct{}, healthCheckConcurrency)
-	healthBackoff := newProbeBackoff()
-	var healthCheckRunning int32
-	runHealthChecksOnce := func() {
-		if !atomic.CompareAndSwapInt32(&healthCheckRunning, 0, 1) {
-			logger.Print("health check: previous cycle still running, skipping this tick")
-			return
-		}
-		defer atomic.StoreInt32(&healthCheckRunning, 0)
-		runHealthChecks(context.Background(), logger, st, outboundProbeSem, healthBackoff, healthCheckInterval)
-	}
-	go runHealthChecksOnce() // don't wait a full interval after a fresh start for first results
-	healthTicker := time.NewTicker(healthCheckInterval)
-	defer healthTicker.Stop()
-	go func() {
-		for range healthTicker.C {
-			runHealthChecksOnce()
-		}
-	}()
+	rootCtx, cancelBackground := context.WithCancel(context.Background())
+	defer cancelBackground()
+	healthScheduler := newProbeScheduler("health check", healthCheckInterval, st.ListServersForHealthCheck,
+		func(ctx context.Context, srv store.Server) bool {
+			ok, latencyMs, errMsg := relay.HealthCheck(srv)
+			if err := st.UpdateServerHealth(ctx, srv.ID, ok, latencyMs, errMsg); err != nil {
+				logger.Printf("health check: update server %d: %v", srv.ID, err)
+			}
+			return ok
+		}, outboundProbeSem, logger)
+	go healthScheduler.Run(rootCtx)
 	// Five-minute raw samples are retained for 90 days. Cleanup runs once on
 	// startup and daily afterwards; this covers every fixed UI range without
 	// allowing an unbounded telemetry table.
@@ -201,24 +191,19 @@ func runServer() {
 	// for Nitrado-synced servers (webspace/handlers/servers.php) — this
 	// just gives every other server the same live data.
 	const publicInfoCheckInterval = 5 * time.Minute
-	publicInfoBackoff := newProbeBackoff()
-	var publicInfoCheckRunning int32
-	runPublicInfoChecksOnce := func() {
-		if !atomic.CompareAndSwapInt32(&publicInfoCheckRunning, 0, 1) {
-			logger.Print("public info check: previous cycle still running, skipping this tick")
-			return
-		}
-		defer atomic.StoreInt32(&publicInfoCheckRunning, 0)
-		runPublicInfoChecks(context.Background(), logger, st, outboundProbeSem, publicInfoBackoff, publicInfoCheckInterval)
-	}
-	go runPublicInfoChecksOnce()
-	publicInfoTicker := time.NewTicker(publicInfoCheckInterval)
-	defer publicInfoTicker.Stop()
-	go func() {
-		for range publicInfoTicker.C {
-			runPublicInfoChecksOnce()
-		}
-	}()
+	publicInfoScheduler := newProbeScheduler("public info check", publicInfoCheckInterval, st.ListServersForPublicInfoCheck,
+		func(ctx context.Context, srv store.Server) bool {
+			online, players, maxPlayers, _ := relay.PublicInfoCheck(srv)
+			source := "a2s"
+			if relay.EffectivePublicQueryProtocol(srv) == "minecraft" {
+				source = "mcquery"
+			}
+			if err := st.UpdateServerPlayerSample(ctx, srv.ID, online, players, maxPlayers, source); err != nil {
+				logger.Printf("public info check: update server %d: %v", srv.ID, err)
+			}
+			return online
+		}, outboundProbeSem, logger)
+	go publicInfoScheduler.Run(rootCtx)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -239,8 +224,8 @@ func runServer() {
 }
 
 // healthCheckConcurrency bounds how many outbound probes — across BOTH the
-// RCON health-check loop and the public-info loop combined, via the shared
-// semaphore each is called with (see runServer's outboundProbeSem) — run
+// RCON health-check scheduler and the public-info one combined, via the
+// shared semaphore each is given (see runServer's outboundProbeSem) — run
 // at once. Each protocol's dial has its own timeout (3-45s depending on
 // protocol), so checking a large list fully sequentially could take a
 // while; this caps how many connections (and, transiently, open RCON
@@ -255,75 +240,6 @@ func runServer() {
 // else share that same pool, so this stays well under it instead of being
 // sized independently and drifting out of sync if either value changes.
 const healthCheckConcurrency = store.MaxOpenConns / 5
-
-func runHealthChecks(ctx context.Context, logger *log.Logger, st *store.Store, sem chan struct{}, backoff *probeBackoff, interval time.Duration) {
-	servers, err := st.ListServersForHealthCheck(ctx)
-	if err != nil {
-		logger.Printf("health check: list servers: %v", err)
-		return
-	}
-	backoff.prune(serverIDs(servers))
-
-	var wg sync.WaitGroup
-	for _, srv := range servers {
-		srv := srv
-		if !backoff.due(srv.ID) {
-			continue // repeatedly unreachable — see probeBackoff
-		}
-		wg.Add(1)
-		sem <- struct{}{}
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }()
-			ok, latencyMs, errMsg := relay.HealthCheck(srv)
-			backoff.record(srv.ID, ok, interval)
-			if err := st.UpdateServerHealth(ctx, srv.ID, ok, latencyMs, errMsg); err != nil {
-				logger.Printf("health check: update server %d: %v", srv.ID, err)
-			}
-		}()
-	}
-	wg.Wait()
-}
-
-// runPublicInfoChecks probes every server with an enabled public query
-// configuration (see internal/relay's PublicInfoCheck),
-// regardless of whether it has a stored RCON password — see
-// ListServersForPublicInfoCheck. sem is the same channel runHealthChecks
-// was called with — see healthCheckConcurrency's comment for why sharing
-// it (not just the constant that used to size two separate channels)
-// matters.
-func runPublicInfoChecks(ctx context.Context, logger *log.Logger, st *store.Store, sem chan struct{}, backoff *probeBackoff, interval time.Duration) {
-	servers, err := st.ListServersForPublicInfoCheck(ctx)
-	if err != nil {
-		logger.Printf("public info check: list servers: %v", err)
-		return
-	}
-	backoff.prune(serverIDs(servers))
-
-	var wg sync.WaitGroup
-	for _, srv := range servers {
-		srv := srv
-		if !backoff.due(srv.ID) {
-			continue // repeatedly unreachable — see probeBackoff
-		}
-		wg.Add(1)
-		sem <- struct{}{}
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }()
-			online, players, maxPlayers, _ := relay.PublicInfoCheck(srv)
-			backoff.record(srv.ID, online, interval)
-			source := "a2s"
-			if relay.EffectivePublicQueryProtocol(srv) == "minecraft" {
-				source = "mcquery"
-			}
-			if err := st.UpdateServerPlayerSample(ctx, srv.ID, online, players, maxPlayers, source); err != nil {
-				logger.Printf("public info check: update server %d: %v", srv.ID, err)
-			}
-		}()
-	}
-	wg.Wait()
-}
 
 func runAddUser(args []string) {
 	fs := flag.NewFlagSet("nicon-relay adduser", flag.ExitOnError)
@@ -455,14 +371,6 @@ func runSetAdmin(args []string) {
 	} else {
 		fmt.Printf("%q is now an admin\n", username)
 	}
-}
-
-func serverIDs(servers []store.Server) map[int64]bool {
-	ids := make(map[int64]bool, len(servers))
-	for _, srv := range servers {
-		ids[srv.ID] = true
-	}
-	return ids
 }
 
 func envBool(name string) bool {
