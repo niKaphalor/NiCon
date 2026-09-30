@@ -73,7 +73,9 @@ hands-off production control plane.
    choose the matching protocol and player parser. Servers you add belong to
    your account only. Their name, address, port, game, protocol, and optional
    replacement RCON password can be edited later from the server header's
-   **More actions** menu.
+   **More actions** menu. The Nitrado token itself can also be saved,
+   replaced, or forgotten later from **Settings → Nitrado**, without
+   reopening this modal.
 5. Click **Connect** on a server to open its console — this is the one
    action that needs the **relay** running. For recognized games, the
    player list is queried automatically and refreshed every 10 seconds
@@ -728,8 +730,11 @@ register. The privacy policy documents the current account/server data,
 encrypted credentials, macros and moderation rules, security audit
 records/IP addresses, contact-form delivery, browser-local preferences,
 Nitrado and Steam API flows, the short-lived Nitrado cache, Nitrado-hosted
-game icons, locally served Inter fonts, PWA app-shell caching, audit
-retention, and self-service deletion behavior. Adjust it if a fork changes
+game icons, Mojang- and Wikimedia-hosted Minecraft artwork, locally served
+Inter fonts, PWA app-shell caching, audit retention, and self-service
+deletion and data-export behavior (**Settings → Export my data**, the
+Art. 15/20 GDPR access/portability path — see
+[Cloud API (`webspace/`)](#cloud-api-webspace)). Adjust it if a fork changes
 any data flow or hosting provider. It is project documentation, not a
 substitute for legal review for a specific deployment.
 
