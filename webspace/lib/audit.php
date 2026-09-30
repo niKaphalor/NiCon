@@ -16,8 +16,15 @@ function nicon_audit_cleanup(): void
     if ($done) return;
     $done = true;
     $days = nicon_audit_retention_days();
-    nicon_db()->exec("DELETE FROM audit_log WHERE created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL $days DAY)");
-    nicon_db()->exec("DELETE FROM rcon_audit_log WHERE created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL $days DAY)");
+    $pdo = nicon_db();
+    // Bound parameter, not string-interpolated — $days is always this
+    // instance's own clamped config value today, never attacker input, but
+    // this was the one place in webspace/ that broke the otherwise
+    // consistently-parameterized-query discipline every other handler
+    // follows; keeping it that way only by accident isn't worth the risk
+    // if this function's input source ever changes.
+    $pdo->prepare('DELETE FROM audit_log WHERE created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? DAY)')->execute([$days]);
+    $pdo->prepare('DELETE FROM rcon_audit_log WHERE created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? DAY)')->execute([$days]);
 }
 
 // nicon_audit_log records an admin action or a security-relevant account

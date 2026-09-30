@@ -6,3 +6,11 @@
 /node_modules/
 /playwright-report/
 /test-results/
+# Defense-in-depth against a real production DB dump ending up in a commit
+# (this already happened once this session — never staged, purely by
+# operator diligence, not because anything stopped it). Doesn't affect the
+# one .sql file actually meant to be tracked (webspace/schema.sql) — an
+# already-tracked file stays tracked regardless of a later-added ignore
+# rule; this only keeps a NEW .sql file from being swept in by `git add -A`.
+*.sql
+!/webspace/schema.sql
