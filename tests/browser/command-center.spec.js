@@ -111,6 +111,11 @@ async function installBackend(page, initialServers = []) {
       server_name: state.servers.find((item) => item.id === entry.serverId)?.name || "Server",
       created_at: new Date(Date.now() + index).toISOString(),
     })));
+    if (method === "GET" && path === "/api/faq") {
+      return json(url.searchParams.get("lang") === "de"
+        ? [{ question: "Frage eins", answer: "Antwort eins" }, { question: "Frage zwei", answer: "Antwort zwei" }]
+        : [{ question: "Question one", answer: "Answer one" }, { question: "Question two", answer: "Answer two" }]);
+    }
     if (method === "GET" && path === "/api/notifications") return json([]);
     if (method === "GET" && path === "/api/command-templates") return json(state.templates);
     if (method === "POST" && path === "/api/command-templates") {
@@ -376,6 +381,8 @@ test("all public pages share the same responsive design shell", async ({ page })
     await expect(page.locator(".legal-card")).toBeVisible();
     await expect(page.locator(".legal-page-toolbar .lang-switch")).toBeVisible();
     await expect(page.locator(".site-footer a[aria-current=page]")).toHaveText(activeLabel);
+    // The FAQ is part of the app, not of the legal/support pages.
+    await expect(page.locator('.public-nav a[href*="faq"], .site-footer a[href*="faq"]')).toHaveCount(0);
   }
 
   await page.setViewportSize({ width: 320, height: 720 });
@@ -387,6 +394,64 @@ test("all public pages share the same responsive design shell", async ({ page })
   }));
   expect(layout.bodyWidth).toBeLessThanOrEqual(layout.viewportWidth);
   expect(layout.cardRight).toBeLessThanOrEqual(layout.viewportWidth);
+});
+
+test("FAQ is a main-navigation view of the app, not a legal page", async ({ page }) => {
+  await installBackend(page, []);
+
+  // Signed out: the FAQ is public, reachable from the main navigation, and
+  // the footer only carries the legal pages.
+  await page.goto("/index.html");
+  await expect(page.locator(".site-footer a[href*='faq']")).toHaveCount(0);
+  await expect(page.locator(".topbar-nav #nav-faq-btn")).toBeVisible();
+  await page.locator("#nav-faq-btn").click();
+  await expect(page.locator("#view-faq")).toBeVisible();
+  await expect(page.locator("#view-login")).toBeHidden();
+  await expect(page.locator("#nav-faq-btn")).toHaveAttribute("aria-current", "page");
+  await expect(page).toHaveURL(/#faq$/);
+  await expect(page.locator("#faq-list .faq-item")).toHaveCount(2);
+  await expect(page.locator("#faq-list .faq-item").first()).toContainText("Question one");
+  await expect(page.locator("#faq-list .faq-item").first()).toHaveAttribute("open", "");
+
+  // Switching language reloads the entries in that language.
+  await page.evaluate(() => window.NICON_I18N.setLang("de"));
+  await expect(page.locator("#faq-list .faq-item").first()).toContainText("Frage eins");
+  await expect(page.locator("#view-faq h1")).toHaveText("Häufig gestellte Fragen");
+  await page.evaluate(() => window.NICON_I18N.setLang("en"));
+
+  // The wordmark leaves the FAQ again and clears the #faq hash.
+  await page.locator(".wordmark").click();
+  await expect(page.locator("#view-faq")).toBeHidden();
+  await expect(page.locator("#view-login")).toBeVisible();
+  expect(new URL(page.url()).hash).toBe("");
+
+  // Deep link.
+  await page.goto("/index.html#faq");
+  await expect(page.locator("#view-faq")).toBeVisible();
+  await expect(page.locator("#faq-list .faq-item")).toHaveCount(2);
+
+  // The old standalone pages redirect into the app, keeping the language.
+  await page.goto("/faq.html");
+  await expect(page).toHaveURL(/index\.html#faq$/);
+  await expect(page.locator("#view-faq")).toBeVisible();
+  await page.goto("/faq.de.html");
+  await expect(page).toHaveURL(/index\.html\?lang=de#faq$/);
+  await expect(page.locator("#view-faq h1")).toHaveText("Häufig gestellte Fragen");
+  await expect(page.locator("#faq-list .faq-item").first()).toContainText("Frage eins");
+});
+
+test("signed in, FAQ sits between Settings and Admin and Servers returns to the console", async ({ page }) => {
+  await installBackend(page, []);
+  await login(page);
+  const labels = await page.locator(".topbar-nav .navlink:visible").allTextContents();
+  expect(labels.indexOf("FAQ")).toBe(labels.indexOf("Settings") + 1);
+  await page.locator("#nav-faq-btn").click();
+  await expect(page.locator("#view-faq")).toBeVisible();
+  await expect(page.locator("#view-app")).toBeHidden();
+  await page.locator("#nav-servers-btn").click();
+  await expect(page.locator("#view-app")).toBeVisible();
+  await expect(page.locator("#view-faq")).toBeHidden();
+  expect(new URL(page.url()).hash).toBe("");
 });
 
 test("7 Days to Die player parser ignores the total summary", async ({ page }) => {

@@ -14,6 +14,13 @@ window.NICON_I18N_STRINGS.de = {
     faq: "FAQ",
     language: "Sprache",
   },
+  faq: {
+    eyebrow: "Hilfe",
+    title: "Häufig gestellte Fragen",
+    intro: "Einrichtung, Kompatibilität, Sicherheit und die Details, die beim Verbinden eines Spieleservers häufig unklar sind.",
+    empty: "Derzeit sind keine FAQ-Einträge veröffentlicht.",
+    error: "Die FAQ konnte gerade nicht geladen werden. Bitte versuche es später erneut.",
+  },
   banner: {
     apiUnreachable: "NiCon kann die Cloud-API gerade nicht erreichen — Anmeldung, Serverliste und Kontoverwaltung funktionieren erst wieder, wenn sie erreichbar ist. Versuch es gleich noch einmal.",
     unreachable: "NiCon kann den Relay gerade nicht erreichen — Anmeldung und Serverliste funktionieren trotzdem, aber für eine Verbindung zur Server-Konsole wird er gebraucht. Versuch es gleich noch einmal.",
@@ -124,7 +131,7 @@ window.NICON_I18N_STRINGS.de = {
     auditLogEmpty: "Noch nichts protokolliert.",
     faqEyebrow: "Hilfetexte",
     faqTitle: "FAQ",
-    faqHint: "Veröffentlichte Einträge erscheinen auf der öffentlichen FAQ-Seite. Pflege beide Sprachen, damit alle Besucher vollständige Antworten sehen.",
+    faqHint: "Veröffentlichte Einträge erscheinen im FAQ-Bereich, den auch nicht angemeldete Besucher sehen. Pflege beide Sprachen, damit alle Besucher vollständige Antworten sehen.",
     faqQuestionDe: "Frage auf Deutsch",
     faqAnswerDe: "Antwort auf Deutsch",
     faqQuestionEn: "Frage auf Englisch",

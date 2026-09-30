@@ -13,6 +13,13 @@ window.NICON_I18N_STRINGS.en = {
     faq: "FAQ",
     language: "Language",
   },
+  faq: {
+    eyebrow: "Help",
+    title: "Frequently asked questions",
+    intro: "Setup, compatibility, security, and the details that often cause confusion when connecting a game server.",
+    empty: "There are no published FAQ entries right now.",
+    error: "The FAQ could not be loaded right now. Please try again later.",
+  },
   banner: {
     apiUnreachable: "NiCon can't reach its cloud API right now — sign-in, your server list, and account management won't work until it's back. Try again in a moment.",
     unreachable: "NiCon can't reach its relay right now — you can still sign in and manage your server list, but connecting to a server's console needs it. Try again in a moment.",
@@ -123,7 +130,7 @@ window.NICON_I18N_STRINGS.en = {
     auditLogEmpty: "Nothing logged yet.",
     faqEyebrow: "Help content",
     faqTitle: "FAQ",
-    faqHint: "Published entries appear on the public FAQ page. Maintain both languages so visitors always see complete answers.",
+    faqHint: "Published entries appear in the FAQ section, which is also visible to visitors who are not signed in. Maintain both languages so visitors always see complete answers.",
     faqQuestionDe: "Question in German",
     faqAnswerDe: "Answer in German",
     faqQuestionEn: "Question in English",
