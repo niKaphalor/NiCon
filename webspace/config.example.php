@@ -25,6 +25,12 @@ return [
     // the browser. Create one in Steam's Web API key administration.
     'steam_api_key' => '',
 
+    // Required for the contact form (POST /contact) to actually deliver
+    // anything: the mailbox that receives visitor messages. Left blank,
+    // the contact form still accepts submissions but they go nowhere —
+    // see handlers/contact.php.
+    'contact_recipient' => 'you@example.com',
+
     // Shared database-backed cache for Nitrado GET responses. Values are
     // clamped to 30-60 seconds; 45 seconds balances freshness and API load.
     'nitrado_cache_ttl_seconds' => 45,

@@ -391,6 +391,12 @@ Object.assign(window.NICON_GAMES, {
   soulmask: { label: "Soulmask", protocol: "source", command: "listplayers", parse: parseLoosePlayerLines, commands: ["listplayers", "say", "kick", "ban"] },
   vrising: { label: "V Rising", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status", "announce", "announcerestart"] },
   wardogs: { label: "WARDOGS", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status"] },
+  // Valheim itself has no RCON listener. NiCon can talk to it only after a
+  // server-side BepInEx plugin such as RCON Next or ValheimRcon exposes a
+  // Source-RCON endpoint. Players do not need that plugin on their clients.
+  valheim: { label: "Valheim", protocol: "source", command: "players", parse: parseLoosePlayerLines,
+    kick: function (p) { return "kick " + p.id; }, ban: function (p) { return "ban " + p.id; },
+    commands: ["list", "players", "say", "kick", "ban", "save"] },
 });
 
 // Keep shared parser templates in this file, but do not expose games absent
@@ -447,12 +453,36 @@ var steamAssets = {
   squad44: { appId: 736220 },
   soulmask: { appId: 2646460, background: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/2646460/page_bg_generated_v6b.jpg" },
   vrising: { appId: 1604030 },
+  valheim: { appId: 892970 },
   wardogs: {
     appId: 1867240,
     header: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1867240/59d4daf753bd5d982e6675f7eee363bc817c574e/header.jpg",
     background: "https://store.fastly.steamstatic.com/images/storepagebackground/app/1867240",
   },
 };
+
+// What an operator must enable before NiCon can connect. This is kept next
+// to the integration catalog so the supported-games overview cannot drift
+// away from the protocol that is actually selected for a game.
+//
+// native: the dedicated server ships the remote-console endpoint.
+// protocol: built in, but intentionally not labelled as classic RCON
+//           (BattlEye, Telnet, a REST API, or BattleBit WebRCON).
+// mod: no endpoint in the vanilla server; a server-only plugin is required.
+// provisional: implemented from published/community command formats but the
+//              exact transport still needs a live-server confirmation.
+var protocolIntegrations = ["sevendaystodie", "arma2", "arma3", "armareforger", "battlebit", "dayz", "palworld"];
+var provisionalIntegrations = ["eightythree", "hellletloose", "hellletloosevietnam", "risingstorm2", "soulmask", "vrising", "wardogs"];
+Object.keys(window.NICON_GAMES).forEach(function (key) {
+  window.NICON_GAMES[key].integrationType = "native";
+});
+protocolIntegrations.forEach(function (key) {
+  if (window.NICON_GAMES[key]) window.NICON_GAMES[key].integrationType = "protocol";
+});
+provisionalIntegrations.forEach(function (key) {
+  if (window.NICON_GAMES[key]) window.NICON_GAMES[key].integrationType = "provisional";
+});
+window.NICON_GAMES.valheim.integrationType = "mod";
 Object.keys(steamAssets).forEach(function (key) {
   var game = window.NICON_GAMES[key];
   var asset = steamAssets[key];

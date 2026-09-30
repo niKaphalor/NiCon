@@ -5,16 +5,21 @@ require_once __DIR__ . '/config.php';
 // nicon_security_headers sets a small set of defense-in-depth headers that
 // don't depend on any per-request state, on every response (including
 // errors and CORS preflights). This is a JSON API with no HTML templates
-// of its own, so a full CSP isn't meaningful here — these three cover the
-// headers that still apply: don't let a browser guess a JSON response into
-// executable content, don't let this origin be framed, and don't leak the
+// of its own, so a full CSP isn't meaningful here — these headers cover
+// what still applies: don't let a browser guess a JSON response into
+// executable content, don't let this origin be framed, don't leak the
 // full request path (recovery codes, tokens never appear in URLs, but
-// session/account paths do) to third-party Referer targets.
+// session/account paths do) to third-party Referer targets, and — since
+// this API handles encrypted RCON credentials and bearer session tokens —
+// don't let a TLS-stripping downgrade attack happen on a future visit.
+// HSTS is harmless to set even if a front-end proxy also sets it (the
+// browser just sees the same directive twice).
 function nicon_security_headers(): void
 {
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
 }
 
 // nicon_cors mirrors internal/relay/relay.go's cors(): sets

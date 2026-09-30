@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<!-- Same policy as index.html's — see the comment there. This page loads
+     no script and has no inline style. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: https://nitrado.net https://*.nitrado.net https://shared.fastly.steamstatic.com https://store.fastly.steamstatic.com https://www.minecraft.net https://upload.wikimedia.org; connect-src 'self' https://nicon.mylss.de https://relay.130.61.8.150.sslip.io wss://relay.130.61.8.150.sslip.io; base-uri 'self'; form-action 'self'">
 <title>Datenschutzerklärung — NiCon</title>
 <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -16,7 +20,7 @@
 
 <header class="topbar public-topbar">
   <a href="index.html" class="wordmark"><picture><source srcset="nicon-favicon.webp" type="image/webp"><img src="nicon-favicon.png" alt="" width="22" height="22"></picture>NiCon</a>
-  <nav class="public-nav" aria-label="Rechtliches und Support"><a href="imprint.de.html">Impressum</a><a href="privacy.de.html" aria-current="page">Datenschutz</a><a href="contact.de.html">Kontakt</a></nav>
+  <nav class="public-nav" aria-label="Rechtliches und Support"><a href="imprint.de.html">Impressum</a><a href="privacy.de.html" aria-current="page">Datenschutz</a><a href="contact.de.html">Kontakt</a><a href="faq.de.html">FAQ</a></nav>
   <a href="index.html" class="btn-secondary public-back">NiCon öffnen</a>
 </header>
 
@@ -118,7 +122,7 @@
     Verbindungsdaten wie IP-Adresse und User-Agent.
   </p>
 
-  <h2>5. Steam-Integration</h2>
+  <h2>5. Steam-Integration und weitere Spielgrafiken</h2>
   <p>
     Hat der Betreiber die Steam-Anreicherung eingerichtet und enthält eine
     Spielerliste SteamID64-Werte, sendet die Cloud-API neu erkannte IDs an
@@ -134,6 +138,17 @@
     übliche Verbindungsdaten wie IP-Adresse und User-Agent; NiCon übermittelt
     keinen Referrer.
   </p>
+  <p>
+    Dieselbe Übersicht lädt außerdem offizielle Minecraft-Schlüsselgrafiken
+    direkt von <code>www.minecraft.net</code> (Mojang, ein
+    Microsoft-Tochterunternehmen) sowie das Minecraft-Logo von
+    <code>upload.wikimedia.org</code> (Wikimedia Foundation) — auf dieselbe
+    Art eingebunden wie die Steam-Grafiken oben, und automatisch geladen,
+    sobald die Übersicht angezeigt wird, nicht erst durch einen separaten
+    Klick. Auch diese Anbieter erhalten beim Laden übliche Verbindungsdaten
+    wie IP-Adresse und User-Agent; NiCon übermittelt auch dort keinen
+    Referrer.
+  </p>
 
   <h2>6. Weitere Empfänger und externe Ressourcen</h2>
   <ul>
@@ -141,10 +156,11 @@
       und empfängt deren Antworten und Spielerdaten.</li>
     <li>Inhalte des Kontaktformulars werden über Web-/Mailhosting und den
       E-Mail-Anbieter des Betreibers an das Support-Postfach übertragen.</li>
-    <li>Frontend, API, Datenbank, Relay, Nitrado, Valve und
-      Spieleserver können bei unterschiedlichen Anbietern oder in
-      unterschiedlichen Ländern betrieben werden; es gelten deren eigene
-      Datenschutzbestimmungen und gesetzlichen Übermittlungsmechanismen.</li>
+    <li>Frontend, API, Datenbank, Relay, Nitrado, Valve, Mojang/Microsoft,
+      die Wikimedia Foundation und Spieleserver können bei unterschiedlichen
+      Anbietern oder in unterschiedlichen Ländern betrieben werden; es gelten
+      deren eigene Datenschutzbestimmungen und gesetzlichen
+      Übermittlungsmechanismen.</li>
   </ul>
 
   <h2>7. Zwecke und Rechtsgrundlagen</h2>
@@ -204,7 +220,12 @@
     (Art. 15), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung
     (Art. 18), Datenübertragbarkeit (Art. 20) und Widerspruch (Art. 21
     DSGVO). Außerdem kannst du dich bei einer Aufsichtsbehörde beschweren
-    (Art. 77 DSGVO). <strong>Einstellungen → Konto löschen</strong>
+    (Art. 77 DSGVO). <strong>Einstellungen → Meine Daten exportieren</strong>
+    lädt auf Wunsch eine JSON-Kopie deines Kontos, deiner Server, Makros,
+    Moderationsregeln und deines Aktivitätsverlaufs herunter und deckt damit
+    die Auskunfts- (Art. 15) und Übertragbarkeitsrechte (Art. 20) oben ab,
+    ohne vorher den Betreiber fragen zu müssen.
+    <strong>Einstellungen → Konto löschen</strong>
     entfernt sofort das Konto und die direkt zugeordneten Datensätze,
     vorbehaltlich der oben beschriebenen Audit-Aufbewahrung. Für
     weitergehende Anfragen nutze die Kontaktadresse im
@@ -232,6 +253,8 @@
   <a href="privacy.de.html" aria-current="page">Datenschutz</a>
   <span aria-hidden="true">·</span>
   <a href="contact.de.html">Kontakt</a>
+  <span aria-hidden="true">·</span>
+  <a href="faq.de.html">FAQ</a>
 </footer>
 
 </body>

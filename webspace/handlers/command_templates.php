@@ -18,6 +18,11 @@ const NICON_COMMAND_TEMPLATE_COMMAND_MAX = 500;
 // commands per account.
 const NICON_MAX_COMMAND_TEMPLATES = 50;
 
+// Bounds create *rate*, not just the standing count above — without this a
+// scripted client could still cycle create+delete indefinitely at no cost.
+const NICON_COMMAND_TEMPLATES_CREATE_RATE_LIMIT = 20; // per account, per window
+const NICON_COMMAND_TEMPLATES_RATE_WINDOW = 300;      // 5 minutes
+
 function nicon_command_template_response(array $row): array
 {
     return [
@@ -36,6 +41,11 @@ function nicon_handle_list_command_templates(int $userId): void
 
 function nicon_handle_create_command_template(int $userId): void
 {
+    if (!nicon_rate_limit_allow("command-templates-create:$userId", NICON_COMMAND_TEMPLATES_CREATE_RATE_LIMIT, NICON_COMMAND_TEMPLATES_RATE_WINDOW)) {
+        header('Retry-After: ' . NICON_COMMAND_TEMPLATES_RATE_WINDOW);
+        nicon_send_error('too many templates created recently — try again later', 429);
+        return;
+    }
     $req = nicon_json_body();
     $name = trim((string) ($req['name'] ?? ''));
     $command = trim((string) ($req['command'] ?? ''));
@@ -54,16 +64,27 @@ function nicon_handle_create_command_template(int $userId): void
     }
 
     $pdo = nicon_db();
-    $countStmt = $pdo->prepare('SELECT COUNT(*) FROM command_templates WHERE user_id = ?');
-    $countStmt->execute([$userId]);
-    if ((int) $countStmt->fetchColumn() >= NICON_MAX_COMMAND_TEMPLATES) {
-        nicon_send_error('you already have the maximum of ' . NICON_MAX_COMMAND_TEMPLATES . ' saved commands — delete one first', 400);
-        return;
-    }
+    // FOR UPDATE inside a transaction — see servers.php's create handler for
+    // why a plain SELECT-then-INSERT here would let two concurrent requests
+    // from the same account each exceed the cap by however many raced.
+    $pdo->beginTransaction();
+    try {
+        $countStmt = $pdo->prepare('SELECT COUNT(*) FROM command_templates WHERE user_id = ? FOR UPDATE');
+        $countStmt->execute([$userId]);
+        if ((int) $countStmt->fetchColumn() >= NICON_MAX_COMMAND_TEMPLATES) {
+            $pdo->rollBack();
+            nicon_send_error('you already have the maximum of ' . NICON_MAX_COMMAND_TEMPLATES . ' saved commands — delete one first', 400);
+            return;
+        }
 
-    $pdo->prepare('INSERT INTO command_templates (user_id, name, command) VALUES (?, ?, ?)')
-        ->execute([$userId, $name, $command]);
-    $id = (int) $pdo->lastInsertId();
+        $pdo->prepare('INSERT INTO command_templates (user_id, name, command) VALUES (?, ?, ?)')
+            ->execute([$userId, $name, $command]);
+        $id = (int) $pdo->lastInsertId();
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
 
     nicon_send_json(['id' => $id, 'name' => $name, 'command' => $command], 201);
 }

@@ -251,6 +251,9 @@ function nicon_supported_game(string $label): ?array
         ['Squad', 'source', ['squad']],
         ['Soulmask', 'source', ['soulmask']],
         ['V Rising', 'source', ['v rising', 'vrising']],
+        // Valheim needs a server-side BepInEx RCON plugin; the service is
+        // still importable once its operator has installed/configured one.
+        ['Valheim', 'source', ['valheim']],
         ['WARDOGS', 'source', ['wardogs', 'war dogs']],
     ];
     $lower = strtolower($label);

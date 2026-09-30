@@ -65,6 +65,11 @@ func dialWebRcon(host string, port int, password string) (*webRconConn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("webrcon: %w", err)
 	}
+	// Unlike the browser-facing connection in ws.go, gorilla/websocket
+	// defaults to no limit here — a compromised/malicious WebRCON server
+	// could otherwise send one oversized frame and force unbounded memory
+	// allocation in readLoop's ReadJSON.
+	ws.SetReadLimit(maxWSMessageBytes)
 
 	c := &webRconConn{
 		ws:        ws,

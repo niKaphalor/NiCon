@@ -233,7 +233,13 @@ func runServer() {
 // them all simultaneously, and keeps the two independent loops from
 // doubling that cap between them just because they happen to tick close
 // together.
-const healthCheckConcurrency = 5
+//
+// Defined as a fraction of store.MaxOpenConns rather than its own number:
+// each probe holds a DB connection just long enough to write one result
+// row, but concurrent foreground WS command-audit writes and everything
+// else share that same pool, so this stays well under it instead of being
+// sized independently and drifting out of sync if either value changes.
+const healthCheckConcurrency = store.MaxOpenConns / 5
 
 func runHealthChecks(ctx context.Context, logger *log.Logger, st *store.Store, sem chan struct{}) {
 	servers, err := st.ListServersForHealthCheck(ctx)

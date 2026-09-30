@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<!-- Same policy as index.html's — see the comment there. This page loads
+     no script and has no inline style. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: https://nitrado.net https://*.nitrado.net https://shared.fastly.steamstatic.com https://store.fastly.steamstatic.com https://www.minecraft.net https://upload.wikimedia.org; connect-src 'self' https://nicon.mylss.de https://relay.130.61.8.150.sslip.io wss://relay.130.61.8.150.sslip.io; base-uri 'self'; form-action 'self'">
 <title>Impressum — NiCon</title>
 <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -17,7 +21,7 @@
 <header class="topbar public-topbar">
   <a href="index.html" class="wordmark"><picture><source srcset="nicon-favicon.webp" type="image/webp"><img src="nicon-favicon.png" alt="" width="22" height="22"></picture>NiCon</a>
   <nav class="public-nav" aria-label="Rechtliches und Support">
-    <a href="imprint.de.html" aria-current="page">Impressum</a><a href="privacy.de.html">Datenschutz</a><a href="contact.de.html">Kontakt</a>
+    <a href="imprint.de.html" aria-current="page">Impressum</a><a href="privacy.de.html">Datenschutz</a><a href="contact.de.html">Kontakt</a><a href="faq.de.html">FAQ</a>
   </nav>
   <a href="index.html" class="btn-secondary public-back">NiCon öffnen</a>
 </header>
@@ -86,6 +90,8 @@
   <a href="privacy.de.html">Datenschutz</a>
   <span aria-hidden="true">·</span>
   <a href="contact.de.html">Kontakt</a>
+  <span aria-hidden="true">·</span>
+  <a href="faq.de.html">FAQ</a>
 </footer>
 
 </body>

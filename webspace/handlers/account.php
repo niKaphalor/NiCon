@@ -11,6 +11,83 @@ function nicon_handle_get_account(int $userId): void
     nicon_send_json(['has_nitrado_token' => $stmt->fetchColumn() !== null]);
 }
 
+// NICON_EXPORT_ACTIVITY_LIMIT bounds nicon_handle_export_account_data's
+// activity section — a generous ceiling meant to cover a real account's
+// full history within the audit retention window (see lib/audit.php),
+// not an artificial "just the recent stuff" cap like GET /audit-log's 100.
+const NICON_EXPORT_ACTIVITY_LIMIT = 5000;
+
+// nicon_handle_export_account_data is the self-service Art. 15/20 GDPR
+// path: everything this account's own data belongs to, as one JSON
+// document a user can download without asking the operator first. Secrets
+// are deliberately excluded the same way they're excluded everywhere else
+// in this API — no password hash, no recovery-code hash, no RCON
+// passwords or Nitrado token, only whether one is set.
+function nicon_handle_export_account_data(int $userId): void
+{
+    $pdo = nicon_db();
+
+    $userStmt = $pdo->prepare('SELECT username, is_admin, created_at, nitrado_token_enc FROM users WHERE id = ?');
+    $userStmt->execute([$userId]);
+    $user = $userStmt->fetch();
+    if (!$user) {
+        nicon_send_error('account not found', 404);
+        return;
+    }
+
+    $serversStmt = $pdo->prepare('
+        SELECT id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source,
+               health_ok, health_checked_at, health_latency_ms, health_error,
+               nitrado_game_code, nitrado_game_icon_url
+        FROM servers WHERE user_id = ? ORDER BY name');
+    $serversStmt->execute([$userId]);
+    $servers = array_map('nicon_server_response', $serversStmt->fetchAll());
+
+    $templatesStmt = $pdo->prepare('SELECT id, name, command FROM command_templates WHERE user_id = ? ORDER BY name');
+    $templatesStmt->execute([$userId]);
+    $commandTemplates = array_map('nicon_command_template_response', $templatesStmt->fetchAll());
+
+    $rulesStmt = $pdo->prepare('SELECT id, pattern, action, enabled FROM moderation_rules WHERE user_id = ? ORDER BY id');
+    $rulesStmt->execute([$userId]);
+    $moderationRules = array_map('nicon_moderation_rule_response', $rulesStmt->fetchAll());
+
+    $accountRowsStmt = $pdo->prepare('
+        SELECT a.action, a.detail, a.created_at, actor.username AS actor_username, target.username AS target_username
+        FROM audit_log a
+        LEFT JOIN users actor ON actor.id = a.user_id
+        LEFT JOIN users target ON target.id = a.target_user_id
+        WHERE a.user_id = ? OR a.target_user_id = ?
+        ORDER BY a.created_at DESC
+        LIMIT ' . NICON_EXPORT_ACTIVITY_LIMIT
+    );
+    $accountRowsStmt->execute([$userId, $userId]);
+    $accountRows = array_map(static function (array $row): array {
+        return [
+            'kind' => 'account',
+            'action' => $row['action'],
+            'detail' => $row['detail'],
+            'actor_username' => $row['actor_username'],
+            'target_username' => $row['target_username'],
+            'created_at' => gmdate('Y-m-d\TH:i:s\Z', strtotime($row['created_at'])),
+        ];
+    }, $accountRowsStmt->fetchAll());
+    $activity = nicon_merge_audit_rows($accountRows, nicon_rcon_audit_rows($userId, NICON_EXPORT_ACTIVITY_LIMIT), NICON_EXPORT_ACTIVITY_LIMIT);
+
+    nicon_send_json([
+        'exported_at' => gmdate('Y-m-d\TH:i:s\Z'),
+        'account' => [
+            'username' => $user['username'],
+            'is_admin' => (bool) $user['is_admin'],
+            'created_at' => gmdate('Y-m-d\TH:i:s\Z', strtotime($user['created_at'])),
+            'has_nitrado_token' => $user['nitrado_token_enc'] !== null,
+        ],
+        'servers' => $servers,
+        'command_templates' => $commandTemplates,
+        'moderation_rules' => $moderationRules,
+        'activity' => $activity,
+    ]);
+}
+
 // nicon_handle_delete_nitrado_token: self-service removal of the saved
 // Nitrado token, independent of deleting the whole account — Art. 17
 // GDPR applies to this stored credential same as to an RCON password.

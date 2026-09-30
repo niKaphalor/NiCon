@@ -155,7 +155,7 @@
           <p class="hint" id="content-empty-text"></p>
           <div class="supported-games">
             <div class="card-kicker" data-i18n="welcome.gamesTitle">Supported games</div>
-            <p class="hint" data-i18n="welcome.gamesHint">Live-tested games are marked accordingly; the rest are implemented from documented command formats only, not yet checked against a real server.</p>
+            <p class="hint" data-i18n="welcome.gamesHint">The top badge shows what the server needs; the bottom badge shows whether the integration has been tested against a live server.</p>
             <ul id="supported-games-list" class="supported-games-list"></ul>
           </div>
           <button type="button" id="empty-add-btn" class="btn-primary" data-i18n="servers.emptyAdd" hidden>+ Add a server</button>
@@ -324,9 +324,24 @@
             </div>
           </div>
 
+          <div id="nitrado-settings-card" class="card" hidden>
+            <div class="card-kicker" data-i18n="settings.nitradoKicker">Nitrado</div>
+            <p class="card-body" data-i18n="settings.nitradoHint">Store your Nitrado API token here to sync your services anytime, without opening Add Server.</p>
+            <p class="hint" id="settings-nitrado-token-status" hidden>
+              <span data-i18n="addModal.nitradoTokenSaved">A token is already saved — leave the field blank to reuse it, or enter a new one to replace it.</span>
+              <button type="button" id="settings-forget-nitrado-token-btn" class="link-button" data-i18n="addModal.forgetToken">Forget it</button>
+            </p>
+            <form id="settings-nitrado-form" class="stacked-form">
+              <input id="settings-nitrado-token" type="password" placeholder="Nitrado API token" autocomplete="off" aria-label="Nitrado API token" data-i18n-placeholder="addModal.nitradoTokenPlaceholder" data-i18n-aria-label="addModal.nitradoTokenPlaceholder">
+              <button type="submit" class="btn-secondary" data-i18n="settings.nitradoSyncButton">Save &amp; sync</button>
+            </form>
+          </div>
+
           <div id="privacy-card" class="card" hidden>
             <div class="card-kicker" data-i18n="settings.privacyKicker">Privacy</div>
             <p class="card-body"><span data-i18n="servers.subheadPart1">Your server list and RCON passwords are stored for your account only — no one else can see, edit, or connect through them.</span> <span data-i18n="servers.seeThe">See the</span> <a href="privacy.html" target="_blank" rel="noopener" data-i18n="common.privacyPolicyLink" data-i18n-doc="privacy">privacy policy</a><span data-i18n="settings.privacyForDetails"> for details.</span></p>
+            <p class="card-body" data-i18n="settings.exportDataHint">Download a copy of everything stored under your account — servers, macros, moderation rules, and activity history — as a JSON file.</p>
+            <button type="button" id="export-data-btn" class="btn-secondary" data-i18n="settings.exportDataButton">Export my data</button>
           </div>
 
           <div id="activity-card" class="card" hidden>
@@ -377,6 +392,32 @@
           <button type="submit" class="btn-primary" data-i18n="admin.notificationSend">Send</button>
         </form>
         <div id="admin-notifications-list" class="admin-notifications-list"></div>
+      </section>
+
+      <section class="page-section">
+        <div class="section-heading"><div><span class="page-eyebrow" data-i18n="admin.faqEyebrow">Help content</span><h2 data-i18n="admin.faqTitle">FAQ</h2></div><p class="hint" data-i18n="admin.faqHint">Published entries appear on the public FAQ page. Maintain both languages so visitors always see complete answers.</p></div>
+        <form id="faq-editor-form" class="faq-editor-form">
+          <input id="faq-editor-id" type="hidden">
+          <div class="faq-editor-language">
+            <span class="tag tag-neutral">DE</span>
+            <input id="faq-question-de" type="text" maxlength="255" required placeholder="Frage auf Deutsch" data-i18n-placeholder="admin.faqQuestionDe">
+            <textarea id="faq-answer-de" maxlength="5000" required placeholder="Antwort auf Deutsch" data-i18n-placeholder="admin.faqAnswerDe"></textarea>
+          </div>
+          <div class="faq-editor-language">
+            <span class="tag tag-neutral">EN</span>
+            <input id="faq-question-en" type="text" maxlength="255" required placeholder="Question in English" data-i18n-placeholder="admin.faqQuestionEn">
+            <textarea id="faq-answer-en" maxlength="5000" required placeholder="Answer in English" data-i18n-placeholder="admin.faqAnswerEn"></textarea>
+          </div>
+          <div class="faq-editor-controls">
+            <label><span data-i18n="admin.faqOrder">Order</span><input id="faq-sort-order" type="number" min="0" max="9999" value="0" required></label>
+            <label class="checkbox-row"><input id="faq-published" type="checkbox" checked><span data-i18n="admin.faqPublish">Publish entry</span></label>
+            <div class="faq-editor-buttons">
+              <button type="button" id="faq-editor-cancel" class="btn-secondary" hidden data-i18n="common.cancel">Cancel</button>
+              <button type="submit" class="btn-primary" data-i18n="admin.faqSave">Save FAQ entry</button>
+            </div>
+          </div>
+        </form>
+        <div id="admin-faq-list" class="admin-faq-list"></div>
       </section>
 
       <section class="page-section">
@@ -544,6 +585,7 @@
         <option value="Soulmask">Soulmask</option>
         <option value="Rust">Rust</option>
         <option value="V Rising">V Rising</option>
+        <option value="Valheim">Valheim</option>
         <option value="WARDOGS">WARDOGS</option>
       </select>
       <div class="form-row">
@@ -619,6 +661,7 @@
       <option value="Soulmask">Soulmask</option>
       <option value="Rust">Rust</option>
       <option value="V Rising">V Rising</option>
+      <option value="Valheim">Valheim</option>
       <option value="WARDOGS">WARDOGS</option>
     </select>
     <div class="form-row">
@@ -670,6 +713,8 @@
   <a href="privacy.html" target="_blank" rel="noopener" data-i18n="nav.privacy" data-i18n-doc="privacy">Privacy</a>
   <span aria-hidden="true">·</span>
   <a href="contact.html" target="_blank" rel="noopener" data-i18n="nav.contact" data-i18n-doc="contact">Contact</a>
+  <span aria-hidden="true">·</span>
+  <a href="faq.html" target="_blank" rel="noopener" data-i18n="nav.faq" data-i18n-doc="faq">FAQ</a>
 </footer>
 
 <script src="i18n.en.js"></script>

@@ -3,6 +3,11 @@ declare(strict_types=1);
 
 const NICON_MAX_MODERATION_RULES = 50;
 
+// Bounds create *rate*, not just the standing count above — without this a
+// scripted client could still cycle create+delete indefinitely at no cost.
+const NICON_MODERATION_RULES_CREATE_RATE_LIMIT = 20; // per account, per window
+const NICON_MODERATION_RULES_RATE_WINDOW = 300;      // 5 minutes
+
 function nicon_moderation_rule_response(array $row): array
 {
     return [
@@ -22,6 +27,11 @@ function nicon_handle_list_moderation_rules(int $userId): void
 
 function nicon_handle_create_moderation_rule(int $userId): void
 {
+    if (!nicon_rate_limit_allow("moderation-rules-create:$userId", NICON_MODERATION_RULES_CREATE_RATE_LIMIT, NICON_MODERATION_RULES_RATE_WINDOW)) {
+        header('Retry-After: ' . NICON_MODERATION_RULES_RATE_WINDOW);
+        nicon_send_error('too many rules created recently — try again later', 429);
+        return;
+    }
     $req = nicon_json_body();
     $pattern = trim((string) ($req['pattern'] ?? ''));
     $action = strtolower((string) ($req['action'] ?? 'highlight'));
@@ -34,15 +44,27 @@ function nicon_handle_create_moderation_rule(int $userId): void
         return;
     }
     $pdo = nicon_db();
-    $count = $pdo->prepare('SELECT COUNT(*) FROM moderation_rules WHERE user_id = ?');
-    $count->execute([$userId]);
-    if ((int) $count->fetchColumn() >= NICON_MAX_MODERATION_RULES) {
-        nicon_send_error('maximum number of moderation rules reached', 400);
-        return;
+    // FOR UPDATE inside a transaction — see servers.php's create handler for
+    // why a plain SELECT-then-INSERT here would let two concurrent requests
+    // from the same account each exceed the cap by however many raced.
+    $pdo->beginTransaction();
+    try {
+        $count = $pdo->prepare('SELECT COUNT(*) FROM moderation_rules WHERE user_id = ? FOR UPDATE');
+        $count->execute([$userId]);
+        if ((int) $count->fetchColumn() >= NICON_MAX_MODERATION_RULES) {
+            $pdo->rollBack();
+            nicon_send_error('maximum number of moderation rules reached', 400);
+            return;
+        }
+        $pdo->prepare('INSERT INTO moderation_rules (user_id, pattern, action) VALUES (?, ?, ?)')
+            ->execute([$userId, $pattern, $action]);
+        $id = (int) $pdo->lastInsertId();
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
     }
-    $pdo->prepare('INSERT INTO moderation_rules (user_id, pattern, action) VALUES (?, ?, ?)')
-        ->execute([$userId, $pattern, $action]);
-    nicon_send_json(['id' => (int) $pdo->lastInsertId(), 'pattern' => $pattern, 'action' => $action, 'enabled' => true], 201);
+    nicon_send_json(['id' => $id, 'pattern' => $pattern, 'action' => $action, 'enabled' => true], 201);
 }
 
 function nicon_handle_delete_moderation_rule(int $userId, int $ruleId): void

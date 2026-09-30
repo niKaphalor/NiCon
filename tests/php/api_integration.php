@@ -155,6 +155,35 @@ try {
     $stmt->execute([$alice, $bob]);
     $createdUsers = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
 
+    [$status] = request_json($base, 'GET', '/api/admin/faq', null, $bobToken);
+    assert_test($status === 403, 'non-admin users must not read FAQ drafts');
+    $pdo->prepare('UPDATE users SET is_admin = TRUE WHERE username = ?')->execute([$alice]);
+    [$status, $faqEntry] = request_json($base, 'POST', '/api/admin/faq', [
+        'question_de' => "Testfrage $suffix",
+        'answer_de' => 'Deutsche Testantwort',
+        'question_en' => "Test question $suffix",
+        'answer_en' => 'English test answer',
+        'sort_order' => 9998,
+        'is_published' => false,
+    ], $aliceToken);
+    assert_test($status === 201 && !($faqEntry['is_published'] ?? true), 'admin FAQ draft creation failed');
+    $faqId = (int) ($faqEntry['id'] ?? 0);
+    [$status, $publicFaq] = request_json($base, 'GET', '/api/faq?lang=de');
+    assert_test($status === 200 && !in_array("Testfrage $suffix", array_column($publicFaq ?? [], 'question'), true), 'FAQ drafts must stay private');
+    [$status, $faqEntry] = request_json($base, 'PUT', "/api/admin/faq/$faqId", [
+        'question_de' => "Testfrage $suffix",
+        'answer_de' => 'Aktualisierte deutsche Testantwort',
+        'question_en' => "Test question $suffix",
+        'answer_en' => 'Updated English test answer',
+        'sort_order' => 9998,
+        'is_published' => true,
+    ], $aliceToken);
+    assert_test($status === 200 && ($faqEntry['is_published'] ?? false), 'admin FAQ update failed');
+    [$status, $publicFaq] = request_json($base, 'GET', '/api/faq?lang=en');
+    assert_test($status === 200 && in_array("Test question $suffix", array_column($publicFaq ?? [], 'question'), true), 'published localized FAQ entry missing');
+    [$status] = request_json($base, 'DELETE', "/api/admin/faq/$faqId", null, $aliceToken);
+    assert_test($status === 204, 'admin FAQ deletion failed');
+
     [$status, $server] = request_json($base, 'POST', '/api/servers', [
         'name' => 'Manual GMod',
         'host' => '127.0.0.1',

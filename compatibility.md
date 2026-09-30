@@ -4,7 +4,7 @@ NiCon's selectable/importable game catalog is an explicitly maintained list.
 Games absent from that list are not offered as new integrations. Existing
 database records are left intact so an update never destroys user data.
 
-Last matrix review: **2026-09-29**.
+Last matrix review: **2026-09-30**.
 
 ## Protocol transports
 
@@ -49,11 +49,17 @@ Last matrix review: **2026-09-29**.
 | Squad 44 | Source-style RCON | `ListPlayers` | Pending |
 | Soulmask | Provisional Source transport | `listplayers` | Pending |
 | V Rising | Provisional Source transport | `status` | Pending |
+| Valheim | Source RCON via a server-side BepInEx plugin | `players`, conservative line parser | Pending — vanilla server has no RCON endpoint |
 | WARDOGS | Provisional Source transport | `status` | Pending |
 
 “Provisional” is intentional: a listed game may require a proprietary or
 undocumented protocol rather than the public Source-RCON wire format. NiCon does not mark these games live-compatible
 until tested against a disposable server.
+
+The UI separately marks whether a game works with the dedicated server as
+shipped, uses another built-in administration protocol, needs a server-side
+mod, or still has a provisional transport. Valheim is the only current entry
+that requires a server mod; the player clients do not need that plugin.
 
 ## Health and API coverage
 

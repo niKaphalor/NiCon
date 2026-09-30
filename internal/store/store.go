@@ -26,6 +26,12 @@ var (
 // constraint violation (ER_DUP_ENTRY).
 const mysqlDuplicateEntry = 1062
 
+// MaxOpenConns is this Store's connection pool ceiling — see Open's own
+// comment for the reasoning behind having one at all. It's exported so
+// main.go's healthCheckConcurrency can be defined relative to it rather
+// than as an independently-chosen number.
+const MaxOpenConns = 25
+
 const schema = `
 CREATE TABLE IF NOT EXISTS users (
 	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -122,6 +128,13 @@ var migrations = []string{
 	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_icon_url VARCHAR(2048) NULL`,
 	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS query_protocol VARCHAR(16) NOT NULL DEFAULT 'auto'`,
 	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS query_port INT UNSIGNED NULL`,
+	// idx_health_server_time (server_id, sampled_at) doesn't help the daily
+	// CleanupHealthSamples DELETE below, which filters on sampled_at alone —
+	// server_id being the leading column means that composite can't be used
+	// for a server_id-agnostic range scan. A second, single-column index
+	// gives the cleanup query (and any other sampled_at-only range query) a
+	// path that doesn't degrade into a full table scan as this table grows.
+	`CREATE INDEX IF NOT EXISTS idx_health_sampled_at ON server_health_samples (sampled_at)`,
 }
 
 type Store struct {
@@ -170,7 +183,15 @@ func Open(dsn string, encryptionKey []byte) (*Store, error) {
 	// so connections get closed and re-opened (fresh TCP+auth) every burst
 	// instead of reused. These bounds keep both worst-case open connections
 	// and idle-churn in check without needing to be exact.
-	db.SetMaxOpenConns(25)
+	//
+	// MaxOpenConns is exported specifically so main.go's healthCheckConcurrency
+	// can be defined as a fraction of it instead of as its own independent
+	// number — the two used to be sized coincidentally (25 here, 5 there,
+	// with nothing tying them together), so raising one without the other
+	// could silently starve this pool once server counts grow. Deriving
+	// keeps that relationship enforced by the compiler instead of by
+	// whoever happens to remember to check both places.
+	db.SetMaxOpenConns(MaxOpenConns)
 	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
 	if err := db.Ping(); err != nil {

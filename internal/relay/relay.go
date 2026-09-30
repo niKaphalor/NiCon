@@ -141,6 +141,15 @@ func (rel *Relay) checkOrigin(r *http.Request) bool {
 // now) and handles the CORS preflight. It returns false if the caller
 // should stop (preflight already answered).
 func (rel *Relay) cors(w http.ResponseWriter, r *http.Request) bool {
+	// HSTS doesn't need to appear on every response to work — a browser
+	// that's seen it once from this origin enforces HTTPS/WSS for
+	// everything else on that origin, including the /ws/rcon upgrade this
+	// function isn't involved in. /healthz is the one plain HTTP path in
+	// this relay, so setting it here is enough to cover the whole origin.
+	// This app transmits encrypted RCON credentials and bearer tokens, so
+	// closing off a TLS-stripping downgrade is worth it even though the
+	// relay itself sits behind Caddy rather than terminating TLS directly.
+	w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 	origin := r.Header.Get("Origin")
 	if origin != "" && rel.allowedOrigins[origin] {
 		w.Header().Set("Access-Control-Allow-Origin", origin)

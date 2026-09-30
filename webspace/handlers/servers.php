@@ -13,6 +13,15 @@ declare(strict_types=1);
 // the same way NICON_MAX_COMMAND_TEMPLATES bounds command templates.
 const NICON_MAX_SERVERS_PER_ACCOUNT = 50;
 
+// The standing NICON_MAX_SERVERS_PER_ACCOUNT cap above bounds how many rows
+// can exist at once, but not how fast a scripted client could cycle
+// create+delete to churn through many more than that over time — these
+// per-account, per-time-window limits close that gap the same way
+// nitrado-power's rate limit does for its own endpoint.
+const NICON_SERVERS_CREATE_RATE_LIMIT = 20;  // per account, per window
+const NICON_SERVERS_UPDATE_RATE_LIMIT = 30;  // per account, per window
+const NICON_SERVERS_RATE_WINDOW = 300;       // 5 minutes
+
 function nicon_game_is_allowed(string $game): bool
 {
     if ($game === '') return true; // generic console, not a game integration
@@ -23,7 +32,7 @@ function nicon_game_is_allowed(string $game): bool
         'DayZ', "Garry's Mod", 'Hell Let Loose', 'Hell Let Loose: Vietnam',
         'Insurgency', 'Minecraft', 'MORDHAU', 'Palworld', 'Project Zomboid',
         'Rising Storm 2: Vietnam', 'Rust', 'Squad', 'Squad 44', 'Soulmask',
-        'V Rising', 'WARDOGS',
+        'V Rising', 'Valheim', 'WARDOGS',
     ], true);
 }
 
@@ -52,6 +61,42 @@ function nicon_query_config(array $req): ?array
     return [$protocol, (int) $port];
 }
 
+// NICON_HEALTH_HISTORY_CACHE_TTL bounds how stale a served health-history
+// response can be — see schema.sql's health_history_cache comment for why
+// this exists at all. 120s is comfortably below the 5-minute sampling
+// interval, so a cache hit is never showing data that's meaningfully
+// behind what a fresh computation would show anyway.
+const NICON_HEALTH_HISTORY_CACHE_TTL = 120;
+
+function nicon_health_history_cache_get(int $serverId, string $range): ?array
+{
+    $stmt = nicon_db()->prepare('
+        SELECT response_json FROM health_history_cache
+        WHERE server_id = ? AND range_key = ? AND expires_at > UTC_TIMESTAMP()
+    ');
+    $stmt->execute([$serverId, $range]);
+    $json = $stmt->fetchColumn();
+    if ($json === false) {
+        return null;
+    }
+    $data = json_decode((string) $json, true);
+    return is_array($data) ? $data : null;
+}
+
+function nicon_health_history_cache_put(int $serverId, string $range, array $data): void
+{
+    $pdo = nicon_db();
+    // Opportunistic cleanup, same reasoning as nitrado_cache_put in
+    // nitrado_sync.php: no persistent PHP process to run this on a timer.
+    $pdo->prepare('DELETE FROM health_history_cache WHERE expires_at <= UTC_TIMESTAMP()')->execute();
+    $expiresAt = gmdate('Y-m-d H:i:s', time() + NICON_HEALTH_HISTORY_CACHE_TTL);
+    $pdo->prepare('
+        INSERT INTO health_history_cache (server_id, range_key, response_json, expires_at)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE response_json = VALUES(response_json), expires_at = VALUES(expires_at)
+    ')->execute([$serverId, $range, json_encode($data), $expiresAt]);
+}
+
 function nicon_handle_server_health_history(int $userId, int $serverId): void
 {
     $ranges = ['24h' => 1, '7d' => 7, '30d' => 30, '90d' => 90];
@@ -67,6 +112,16 @@ function nicon_handle_server_health_history(int $userId, int $serverId): void
         nicon_send_error('server not found', 404);
         return;
     }
+
+    // The ownership check above still runs on every request regardless of
+    // this cache hit — only the (expensive, identical for every caller who
+    // owns this server) computed result is reused, never the access check.
+    $cached = nicon_health_history_cache_get($serverId, $range);
+    if ($cached !== null) {
+        nicon_send_json($cached);
+        return;
+    }
+
     $days = $ranges[$range];
     $stmt = $pdo->prepare("
         SELECT sampled_at, online, latency_ms, player_current, player_max, source
@@ -112,14 +167,16 @@ function nicon_handle_server_health_history(int $userId, int $serverId): void
     $playersTotal = array_sum($playerValues);
     $playersPeak = $playersCount ? max($playerValues) : null;
     $expected = $ranges[$range] * 24 * 12;
-    nicon_send_json([
+    $response = [
         'range' => $range,
         'uptime_percent' => $availabilityCount ? round($online * 100 / $availabilityCount, 2) : null,
         'sample_completeness_percent' => round(min(100, $availabilityCount * 100 / $expected), 2),
         'players_average' => $playersCount ? round($playersTotal / $playersCount, 1) : null,
         'players_peak' => $playersPeak,
         'samples' => $samples,
-    ]);
+    ];
+    nicon_health_history_cache_put($serverId, $range, $response);
+    nicon_send_json($response);
 }
 
 function nicon_handle_server_player_sample(int $userId, int $serverId): void
@@ -245,6 +302,11 @@ function nicon_handle_list_servers(int $userId): void
 
 function nicon_handle_create_server(int $userId): void
 {
+    if (!nicon_rate_limit_allow("servers-create:$userId", NICON_SERVERS_CREATE_RATE_LIMIT, NICON_SERVERS_RATE_WINDOW)) {
+        header('Retry-After: ' . NICON_SERVERS_RATE_WINDOW);
+        nicon_send_error('too many servers created recently — try again later', 429);
+        return;
+    }
     $req = nicon_json_body();
     $name = trim((string) ($req['name'] ?? ''));
     $host = trim((string) ($req['host'] ?? ''));
@@ -278,17 +340,32 @@ function nicon_handle_create_server(int $userId): void
     }
 
     $pdo = nicon_db();
-    $countStmt = $pdo->prepare('SELECT COUNT(*) FROM servers WHERE user_id = ?');
-    $countStmt->execute([$userId]);
-    if ((int) $countStmt->fetchColumn() >= NICON_MAX_SERVERS_PER_ACCOUNT) {
-        nicon_send_error('you already have the maximum of ' . NICON_MAX_SERVERS_PER_ACCOUNT . ' servers — remove one first', 400);
-        return;
+    // FOR UPDATE inside a transaction, not a plain SELECT before the INSERT:
+    // two concurrent requests from the same account could otherwise both
+    // read a count under the cap and both insert, exceeding it by however
+    // many raced. The locking read takes InnoDB next-key locks covering
+    // this user_id's rows (an index exists on it via the FOREIGN KEY), which
+    // blocks a second transaction's own locking read until the first
+    // commits — closing the race instead of just narrowing it.
+    $pdo->beginTransaction();
+    try {
+        $countStmt = $pdo->prepare('SELECT COUNT(*) FROM servers WHERE user_id = ? FOR UPDATE');
+        $countStmt->execute([$userId]);
+        if ((int) $countStmt->fetchColumn() >= NICON_MAX_SERVERS_PER_ACCOUNT) {
+            $pdo->rollBack();
+            nicon_send_error('you already have the maximum of ' . NICON_MAX_SERVERS_PER_ACCOUNT . ' servers — remove one first', 400);
+            return;
+        }
+        $pdo->prepare('
+            INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ')->execute([$userId, $name, $host, $port, nicon_encrypt_password($password), $protocol, $queryProtocol, $queryPort, $game, 'manual']);
+        $id = (int) $pdo->lastInsertId();
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
     }
-    $pdo->prepare('
-        INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ')->execute([$userId, $name, $host, $port, nicon_encrypt_password($password), $protocol, $queryProtocol, $queryPort, $game, 'manual']);
-    $id = (int) $pdo->lastInsertId();
 
     nicon_audit_log($userId, 'server_added', null, $name);
 
@@ -303,6 +380,11 @@ function nicon_handle_create_server(int $userId): void
 
 function nicon_handle_update_server(int $userId, int $serverId): void
 {
+    if (!nicon_rate_limit_allow("servers-update:$userId", NICON_SERVERS_UPDATE_RATE_LIMIT, NICON_SERVERS_RATE_WINDOW)) {
+        header('Retry-After: ' . NICON_SERVERS_RATE_WINDOW);
+        nicon_send_error('too many server updates recently — try again later', 429);
+        return;
+    }
     $req = nicon_json_body();
     $name = trim((string) ($req['name'] ?? ''));
     $host = trim((string) ($req['host'] ?? ''));

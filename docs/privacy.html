@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<!-- Same policy as index.html's — see the comment there. This page loads
+     no script and has no inline style. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: https://nitrado.net https://*.nitrado.net https://shared.fastly.steamstatic.com https://store.fastly.steamstatic.com https://www.minecraft.net https://upload.wikimedia.org; connect-src 'self' https://nicon.mylss.de https://relay.130.61.8.150.sslip.io wss://relay.130.61.8.150.sslip.io; base-uri 'self'; form-action 'self'">
 <title>Privacy policy — NiCon</title>
 <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -16,7 +20,7 @@
 
 <header class="topbar public-topbar">
   <a href="index.html" class="wordmark"><picture><source srcset="nicon-favicon.webp" type="image/webp"><img src="nicon-favicon.png" alt="" width="22" height="22"></picture>NiCon</a>
-  <nav class="public-nav" aria-label="Legal and support"><a href="imprint.html">Imprint</a><a href="privacy.html" aria-current="page">Privacy</a><a href="contact.html">Contact</a></nav>
+  <nav class="public-nav" aria-label="Legal and support"><a href="imprint.html">Imprint</a><a href="privacy.html" aria-current="page">Privacy</a><a href="contact.html">Contact</a><a href="faq.html">FAQ</a></nav>
   <a href="index.html" class="btn-secondary public-back">Open NiCon</a>
 </header>
 
@@ -109,7 +113,7 @@
     such as the browser's IP address and user agent to that host.
   </p>
 
-  <h2>5. Steam integration</h2>
+  <h2>5. Steam integration and other game artwork</h2>
   <p>
     If the operator configured Steam enrichment and a player list contains
     SteamID64 values, the Cloud API sends newly observed IDs to Valve's
@@ -124,6 +128,16 @@
     ordinary connection data such as IP address and user agent; NiCon sends
     no referrer.
   </p>
+  <p>
+    The same overview also loads Minecraft's official key art directly from
+    <code>www.minecraft.net</code> (Mojang, a Microsoft subsidiary) and the
+    Minecraft logo from <code>upload.wikimedia.org</code> (Wikimedia
+    Foundation) — the same hotlinking mechanism as the Steam artwork above,
+    loaded automatically whenever the overview is shown rather than on a
+    separate click. Those operators likewise receive ordinary connection
+    data such as IP address and user agent when the images load; NiCon sends
+    no referrer to them either.
+  </p>
 
   <h2>6. Other recipients and external resources</h2>
   <ul>
@@ -131,9 +145,10 @@
       from, the game servers you choose to connect to.</li>
     <li>Contact-form content is transmitted through the operator's web/mail
       hosting and email provider to the mailbox used for support.</li>
-    <li>The frontend, API, database, relay, Nitrado, Valve, and game
-      server may be hosted by different providers or in different countries;
-      their own privacy terms and legal transfer mechanisms apply.</li>
+    <li>The frontend, API, database, relay, Nitrado, Valve, Mojang/Microsoft,
+      the Wikimedia Foundation, and game servers may be hosted by different
+      providers or in different countries; their own privacy terms and legal
+      transfer mechanisms apply.</li>
   </ul>
 
   <h2>7. Purposes and legal bases</h2>
@@ -189,7 +204,11 @@
     rectification (Art. 16), erasure (Art. 17), restriction (Art. 18), data
     portability (Art. 20), and object to processing (Art. 21 GDPR). You may
     also complain to a supervisory authority (Art. 77 GDPR). The in-app
-    <strong>Settings → Delete account</strong> action immediately removes
+    <strong>Settings → Export my data</strong> action downloads a JSON copy
+    of your account, servers, macros, moderation rules, and activity history
+    on demand, covering the access (Art. 15) and portability (Art. 20)
+    requests above without needing to ask the operator first.
+    <strong>Settings → Delete account</strong> immediately removes
     the account and its directly associated rows, subject to the audit-log
     retention described above. Contact the address in the
     <a href="imprint.html">imprint</a> for any broader request.
@@ -214,6 +233,8 @@
   <a href="privacy.html" aria-current="page">Privacy</a>
   <span aria-hidden="true">·</span>
   <a href="contact.html">Contact</a>
+  <span aria-hidden="true">·</span>
+  <a href="faq.html">FAQ</a>
 </footer>
 
 </body>

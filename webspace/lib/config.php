@@ -32,6 +32,7 @@ function nicon_config(): array
         'db_pass' => getenv('NICON_DB_PASS') ?: '',
         'encryption_key_base64' => getenv('NICON_ENCRYPTION_KEY') ?: '',
         'steam_api_key' => getenv('NICON_STEAM_API_KEY') ?: '',
+        'contact_recipient' => getenv('NICON_CONTACT_RECIPIENT') ?: '',
         // Test-only override used by the HTTP integration suite. Production
         // deployments leave this unset and always use api.nitrado.net.
         'nitrado_api_base_url' => getenv('NICON_NITRADO_API_BASE_URL') ?: 'https://api.nitrado.net',

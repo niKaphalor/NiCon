@@ -9,6 +9,19 @@ import (
 	"time"
 )
 
+// maxTelnetResponseBytes bounds readUntilQuiet's accumulator, mirroring
+// maxPalworldResponseBytes's reasoning in palworld_rest.go: without a cap, a
+// malicious 7 Days to Die server could send arbitrarily much data and force
+// unbounded memory growth here.
+const maxTelnetResponseBytes = 1 * 1024 * 1024 // 1 MiB
+
+// maxTelnetReadDuration bounds readUntilQuiet's total wall-clock time,
+// independent of the rolling "quiet" timeout passed in. That timeout resets
+// on every byte received, so a server trickling data continuously (e.g. one
+// byte every 100ms) would otherwise never go quiet and Execute would block
+// under c.mu forever, wedging that connection.
+const maxTelnetReadDuration = 15 * time.Second
+
 // telnetConn is the line-oriented remote console used by 7 Days to Die.
 // It handles the small subset of Telnet negotiation used by the dedicated
 // server and treats a short period of silence as the end of a command reply.
@@ -69,14 +82,22 @@ func (c *telnetConn) Close() error { return c.conn.Close() }
 func (c *telnetConn) readUntilQuiet(initial, quiet time.Duration) (string, error) {
 	var out bytes.Buffer
 	buf := make([]byte, 4096)
+	deadline := time.Now().Add(maxTelnetReadDuration)
 	for {
 		wait := quiet
 		if out.Len() == 0 {
 			wait = initial
 		}
-		_ = c.conn.SetReadDeadline(time.Now().Add(wait))
+		readDeadline := time.Now().Add(wait)
+		if readDeadline.After(deadline) {
+			readDeadline = deadline
+		}
+		_ = c.conn.SetReadDeadline(readDeadline)
 		n, err := c.conn.Read(buf)
 		if n > 0 {
+			if out.Len()+n > maxTelnetResponseBytes {
+				return out.String(), fmt.Errorf("telnet: response exceeded %d bytes", maxTelnetResponseBytes)
+			}
 			out.Write(stripTelnetControl(buf[:n]))
 		}
 		if ne, ok := err.(net.Error); ok && ne.Timeout() && out.Len() > 0 {
@@ -84,6 +105,9 @@ func (c *telnetConn) readUntilQuiet(initial, quiet time.Duration) (string, error
 		}
 		if err != nil {
 			return out.String(), err
+		}
+		if time.Now().After(deadline) {
+			return out.String(), fmt.Errorf("telnet: response exceeded %s", maxTelnetReadDuration)
 		}
 	}
 }

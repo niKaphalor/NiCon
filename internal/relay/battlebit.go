@@ -34,6 +34,10 @@ func dialBattlebit(host string, port int, password string) (*battlebitConn, erro
 	if err != nil {
 		return nil, fmt.Errorf("battlebit: %w", err)
 	}
+	// See dialWebRcon's identical call: gorilla/websocket has no read limit
+	// by default, so a compromised BattleBit server could otherwise force
+	// unbounded memory allocation with one oversized frame.
+	ws.SetReadLimit(maxWSMessageBytes)
 	c := &battlebitConn{ws: ws, pending: make(map[int]chan []byte), Broadcast: make(chan string, 64)}
 	go c.readLoop()
 	return c, nil

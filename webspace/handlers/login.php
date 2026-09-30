@@ -3,13 +3,17 @@ declare(strict_types=1);
 
 // Mirrors register.php's rate limiting (same fixed-window/IP mechanism —
 // see lib/ratelimit.php) — login had none before, unlike every other
-// credential-guessing surface here (register, reset-password). Two
-// buckets: a coarse per-IP ceiling against broad credential stuffing
-// across many usernames, and a tighter per-(IP, username) one against
-// brute-forcing a single account.
-const NICON_LOGIN_RATE_LIMIT = 20;      // per IP, per window
-const NICON_LOGIN_USER_RATE_LIMIT = 10; // per IP+username, per window
-const NICON_LOGIN_RATE_WINDOW = 900;    // 15 minutes
+// credential-guessing surface here (register, reset-password). Three
+// buckets: a coarse per-IP ceiling against broad credential stuffing across
+// many usernames, a tighter per-(IP, username) one against brute-forcing a
+// single account from one IP, and a per-username-only one (no IP in the
+// key) against the same attack spread across many IPs — the first two
+// buckets alone give a fresh allowance to every new source IP, so a
+// distributed/rotating-IP attacker isn't slowed by them at all.
+const NICON_LOGIN_RATE_LIMIT = 20;         // per IP, per window
+const NICON_LOGIN_USER_RATE_LIMIT = 10;    // per IP+username, per window
+const NICON_LOGIN_ACCOUNT_RATE_LIMIT = 30; // per username regardless of IP, per window
+const NICON_LOGIN_RATE_WINDOW = 900;       // 15 minutes
 
 function nicon_handle_login(): void
 {
@@ -20,7 +24,9 @@ function nicon_handle_login(): void
     $ipLimited = !nicon_rate_limit_allow('login', NICON_LOGIN_RATE_LIMIT, NICON_LOGIN_RATE_WINDOW);
     $userLimited = $username !== ''
         && !nicon_rate_limit_allow('login:' . strtolower($username), NICON_LOGIN_USER_RATE_LIMIT, NICON_LOGIN_RATE_WINDOW);
-    if ($ipLimited || $userLimited) {
+    $accountLimited = $username !== ''
+        && !nicon_rate_limit_allow_global('login-account:' . strtolower($username), NICON_LOGIN_ACCOUNT_RATE_LIMIT, NICON_LOGIN_RATE_WINDOW);
+    if ($ipLimited || $userLimited || $accountLimited) {
         header('Retry-After: ' . NICON_LOGIN_RATE_WINDOW);
         nicon_send_error('too many login attempts — try again later', 429);
         return;

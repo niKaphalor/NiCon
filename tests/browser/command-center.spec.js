@@ -192,13 +192,16 @@ async function login(page) {
 test("login, manual game selection, profile editing, and Nitrado sync", async ({ page }) => {
   const state = await installBackend(page, []);
   await login(page);
-  await expect(page.locator("#supported-games-list .supported-game-header")).toHaveCount(29);
+  await expect(page.locator("#supported-games-list .supported-game-header")).toHaveCount(30);
   await expect(page.locator('#supported-games-list li[aria-label="Rust"] img')).toHaveAttribute("src", /apps\/252490\/header\.jpg/);
   await expect(page.locator('#supported-games-list li[aria-label="7 Days to Die"] .tag')).toHaveClass(/tag-tested/);
   await expect(page.locator('#supported-games-list li[aria-label="DayZ"] .tag')).toHaveClass(/tag-tested/);
   await expect(page.locator('#supported-games-list li[aria-label="ARK: Survival Ascended"] .tag')).toHaveClass(/tag-tested/);
   await expect(page.locator('#supported-games-list li[aria-label="Minecraft"] .tag')).toHaveClass(/tag-tested/);
   await expect(page.locator('#supported-games-list li[aria-label="Palworld"] .tag')).toHaveClass(/tag-tested/);
+  await expect(page.locator('#supported-games-list li[aria-label="Valheim"] .supported-game-integration')).toContainText("Server mod required");
+  await expect(page.locator('#supported-games-list li[aria-label="Rust"] .supported-game-integration')).toContainText("No server mod");
+  await expect(page.locator('#supported-games-list li[aria-label="DayZ"] .supported-game-integration')).toContainText("Dedicated server protocol");
   // Minecraft isn't on Steam — official key art hotlinked from Mojang's
   // own CDN instead (see games.js), not the Steam header path every other
   // game above uses, plus a wordmark overlay since that key art has no

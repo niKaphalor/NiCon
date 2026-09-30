@@ -136,6 +136,7 @@
 
   var viewSettings = document.getElementById("view-settings");
   var privacyCard = document.getElementById("privacy-card");
+  var exportDataBtn = document.getElementById("export-data-btn");
   var accountCard = document.getElementById("account-card");
   var activityCard = document.getElementById("activity-card");
   var activityList = document.getElementById("activity-list");
@@ -165,6 +166,16 @@
   var notificationMessage = document.getElementById("notification-message");
   var adminNotificationsList = document.getElementById("admin-notifications-list");
   var adminAuditLogList = document.getElementById("admin-audit-log-list");
+  var faqEditorForm = document.getElementById("faq-editor-form");
+  var faqEditorId = document.getElementById("faq-editor-id");
+  var faqQuestionDe = document.getElementById("faq-question-de");
+  var faqAnswerDe = document.getElementById("faq-answer-de");
+  var faqQuestionEn = document.getElementById("faq-question-en");
+  var faqAnswerEn = document.getElementById("faq-answer-en");
+  var faqSortOrder = document.getElementById("faq-sort-order");
+  var faqPublished = document.getElementById("faq-published");
+  var faqEditorCancel = document.getElementById("faq-editor-cancel");
+  var adminFaqList = document.getElementById("admin-faq-list");
 
   var viewHealth = document.getElementById("view-health");
   var healthBody = document.getElementById("health-body");
@@ -178,6 +189,11 @@
   var nitradoTokenInput = document.getElementById("nitrado-token");
   var nitradoTokenStatus = document.getElementById("nitrado-token-status");
   var forgetNitradoTokenBtn = document.getElementById("forget-nitrado-token-btn");
+  var nitradoSettingsCard = document.getElementById("nitrado-settings-card");
+  var settingsNitradoForm = document.getElementById("settings-nitrado-form");
+  var settingsNitradoTokenInput = document.getElementById("settings-nitrado-token");
+  var settingsNitradoTokenStatus = document.getElementById("settings-nitrado-token-status");
+  var settingsForgetNitradoTokenBtn = document.getElementById("settings-forget-nitrado-token-btn");
   var manualForm = document.getElementById("manual-form");
   var manualTestBtn = document.getElementById("manual-test-btn");
   var manualQueryTestBtn = document.getElementById("manual-query-test-btn");
@@ -834,6 +850,30 @@
       });
   });
 
+  // --- data export (self-service, Art. 15/20 GDPR) ---
+
+  exportDataBtn.addEventListener("click", function () {
+    apiFetch("/api/account/export", { method: "GET" })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t)); });
+        return r.text();
+      })
+      .then(function (text) {
+        var blob = new Blob([text], { type: "application/json" });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement("a");
+        link.href = url;
+        link.download = "nicon-data-export-" + new Date().toISOString().slice(0, 10) + ".json";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      })
+      .catch(function (err) {
+        showToast(I18N.t("errors.exportDataFailed", { message: err.message }));
+      });
+  });
+
   // --- account deletion (self-service, Art. 17 GDPR) ---
 
   deleteAccountBtn.addEventListener("click", function () {
@@ -865,22 +905,35 @@
       .catch(function () { /* the sync form still works without this */ });
   }
 
+  // renderNitradoTokenStatus keeps both places a Nitrado token can be
+  // managed from — the Add Server modal's "From Nitrado" tab, and the
+  // Settings → Nitrado card — in sync with each other, since either one
+  // saving or forgetting a token changes state the other one displays too.
   function renderNitradoTokenStatus() {
     nitradoTokenStatus.hidden = !hasNitradoToken;
     nitradoTokenInput.required = !hasNitradoToken;
+    settingsNitradoTokenStatus.hidden = !hasNitradoToken;
+    settingsNitradoTokenInput.required = !hasNitradoToken;
   }
 
-  forgetNitradoTokenBtn.addEventListener("click", function () {
-    showConfirm(I18N.t("addModal.forgetTokenConfirm")).then(function (ok) {
+  function forgetNitradoToken() {
+    return showConfirm(I18N.t("addModal.forgetTokenConfirm")).then(function (ok) {
       if (!ok) return;
-      apiFetch("/api/account/nitrado-token", { method: "DELETE" })
+      return apiFetch("/api/account/nitrado-token", { method: "DELETE" })
         .then(function (r) {
           if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.forgetTokenFailed"));
           hasNitradoToken = false;
           renderNitradoTokenStatus();
-        })
-        .catch(function (err) { showToast(err.message); });
+        });
     });
+  }
+
+  forgetNitradoTokenBtn.addEventListener("click", function () {
+    forgetNitradoToken().catch(function (err) { showToast(err.message); });
+  });
+
+  settingsForgetNitradoTokenBtn.addEventListener("click", function () {
+    forgetNitradoToken().catch(function (err) { showToast(err.message); });
   });
 
   // --- add-server modal + tabs ---
@@ -1153,6 +1206,8 @@
         row.classList.add("has-game-icon");
         var gameIcon = document.createElement("img");
         gameIcon.className = "server-game-icon";
+        gameIcon.loading = "lazy";
+        gameIcon.referrerPolicy = "no-referrer";
         gameIcon.src = server.game_icon_url;
         gameIcon.alt = "";
         gameIcon.addEventListener("error", function () {
@@ -1183,12 +1238,12 @@
 
   // --- Nitrado sync ---
 
-  nitradoForm.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var token = nitradoTokenInput.value.trim();
-    if (!token && !hasNitradoToken) return; // required attribute already blocks this, belt and suspenders
-
-    apiFetch("/api/nitrado/sync", {
+  // performNitradoSync is shared by the Add Server modal's "From Nitrado"
+  // tab and the Settings → Nitrado card — same request, same server-list
+  // side effect, different only in what each caller does on success/error
+  // (close the modal vs. just toast) and which input field to clear after.
+  function performNitradoSync(token) {
+    return apiFetch("/api/nitrado/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(token ? { token: token } : {}),
@@ -1201,15 +1256,38 @@
         servers = list || [];
         renderServers();
         renderContent();
-        addModal.close();
         if (token) loadAccountInfo(); // a new token was just saved
-      })
+      });
+  }
+
+  nitradoForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var token = nitradoTokenInput.value.trim();
+    if (!token && !hasNitradoToken) return; // required attribute already blocks this, belt and suspenders
+
+    performNitradoSync(token)
+      .then(function () { addModal.close(); })
       .catch(function (err) {
         showToast(I18N.t("errors.nitradoSyncFailed", { message: err.message }));
       })
       .finally(function () {
         // The token was only ever needed for this one request.
         nitradoTokenInput.value = "";
+      });
+  });
+
+  settingsNitradoForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var token = settingsNitradoTokenInput.value.trim();
+    if (!token && !hasNitradoToken) return;
+
+    performNitradoSync(token)
+      .then(function () { showToast(I18N.t("settings.nitradoSyncSuccess")); })
+      .catch(function (err) {
+        showToast(I18N.t("errors.nitradoSyncFailed", { message: err.message }));
+      })
+      .finally(function () {
+        settingsNitradoTokenInput.value = "";
       });
   });
 
@@ -1462,6 +1540,7 @@
     addServerBtn.hidden = false;
     accountDangerZone.hidden = false;
     accountCard.hidden = false;
+    nitradoSettingsCard.hidden = false;
     privacyCard.hidden = false;
     activityCard.hidden = false;
     accountUsernameLine.textContent = I18N.t("settings.accountUsernameLine", { username: currentUsername });
@@ -1510,6 +1589,7 @@
   adminNavBtn.addEventListener("click", function () {
     loadAdminUsers();
     loadAdminNotifications();
+    loadAdminFaq();
     loadAdminAuditLog();
     showAdminView();
   });
@@ -1712,6 +1792,9 @@
       case "admin_recovery_code_regenerated": return I18N.t("auditLog.action_adminRecoveryCodeRegenerated", { actor: actor, target: target });
       case "admin_notification_created": return I18N.t("auditLog.action_adminNotificationCreated", { actor: actor, detail: detail });
       case "admin_notification_deleted": return I18N.t("auditLog.action_adminNotificationDeleted", { actor: actor, detail: detail });
+      case "admin_faq_created": return I18N.t("auditLog.action_adminFaqCreated", { actor: actor, detail: detail });
+      case "admin_faq_updated": return I18N.t("auditLog.action_adminFaqUpdated", { actor: actor, detail: detail });
+      case "admin_faq_deleted": return I18N.t("auditLog.action_adminFaqDeleted", { actor: actor, detail: detail });
       default: return entry.action; // forward-compatible fallback for an action this build doesn't know a template for yet
     }
   }
@@ -1795,6 +1878,131 @@
       .then(function () {
         notificationForm.reset();
         loadAdminNotifications();
+      })
+      .catch(function (err) { showToast(err.message); });
+  });
+
+  // --- admin: public FAQ ---
+
+  function resetFaqEditor() {
+    faqEditorForm.reset();
+    faqEditorId.value = "";
+    faqSortOrder.value = "0";
+    faqPublished.checked = true;
+    faqEditorCancel.hidden = true;
+  }
+
+  function loadAdminFaq() {
+    return apiFetch("/api/admin/faq", { method: "GET" })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || I18N.t("errors.faqLoadFailed")); });
+        return r.json();
+      })
+      .then(function (list) { renderAdminFaq(list || []); })
+      .catch(function (err) { showToast(err.message); });
+  }
+
+  function editFaqEntry(entry) {
+    faqEditorId.value = String(entry.id);
+    faqQuestionDe.value = entry.question_de;
+    faqAnswerDe.value = entry.answer_de;
+    faqQuestionEn.value = entry.question_en;
+    faqAnswerEn.value = entry.answer_en;
+    faqSortOrder.value = String(entry.sort_order || 0);
+    faqPublished.checked = !!entry.is_published;
+    faqEditorCancel.hidden = false;
+    faqQuestionDe.focus();
+  }
+
+  function renderAdminFaq(list) {
+    adminFaqList.innerHTML = "";
+    if (!list.length) {
+      var empty = document.createElement("p");
+      empty.className = "hint";
+      empty.textContent = I18N.t("admin.faqEmpty");
+      adminFaqList.appendChild(empty);
+      return;
+    }
+    list.forEach(function (entry) {
+      var row = document.createElement("article");
+      row.className = "faq-admin-row";
+
+      var copy = document.createElement("div");
+      copy.className = "faq-admin-copy";
+      var heading = document.createElement("h3");
+      heading.textContent = entry.question_de;
+      copy.appendChild(heading);
+      var english = document.createElement("p");
+      english.className = "hint";
+      english.textContent = entry.question_en;
+      copy.appendChild(english);
+      var meta = document.createElement("div");
+      meta.className = "faq-admin-meta";
+      var state = document.createElement("span");
+      state.className = "tag " + (entry.is_published ? "tag-tested" : "tag-neutral");
+      state.textContent = I18N.t(entry.is_published ? "admin.faqPublished" : "admin.faqDraft");
+      meta.appendChild(state);
+      var order = document.createElement("span");
+      order.className = "hint mono";
+      order.textContent = I18N.t("admin.faqOrderValue", { value: entry.sort_order });
+      meta.appendChild(order);
+      copy.appendChild(meta);
+      row.appendChild(copy);
+
+      var actions = document.createElement("div");
+      actions.className = "faq-admin-actions";
+      var edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "btn-secondary";
+      edit.textContent = I18N.t("common.edit");
+      edit.addEventListener("click", function () { editFaqEntry(entry); });
+      actions.appendChild(edit);
+      var remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "btn-secondary btn-danger";
+      remove.textContent = I18N.t("admin.delete");
+      remove.addEventListener("click", function () {
+        showConfirm(I18N.t("admin.faqDeleteConfirm", { question: entry.question_de })).then(function (ok) {
+          if (!ok) return;
+          apiFetch("/api/admin/faq/" + entry.id, { method: "DELETE" })
+            .then(function (r) {
+              if (!r.ok && r.status !== 204) throw new Error(I18N.t("errors.faqDeleteFailed"));
+              if (faqEditorId.value === String(entry.id)) resetFaqEditor();
+              loadAdminFaq();
+            })
+            .catch(function (err) { showToast(err.message); });
+        });
+      });
+      actions.appendChild(remove);
+      row.appendChild(actions);
+      adminFaqList.appendChild(row);
+    });
+  }
+
+  faqEditorCancel.addEventListener("click", resetFaqEditor);
+  faqEditorForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var id = faqEditorId.value;
+    var payload = {
+      question_de: faqQuestionDe.value.trim(),
+      answer_de: faqAnswerDe.value.trim(),
+      question_en: faqQuestionEn.value.trim(),
+      answer_en: faqAnswerEn.value.trim(),
+      sort_order: Number(faqSortOrder.value || 0),
+      is_published: faqPublished.checked,
+    };
+    apiFetch(id ? "/api/admin/faq/" + id : "/api/admin/faq", {
+      method: id ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || I18N.t("errors.faqSaveFailed")); });
+        return r.json();
+      })
+      .then(function () {
+        resetFaqEditor();
+        loadAdminFaq();
       })
       .catch(function (err) { showToast(err.message); });
   });
@@ -2653,6 +2861,8 @@
     if (server.game_icon_url) {
       var gameIcon = document.createElement("img");
       gameIcon.className = "server-game-icon";
+      gameIcon.loading = "lazy";
+      gameIcon.referrerPolicy = "no-referrer";
       gameIcon.src = server.game_icon_url;
       gameIcon.alt = "";
       gameIcon.addEventListener("error", function () { gameIcon.remove(); });
@@ -2985,6 +3195,10 @@
     c.lines.push({ kind: kind, text: text });
     if (c.lines.length > MAX_CONSOLE_LOG_LINES) {
       c.lines.splice(0, c.lines.length - MAX_CONSOLE_LOG_LINES);
+      // Tracked so appendNewLogLines can tell a trim happened since its
+      // last render and fall back to a full rebuild instead of appending
+      // onto a DOM that's now missing the lines at the front.
+      c.trimGen = (c.trimGen || 0) + 1;
     }
   }
 
@@ -3030,19 +3244,66 @@
   // renderLog does a full rebuild (log.innerHTML = "" + re-append every
   // line) rather than an incremental append, so it can re-run the filter
   // regex over the whole log; that's fine for a single command's
-  // response, but a burst of broadcast lines arriving back-to-back
-  // (WebRCON/BattlEye chat, kill feed) used to trigger one full rebuild
-  // per line. Coalescing same-frame calls into one keeps the same
-  // rendering path and the same final output, just not redone once per
-  // line when several arrive within a frame.
+  // response, or any of the explicit UI actions that call it directly
+  // (filter changed, console switched/cleared, follow-tail clicked) — all
+  // of those need every line re-evaluated anyway. A burst of broadcast
+  // lines arriving back-to-back (WebRCON/BattlEye chat, kill feed) is a
+  // different case: nothing about the filter or existing lines changed,
+  // only new ones were appended, so appendNewLogLines below handles that
+  // path by appending just the new lines instead of rebuilding all 2000.
+  // Coalescing same-frame calls into one (regardless of which path runs)
+  // still keeps a burst to one DOM update per animation frame rather than
+  // one per line.
   var logRenderScheduled = false;
   function scheduleLogRender() {
     if (logRenderScheduled) return;
     logRenderScheduled = true;
     window.requestAnimationFrame(function () {
       logRenderScheduled = false;
-      renderLog(consoles[selectedServerId]);
+      appendNewLogLines(consoles[selectedServerId]);
     });
+  }
+
+  // appendNewLogLines is renderLog's incremental fast path for the one
+  // caller (scheduleLogRender) whose trigger — new lines were pushed onto
+  // c.lines — can never itself invalidate what's already in the DOM. It
+  // falls back to the always-correct full renderLog whenever an
+  // assumption that would make appending unsafe doesn't hold: the console
+  // changed, a filter is active (this path never evaluates one), or old
+  // lines were trimmed off the front since the last render (tracked via
+  // trimGen). renderLog itself records the bookkeeping this checks
+  // against, so every code path — direct renderLog calls and this one —
+  // stays consistent with whatever's actually in the DOM.
+  function appendNewLogLines(c) {
+    if (!c ||
+        lastRenderedLogConsole !== c ||
+        c._logRenderedFiltered !== false ||
+        activeFilterRegex() !== null ||
+        c._logRenderedTrimGen !== (c.trimGen || 0) ||
+        typeof c._logRenderedCount !== "number" ||
+        c._logRenderedCount > c.lines.length) {
+      renderLog(c);
+      return;
+    }
+    var newLines = c.lines.slice(c._logRenderedCount);
+    if (!newLines.length) return;
+    renderingConsoleLog = true;
+    var previousScrollTop = c.scrollTop;
+    newLines.forEach(function (line) {
+      var div = document.createElement("div");
+      div.className = "log-line kind-" + line.kind;
+      appendHighlighted(div, line.text, null);
+      log.appendChild(div);
+    });
+    c._logRenderedCount = c.lines.length;
+    if (c.followTail !== false) {
+      log.scrollTop = log.scrollHeight;
+    } else {
+      log.scrollTop = previousScrollTop;
+    }
+    c.scrollTop = log.scrollTop;
+    renderingConsoleLog = false;
+    updateConsoleFollowButton(c);
   }
 
   function refreshIfActive(c) {
@@ -3055,6 +3316,7 @@
   // --- console log: filtering + highlighting ---
 
   var renderingConsoleLog = false;
+  var lastRenderedLogConsole = null;
 
   function updateConsoleFollowButton(c) {
     consoleFollowBtn.hidden = !c || c.followTail !== false;
@@ -3080,6 +3342,7 @@
     log.innerHTML = "";
     if (!c) {
       renderingConsoleLog = false;
+      lastRenderedLogConsole = null;
       updateConsoleFollowButton(null);
       return;
     }
@@ -3099,6 +3362,10 @@
     }
     c.scrollTop = log.scrollTop;
     renderingConsoleLog = false;
+    lastRenderedLogConsole = c;
+    c._logRenderedFiltered = !!regex;
+    c._logRenderedTrimGen = c.trimGen || 0;
+    c._logRenderedCount = c.lines.length;
     updateConsoleFollowButton(c);
   }
 
@@ -3865,8 +4132,10 @@
       var tested = TESTED_GAMES.indexOf(key) !== -1;
       var game = window.NICON_GAMES[key];
       var li = document.createElement("li");
+      var integrationType = game.integrationType || "native";
+      var integrationLabel = I18N.t("welcome.integration." + integrationType);
       li.setAttribute("aria-label", game.label);
-      li.title = game.label;
+      li.title = game.label + " — " + integrationLabel;
 
       var image = document.createElement("img");
       image.className = "supported-game-header";
@@ -3905,6 +4174,11 @@
         logo.referrerPolicy = "no-referrer";
         li.appendChild(logo);
       }
+
+      var integrationTag = document.createElement("span");
+      integrationTag.className = "supported-game-integration integration-" + integrationType;
+      integrationTag.textContent = integrationLabel;
+      li.appendChild(integrationTag);
 
       var tag = document.createElement("span");
       tag.className = "tag " + (tested ? "tag-tested" : "tag-untested");

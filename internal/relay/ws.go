@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorcon/rcon"
 	"github.com/gorilla/websocket"
 
 	"github.com/niKaphalor/NiCon/internal/store"
@@ -167,7 +166,7 @@ func connectGame(srv store.Server) (gameConn, error) {
 		return dialBattlebit(srv.Host, srv.Port, srv.Password)
 	default:
 		address := fmt.Sprintf("%s:%d", srv.Host, srv.Port)
-		return rcon.Dial(address, srv.Password)
+		return dialSourceRCON(address, srv.Password)
 	}
 }
 

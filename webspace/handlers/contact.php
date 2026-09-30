@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 const NICON_CONTACT_RATE_LIMIT = 3;   // per window, mirrors NICON_REGISTER_RATE_LIMIT
 const NICON_CONTACT_RATE_WINDOW = 900; // 15 minutes
-const NICON_CONTACT_RECIPIENT = 'r.mertner@gmx.de';
 
 // nicon_handle_contact sends a visitor's message to the operator's inbox.
 // No login required — this is the page people reach for BEFORE they have
@@ -14,6 +13,17 @@ const NICON_CONTACT_RECIPIENT = 'r.mertner@gmx.de';
 // dependency.
 function nicon_handle_contact(): void
 {
+    // Per-instance, not per-instance-source: a fork of this repo has no
+    // reason to inherit a previous operator's inbox address baked into the
+    // code, and the address itself is that operator's personal data — it
+    // belongs in the gitignored config, not in a file anyone forking or
+    // reading this repository can see.
+    $recipient = (string) (nicon_config()['contact_recipient'] ?? '');
+    if ($recipient === '') {
+        nicon_send_error('contact form is not configured on this instance', 500);
+        return;
+    }
+
     if (!nicon_rate_limit_allow('contact', NICON_CONTACT_RATE_LIMIT, NICON_CONTACT_RATE_WINDOW)) {
         header('Retry-After: ' . NICON_CONTACT_RATE_WINDOW);
         nicon_send_error('too many messages from this address — try again later', 429);
@@ -57,7 +67,7 @@ function nicon_handle_contact(): void
         'Content-Type: text/plain; charset=UTF-8',
     ];
 
-    $sent = @mail(NICON_CONTACT_RECIPIENT, $subject, $body, implode("\r\n", $headers));
+    $sent = @mail($recipient, $subject, $body, implode("\r\n", $headers));
     if (!$sent) {
         nicon_send_error('could not send your message — try again later', 502);
         return;

@@ -214,8 +214,9 @@ mysql -h <host> -u <user> -p <database> < webspace/schema.sql
 cp webspace/config.example.php webspace/config.local.php
 # edit config.local.php: db_dsn/db_user/db_pass, encryption_key_base64
 # (generate with `nicon-relay genkey` — must match the relay's key
-# exactly), allowed_origins, and optionally steam_api_key for player
-# profile/ban enrichment.
+# exactly), allowed_origins, optionally steam_api_key for player
+# profile/ban enrichment, and contact_recipient if you want the contact
+# form (see below) to actually deliver anywhere.
 ```
 
 Then upload the whole `webspace/` directory to your hosting (e.g. into a
@@ -279,7 +280,7 @@ Once deployed, it serves the same JSON API the relay used to (except
 `/ws/rcon`, which stays with the relay — see below):
 
 - **Auth and account** (`POST /login`, `POST /logout`, `POST /register`,
-  `POST /reset-password`, `GET/DELETE /account`, `PUT
+  `POST /reset-password`, `GET/DELETE /account`, `GET /account/export`, `PUT
   /account/password`, `PUT /account/username`, `DELETE
   /account/nitrado-token`): login exchanges a
   username/password (bcrypt-hashed at rest) for a session token, which the
@@ -288,13 +289,13 @@ Once deployed, it serves the same JSON API the relay used to (except
   nonexistent username still runs a bcrypt comparison against a fixed
   dummy hash before failing, so a wrong-username response takes about the
   same time as a wrong-password one — timing alone can't be used to probe
-  which usernames exist. `/login` is rate-limited two ways at once: 20 per
+  which usernames exist. `/login` is rate-limited three ways at once: 20 per
   15-minute window per client IP (caps how many different accounts one IP
-  can try), and separately 10 per 15-minute window per IP+username pair
-  (caps repeated guesses against one specific account from that IP). Note
-  what this doesn't cover: a slow, distributed guess against one account
-  spread across many IPs isn't caught by either counter, since each IP
-  gets its own share of both limits. Tokens
+  can try), separately 10 per 15-minute window per IP+username pair (caps
+  repeated guesses against one specific account from that IP), and 30 per
+  15-minute window per username regardless of IP (catches a slow, distributed
+  guess spread across many source IPs, which the first two counters alone
+  wouldn't — each IP would otherwise get its own fresh share of both). Tokens
   live 7 days server-side (a `sessions` row with an expiry) and are stored
   in the browser's `sessionStorage`, not `localStorage`, so they don't
   outlive the tab. Register is the same, minus an existing account — it
@@ -326,6 +327,12 @@ Once deployed, it serves the same JSON API the relay used to (except
   Account deletion removes the user row;
   `sessions` and `servers` cascade-delete with it at the database level
   (`ON DELETE CASCADE`), so there's nothing left to clean up separately.
+  `GET /account/export` is the self-service GDPR access/portability path
+  (Art. 15/20): one JSON document with the account's own servers (minus
+  RCON passwords, same as everywhere else), command templates, moderation
+  rules, and full activity history (account + RCON audit rows, not capped
+  at 100 like `GET /audit-log`) — the frontend's **Settings → Export my
+  data** button downloads it as a file, no operator involvement needed.
 - **Per-user server storage** (`GET/POST /servers`, `PUT /servers/{id}`,
   `PUT /servers/{id}/password`, `DELETE /servers/{id}`,
   `POST /servers/{id}/nitrado-power`, `GET
@@ -435,9 +442,12 @@ Once deployed, it serves the same JSON API the relay used to (except
 - **Contact form** (`POST /contact`): no login required — this is the
   page people reach before they have an account, or don't want one. Takes
   `{name, email, message}` and sends it as an email to the operator's own
-  address (hardcoded in `handlers/contact.php`, not per-instance
-  configurable yet) via PHP's `mail()`, with `Reply-To` set to the
-  submitter's address so replying just works. A hidden `website` field is
+  address, read from `config.local.php`'s `contact_recipient` (or
+  `NICON_CONTACT_RECIPIENT` if you're on the environment-variable fallback
+  — see [Cloud API (`webspace/`)](#cloud-api-webspace)) via PHP's `mail()`,
+  with `Reply-To` set to the submitter's address so replying just works.
+  Left unconfigured, the endpoint returns a 500 instead of silently
+  discarding messages. A hidden `website` field is
   a honeypot — a bot that fills it in gets a fake `{"ok": true}` back
   with no email actually sent, so it has no signal to learn from; rate
   limited the same way as `/register` (3 per 15-minute window).
@@ -636,10 +646,15 @@ Anyone who can reach the frontend can create their own account from the
 default. Signing up requires a username (3–32 characters), a password (min
 8 characters), and checking a box confirming the
 [privacy policy](docs/privacy.html) has been read; it logs you in
-immediately afterward. An account can delete itself at any time from
+immediately afterward. **Settings → Export my data** downloads a JSON copy
+of everything stored under the account — servers, command templates,
+moderation rules, and full activity history — on demand, no request to the
+operator needed. An account can delete itself at any time from
 **Settings → Delete account** — this permanently removes the account and
 every server it added, RCON passwords included (there is no "soft delete"
-or recovery).
+or recovery). The Nitrado API token (see below) can be saved, replaced, or
+forgotten either from **Settings → Nitrado** or from the Add Server
+modal's "From Nitrado" tab — both talk to the same saved token.
 
 Whoever operates the Cloud API and relay can also create accounts
 directly, from the command line, without going through the registration

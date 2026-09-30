@@ -14,7 +14,25 @@ require_once __DIR__ . '/db.php';
 function nicon_rate_limit_allow(string $bucket, int $limit, int $windowSeconds): bool
 {
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-    $key = hash('sha256', $bucket . ':' . $ip);
+    return nicon_rate_limit_count($bucket . ':' . $ip, $limit, $windowSeconds);
+}
+
+// nicon_rate_limit_allow_global is nicon_rate_limit_allow without the client
+// IP folded into the key — every caller sharing $bucket competes for the
+// same $limit regardless of where they connect from. Needed specifically
+// where the per-IP bucket isn't enough: login.php's per-(IP, username)
+// bucket only ever throttles a single source IP guessing one account, so a
+// distributed attacker rotating across many IPs gets a fresh allowance from
+// each one. This is the backstop for that — one counter per account, no
+// matter how many IPs are used against it.
+function nicon_rate_limit_allow_global(string $bucket, int $limit, int $windowSeconds): bool
+{
+    return nicon_rate_limit_count($bucket, $limit, $windowSeconds);
+}
+
+function nicon_rate_limit_count(string $key, int $limit, int $windowSeconds): bool
+{
+    $key = hash('sha256', $key);
     $windowStart = intdiv(time(), $windowSeconds) * $windowSeconds;
 
     $pdo = nicon_db();
