@@ -28,11 +28,15 @@ type battlebitConn struct {
 	closeOnce sync.Once
 }
 
-func dialBattlebit(host string, port int, password string) (*battlebitConn, error) {
-	u := url.URL{Scheme: "ws", Host: net.JoinHostPort(host, strconv.Itoa(port)), Path: "/"}
+func dialBattlebit(host string, port int, password string, opts ...dialOptions) (*battlebitConn, error) {
+	o := firstDialOptions(opts)
+	u := url.URL{Scheme: o.wsScheme(), Host: net.JoinHostPort(host, strconv.Itoa(port)), Path: "/"}
 	header := http.Header{}
 	header.Set("x-password", password)
-	ws, _, err := websocket.DefaultDialer.Dial(u.String(), header)
+	if h := o.hostHeader(port); h != "" {
+		header.Set("Host", h)
+	}
+	ws, _, err := o.wsDialer().Dial(u.String(), header)
 	if err != nil {
 		return nil, fmt.Errorf("battlebit: %w", err)
 	}

@@ -82,6 +82,10 @@ ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_code VARCHAR(128) NOT 
 ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_icon_url VARCHAR(2048) NULL;
 ALTER TABLE servers ADD COLUMN IF NOT EXISTS query_protocol VARCHAR(16) NOT NULL DEFAULT 'auto';
 ALTER TABLE servers ADD COLUMN IF NOT EXISTS query_port INT UNSIGNED NULL;
+-- Connect over TLS (wss / https) for the protocols that support it (WebRCON,
+-- BattleBit, Palworld REST); certificates are always verified. Off by default:
+-- most game servers speak the plain variant only.
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS use_tls BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS server_health_samples (
 	id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

@@ -157,6 +157,10 @@ func acquireProbeSlot() (release func(), err error) {
 	}
 }
 
+// tlsCapableProtocols are the transports that can run over TLS (wss / https).
+// The others (Source RCON, Telnet, BattlEye's UDP) have no TLS variant.
+var tlsCapableProtocols = map[string]bool{"webrcon": true, "battlebit": true, "palworld_rest": true}
+
 // validPort reports whether port is a usable TCP/UDP port number.
 func validPort(port int) bool { return port >= 1 && port <= 65535 }
 

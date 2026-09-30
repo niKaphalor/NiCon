@@ -297,6 +297,8 @@ window.NICON_I18N_STRINGS.de = {
     confirm: "Bestätigen",
   },
   addModal: {
+    useTls: "TLS verwenden (wss / https)",
+    useTlsHint: "Nur, wenn der Spieleserver selbst TLS mit einem für diesen Hostnamen gültigen Zertifikat anbietet – das Zertifikat wird immer geprüft.",
     title: "Server hinzufügen",
     tabNitrado: "Von Nitrado",
     tabManual: "Manuell",

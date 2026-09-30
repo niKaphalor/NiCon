@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // palworldRestConn speaks Palworld's first-party REST API
@@ -30,16 +29,23 @@ import (
 const maxPalworldResponseBytes = 4 * 1024 * 1024 // 4 MiB
 
 type palworldRestConn struct {
-	baseURL  string
-	password string
-	client   *http.Client
+	baseURL    string
+	hostHeader string // the name the user entered (see dialOptions); "" = default
+	password   string
+	client     *http.Client
 }
 
-func dialPalworldRest(host string, port int, password string) (*palworldRestConn, error) {
+func dialPalworldRest(host string, port int, password string, opts ...dialOptions) (*palworldRestConn, error) {
+	o := firstDialOptions(opts)
+	scheme := "http"
+	if o.TLS {
+		scheme = "https"
+	}
 	c := &palworldRestConn{
-		baseURL:  "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/v1/api",
-		password: password,
-		client:   &http.Client{Timeout: 10 * time.Second},
+		baseURL:    scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/v1/api",
+		hostHeader: o.hostHeader(port),
+		password:   password,
+		client:     o.httpClient(),
 	}
 	// Verify the credentials actually work before declaring "connected" —
 	// mirrors RCON's dial-time auth check, rather than only discovering a
@@ -50,8 +56,11 @@ func dialPalworldRest(host string, port int, password string) (*palworldRestConn
 	return c, nil
 }
 
-// Close is a no-op: plain HTTP requests, nothing to keep open.
-func (c *palworldRestConn) Close() error { return nil }
+// Close drops any idle keep-alive connection; there is no session to end.
+func (c *palworldRestConn) Close() error {
+	c.client.CloseIdleConnections()
+	return nil
+}
 
 func (c *palworldRestConn) Execute(command string) (string, error) {
 	fields := strings.Fields(command)
@@ -133,6 +142,9 @@ func (c *palworldRestConn) request(method, path string, body interface{}) (strin
 	if err != nil {
 		return "", err
 	}
+	if c.hostHeader != "" {
+		req.Host = c.hostHeader
+	}
 	req.SetBasicAuth("admin", c.password)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -154,6 +166,11 @@ func (c *palworldRestConn) request(method, path string, body interface{}) (strin
 		return "", err
 	}
 
+	// Redirects are not followed (see dialOptions.httpClient): a game server
+	// must not be able to steer the relay to an unchecked target.
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		return "", fmt.Errorf("palworld REST API: unexpected redirect (%s) — redirects are not followed", resp.Status)
+	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		return "", errors.New("palworld REST API: unauthorized — check the server's admin password")
 	}

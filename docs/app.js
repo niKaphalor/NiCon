@@ -1104,9 +1104,31 @@
     return value >= 1 && value <= 65535 ? value : null;
   }
 
+  // TLS (wss / https) exists only for the HTTP/WebSocket based protocols. The
+  // checkbox is shown for those and cleared when it is hidden, so a stale tick
+  // can never be sent along with, say, a Source RCON server.
+  var TLS_PROTOCOLS = ["webrcon", "battlebit", "palworld_rest"];
+  var manualProtocolSelect = document.getElementById("manual-protocol");
+  var manualTlsRow = document.getElementById("manual-tls-row");
+  var manualTls = document.getElementById("manual-tls");
+  var editServerTlsRow = document.getElementById("edit-server-tls-row");
+  var editServerTls = document.getElementById("edit-server-tls");
+
+  function syncTlsRow(protocolSelect, row, checkbox) {
+    var supported = TLS_PROTOCOLS.indexOf(protocolSelect.value) !== -1;
+    row.hidden = !supported;
+    if (!supported) checkbox.checked = false;
+  }
+
+  function syncManualTls() { syncTlsRow(manualProtocolSelect, manualTlsRow, manualTls); }
+  function syncEditTls() { syncTlsRow(editServerProtocol, editServerTlsRow, editServerTls); }
+  manualProtocolSelect.addEventListener("change", syncManualTls);
+  editServerProtocol.addEventListener("change", syncEditTls);
+
   manualGameSelect.addEventListener("change", function () {
     document.getElementById("manual-protocol").value = suggestedProtocolForGame(manualGameSelect.value);
     manualQueryProtocol.value = suggestedQueryProtocolForGame(manualGameSelect.value);
+    syncManualTls();
   });
 
   function setGameSelectValue(select, game) {
@@ -1130,6 +1152,8 @@
     editServerHost.value = server.host;
     editServerPort.value = server.port;
     editServerProtocol.value = server.protocol || "source";
+    editServerTls.checked = !!server.use_tls;
+    syncEditTls();
     editServerQueryProtocol.value = server.query_protocol || "auto";
     editServerQueryPort.value = server.query_port || "";
     setGameSelectValue(editServerGame, server.game);
@@ -1147,6 +1171,7 @@
   editServerGame.addEventListener("change", function () {
     editServerProtocol.value = suggestedProtocolForGame(editServerGame.value);
     editServerQueryProtocol.value = suggestedQueryProtocolForGame(editServerGame.value);
+    syncEditTls();
   });
   passwordEditServerBtn.addEventListener("click", function () {
     var server = findServer(selectedServerId);
@@ -1164,6 +1189,7 @@
       host: editServerHost.value.trim(),
       port: parseInt(editServerPort.value, 10),
       protocol: editServerProtocol.value,
+      use_tls: editServerTls.checked,
       query_protocol: editServerQueryProtocol.value,
       query_port: optionalPort(editServerQueryPort),
       game: editServerGame.value,
@@ -1481,7 +1507,7 @@
         return;
       }
       if (msg.type === "authenticated") {
-        socket.send(JSON.stringify({ type: "test", host: host, port: port, password: password, protocol: protocol }));
+        socket.send(JSON.stringify({ type: "test", host: host, port: port, password: password, protocol: protocol, use_tls: manualTls.checked }));
       } else if (msg.type === "test_result") {
         finish(msg.ok ? I18N.t("addModal.testOk") : I18N.t("addModal.testFailed", { message: msg.message || "" }), !msg.ok);
       } else if (msg.type === "error") {
@@ -1506,7 +1532,7 @@
     apiFetch("/api/servers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name, host: host, port: port, password: password, protocol: protocol, query_protocol: queryProtocol, query_port: queryPort, game: game }),
+      body: JSON.stringify({ name: name, host: host, port: port, password: password, protocol: protocol, use_tls: manualTls.checked, query_protocol: queryProtocol, query_port: queryPort, game: game }),
     })
       .then(function (r) {
         if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t)); });
@@ -1517,6 +1543,7 @@
         renderServers();
         renderContent();
         manualForm.reset();
+        syncManualTls();
         manualTestStatus.hidden = true;
         manualQueryTestStatus.hidden = true;
         addModal.close();
@@ -3097,7 +3124,7 @@
     var game = gameKey ? window.NICON_GAMES[gameKey] : null;
     var eyebrow = document.createElement("div");
     eyebrow.className = "server-eyebrow";
-    eyebrow.textContent = (game ? game.label : server.game || I18N.t("info.genericOption")) + " · " + protocolLabel(server.protocol);
+    eyebrow.textContent = (game ? game.label : server.game || I18N.t("info.genericOption")) + " · " + protocolLabel(server.protocol) + (server.use_tls ? " · TLS" : "");
     identity.appendChild(eyebrow);
 
     var h1 = document.createElement("h1");

@@ -128,6 +128,7 @@ var migrations = []string{
 	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_icon_url VARCHAR(2048) NULL`,
 	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS query_protocol VARCHAR(16) NOT NULL DEFAULT 'auto'`,
 	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS query_port INT UNSIGNED NULL`,
+	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS use_tls BOOLEAN NOT NULL DEFAULT FALSE`,
 	// idx_health_server_time (server_id, sampled_at) doesn't help the daily
 	// CleanupHealthSamples DELETE below, which filters on sampled_at alone —
 	// server_id being the leading column means that composite can't be used
@@ -483,11 +484,14 @@ type Server struct {
 	Game             string
 	Source           string
 	NitradoServiceID *int64
+	// UseTLS connects over TLS (wss / https) for the protocols that support it
+	// (WebRCON, BattleBit, Palworld REST); certificates are always verified.
+	UseTLS bool
 }
 
 func (s *Store) ListServers(ctx context.Context, userID int64) ([]Server, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id
+		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id, use_tls
 		 FROM servers WHERE user_id = ? ORDER BY name`, userID)
 	if err != nil {
 		return nil, err
@@ -509,7 +513,7 @@ func (s *Store) ListServers(ctx context.Context, userID int64) ([]Server, error)
 // by someone else looks identical to a nonexistent one to the caller.
 func (s *Store) GetServer(ctx context.Context, userID, serverID int64) (*Server, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id
+		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id, use_tls
 		 FROM servers WHERE id = ? AND user_id = ?`, serverID, userID)
 	srv, err := s.scanServer(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -531,7 +535,7 @@ func (s *Store) scanServer(row scannable) (Server, error) {
 	var queryPort sql.NullInt64
 	if err := row.Scan(
 		&srv.ID, &srv.UserID, &srv.Name, &srv.Host, &srv.Port, &passwordEnc,
-		&srv.Protocol, &srv.QueryProtocol, &queryPort, &srv.Game, &srv.Source, &srv.NitradoServiceID,
+		&srv.Protocol, &srv.QueryProtocol, &queryPort, &srv.Game, &srv.Source, &srv.NitradoServiceID, &srv.UseTLS,
 	); err != nil {
 		return Server{}, err
 	}
@@ -571,9 +575,9 @@ func (s *Store) CreateServer(ctx context.Context, srv Server) (int64, error) {
 	}
 	defer tx.Rollback()
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		srv.UserID, srv.Name, srv.Host, srv.Port, passwordEnc, srv.Protocol, srv.QueryProtocol, srv.QueryPort, srv.Game, srv.Source, srv.NitradoServiceID)
+		`INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id, use_tls)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		srv.UserID, srv.Name, srv.Host, srv.Port, passwordEnc, srv.Protocol, srv.QueryProtocol, srv.QueryPort, srv.Game, srv.Source, srv.NitradoServiceID, srv.UseTLS)
 	if err != nil {
 		return 0, err
 	}
@@ -641,7 +645,7 @@ func (s *Store) DeleteServer(ctx context.Context, userID, serverID int64) error 
 // per-request query.
 func (s *Store) ListServersForHealthCheck(ctx context.Context) ([]Server, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id
+		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id, use_tls
 		 FROM servers WHERE password_enc IS NOT NULL`)
 	if err != nil {
 		return nil, err
@@ -675,7 +679,7 @@ func (s *Store) ListServersForHealthCheck(ctx context.Context) ([]Server, error)
 // that don't have one yet.
 func (s *Store) ListServersForPublicInfoCheck(ctx context.Context) ([]Server, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id
+		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id, use_tls
 		 FROM servers
 		 WHERE query_protocol IN ('a2s', 'minecraft')
 		    OR (query_protocol = 'auto' AND (protocol = 'source' OR game = 'Minecraft'))`)

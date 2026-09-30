@@ -557,6 +557,32 @@ try {
     assert_test(str_contains($cronOutput, 'cleaned'), 'the cron job runs the maintenance: ' . $cronOutput);
     assert_test($countBulk() === 0, 'the cron job finishes the backlog');
 
+    // ---- optional TLS for the HTTP/WebSocket based protocols ----------------
+    [$status, $plain] = request_json($base, 'POST', '/api/servers', [
+        'name' => 'TLS default', 'host' => '127.0.0.1', 'port' => 28016, 'password' => 'secret', 'protocol' => 'webrcon', 'game' => '',
+    ], $aliceToken);
+    assert_test($status === 200 && $plain['use_tls'] === false, 'TLS is off by default');
+    [$status, $tlsServer] = request_json($base, 'POST', '/api/servers', [
+        'name' => 'TLS on', 'host' => '127.0.0.1', 'port' => 28016, 'password' => 'secret', 'protocol' => 'palworld_rest', 'use_tls' => true, 'game' => '',
+    ], $aliceToken);
+    assert_test($status === 200 && $tlsServer['use_tls'] === true, 'TLS can be enabled for a Palworld REST server');
+    assert_test((int) $pdo->query('SELECT use_tls FROM servers WHERE id = ' . (int) $tlsServer['id'])->fetchColumn() === 1, 'use_tls is stored');
+    [$status, $refused] = request_json($base, 'POST', '/api/servers', [
+        'name' => 'TLS on Source', 'host' => '127.0.0.1', 'port' => 28016, 'password' => 'secret', 'protocol' => 'source', 'use_tls' => true, 'game' => '',
+    ], $aliceToken);
+    assert_test($status === 400 && str_contains($refused['error'] ?? '', 'TLS'), 'TLS must be refused for a protocol without a TLS variant');
+    [$status, $updated] = request_json($base, 'PUT', '/api/servers/' . $tlsServer['id'], [
+        'name' => 'TLS on', 'host' => '127.0.0.1', 'port' => 28016, 'protocol' => 'webrcon', 'use_tls' => false, 'game' => '',
+    ], $aliceToken);
+    assert_test($status === 200 && $updated['use_tls'] === false && $updated['protocol'] === 'webrcon', 'TLS can be switched off again');
+    [$status] = request_json($base, 'PUT', '/api/servers/' . $tlsServer['id'], [
+        'name' => 'TLS on', 'host' => '127.0.0.1', 'port' => 28016, 'protocol' => 'telnet', 'use_tls' => true, 'game' => '',
+    ], $aliceToken);
+    assert_test($status === 400, 'an update must not enable TLS on a protocol without one');
+    [$status, $listed] = request_json($base, 'GET', '/api/servers', null, $aliceToken);
+    assert_test(count(array_filter($listed, static fn(array $s): bool => array_key_exists('use_tls', $s))) === count($listed), 'every listed server reports use_tls');
+    foreach ([$plain['id'], $tlsServer['id']] as $tlsFixtureId) request_json($base, 'DELETE', "/api/servers/$tlsFixtureId", null, $aliceToken);
+
     // ---- password policy, input validation --------------------------------
     $pdo->exec('DELETE FROM rate_limits');
     [$status, $body] = request_json($base, 'POST', '/api/register', [

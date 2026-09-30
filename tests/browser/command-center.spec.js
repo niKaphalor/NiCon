@@ -650,6 +650,32 @@ test("the frame guard hides the app when another page embeds it", async ({ page 
   expect(await page.evaluate(() => document.documentElement.style.display)).toBe("");
 });
 
+test("TLS can be chosen for HTTP/WebSocket based protocols only", async ({ page }) => {
+  const state = await installBackend(page, []);
+  await login(page);
+  await page.locator("#add-server-btn").click();
+  await page.locator('[data-tab="manual"]').click();
+
+  const tlsRow = page.locator("#manual-tls-row");
+  await expect(tlsRow).toBeHidden(); // default protocol: Source RCON
+  await page.locator("#manual-protocol").selectOption("webrcon");
+  await expect(tlsRow).toBeVisible();
+  await page.locator("#manual-tls").check();
+  await page.locator("#manual-protocol").selectOption("telnet");
+  await expect(tlsRow).toBeHidden();
+  await expect(page.locator("#manual-tls")).not.toBeChecked(); // a hidden tick never survives
+
+  await page.locator("#manual-protocol").selectOption("palworld_rest");
+  await page.locator("#manual-tls").check();
+  await page.locator("#manual-name").fill("Palworld over TLS");
+  await page.locator("#manual-host").fill("pal.example.com");
+  await page.locator("#manual-port").fill("8212");
+  await page.locator("#manual-password").fill("secret");
+  await page.locator('#manual-form button[type="submit"]').click();
+  await expect.poll(() => state.servers.find((s) => s.name === "Palworld over TLS")?.use_tls).toBe(true);
+  await expect(page.locator(".server-row", { hasText: "Palworld over TLS" })).toBeVisible();
+});
+
 test("signed in, FAQ sits between Settings and Admin and Servers returns to the console", async ({ page }) => {
   await installBackend(page, []);
   await login(page);

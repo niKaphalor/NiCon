@@ -590,6 +590,10 @@
         <option value="battlebit">BattleBit WebRCON</option>
         <option value="palworld_rest" data-i18n="addModal.protocolPalworldRest">Palworld REST API</option>
       </select>
+      <label class="checkbox-row tls-row" id="manual-tls-row" hidden>
+        <input type="checkbox" id="manual-tls">
+        <span><span data-i18n="addModal.useTls">Use TLS (wss / https)</span> <span class="hint" data-i18n="addModal.useTlsHint">Only if the game server itself serves TLS with a certificate that is valid for this host name — the certificate is always verified.</span></span>
+      </label>
       <select id="manual-game" aria-label="Game" data-i18n-aria-label="info.gameAriaLabel">
         <option value="" data-i18n="info.genericOption">Generic (no parsing)</option>
         <option value="7 Days to Die">7 Days to Die</option>
@@ -666,6 +670,10 @@
       <option value="battlebit">BattleBit WebRCON</option>
       <option value="palworld_rest" data-i18n="addModal.protocolPalworldRest">Palworld REST API</option>
     </select>
+    <label class="checkbox-row tls-row" id="edit-server-tls-row" hidden>
+      <input type="checkbox" id="edit-server-tls">
+      <span><span data-i18n="addModal.useTls">Use TLS (wss / https)</span> <span class="hint" data-i18n="addModal.useTlsHint">Only if the game server itself serves TLS with a certificate that is valid for this host name — the certificate is always verified.</span></span>
+    </label>
     <select id="edit-server-game" aria-label="Game" data-i18n-aria-label="info.gameAriaLabel">
       <option value="" data-i18n="info.genericOption">Generic (no parsing)</option>
       <option value="7 Days to Die">7 Days to Die</option>

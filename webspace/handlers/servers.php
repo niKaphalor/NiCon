@@ -44,6 +44,23 @@ function nicon_game_is_allowed(string $game): bool
 // (each request is its own process) but was the one place in this file
 // that didn't let its caller unwind normally — see git history for why
 // that was flagged and changed.
+// Protocols that have a TLS variant (wss / https). Source RCON, Telnet and
+// BattlEye do not.
+const NICON_TLS_PROTOCOLS = ['webrcon', 'battlebit', 'palworld_rest'];
+
+// nicon_use_tls_from_request reads the optional `use_tls` field. Returns null
+// (after sending the 400) if TLS is requested for a protocol that cannot do it.
+function nicon_use_tls_from_request(array $req, string $protocol): ?bool
+{
+    $raw = $req['use_tls'] ?? false;
+    $useTls = $raw === true || $raw === 1 || $raw === '1' || $raw === 'true';
+    if ($useTls && !in_array($protocol, NICON_TLS_PROTOCOLS, true)) {
+        nicon_send_error('TLS is only available for the WebRCON, BattleBit and Palworld REST protocols', 400);
+        return null;
+    }
+    return $useTls;
+}
+
 function nicon_query_config(array $req): ?array
 {
     $protocol = strtolower(trim((string) ($req['query_protocol'] ?? 'auto')));
@@ -348,6 +365,7 @@ function nicon_server_response(array $row): array
         'source' => $row['source'],
         'nitrado_game_code' => $row['nitrado_game_code'] ?? '',
         'game_icon_url' => $row['nitrado_game_icon_url'] ?? null,
+        'use_tls' => !empty($row['use_tls']),
         'has_password' => $row['password_enc'] !== null,
         'health_ok' => $row['health_ok'] === null ? null : (bool) $row['health_ok'],
         'health_checked_at' => $row['health_checked_at'] !== null ? gmdate('Y-m-d\TH:i:s\Z', strtotime($row['health_checked_at'])) : null,
@@ -411,7 +429,7 @@ function nicon_handle_list_servers(int $userId): void
     $stmt = nicon_db()->prepare('
         SELECT id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source,
                health_ok, health_checked_at, health_latency_ms, health_error,
-               nitrado_game_code, nitrado_game_icon_url
+               nitrado_game_code, nitrado_game_icon_url, use_tls
         FROM servers WHERE user_id = ? ORDER BY name');
     $stmt->execute([$userId]);
     $servers = array_map('nicon_server_response', $stmt->fetchAll());
@@ -436,6 +454,8 @@ function nicon_handle_create_server(int $userId): void
         return;
     }
     $protocol = (string) ($req['protocol'] ?? '') ?: 'source';
+    $useTls = nicon_use_tls_from_request($req, $protocol);
+    if ($useTls === null) return;
     $queryConfig = nicon_query_config($req);
     if ($queryConfig === null) return; // nicon_query_config already sent the error
     [$queryProtocol, $queryPort] = $queryConfig;
@@ -484,9 +504,9 @@ function nicon_handle_create_server(int $userId): void
         // transaction). The legacy format needs no ID and is written directly.
         $v2 = nicon_writes_v2();
         $pdo->prepare('
-            INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ')->execute([$userId, $name, $host, $port, $v2 ? null : nicon_encrypt_password($password, NICON_MAX_SERVER_PASSWORD_BYTES), $protocol, $queryProtocol, $queryPort, $game, 'manual']);
+            INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, use_tls)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ')->execute([$userId, $name, $host, $port, $v2 ? null : nicon_encrypt_password($password, NICON_MAX_SERVER_PASSWORD_BYTES), $protocol, $queryProtocol, $queryPort, $game, 'manual', $useTls ? 1 : 0]);
         $id = (int) $pdo->lastInsertId();
         if ($v2 && $password !== '') {
             $pdo->prepare('UPDATE servers SET password_enc = ? WHERE id = ?')
@@ -503,7 +523,7 @@ function nicon_handle_create_server(int $userId): void
     $stmt = $pdo->prepare('
         SELECT id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source,
                health_ok, health_checked_at, health_latency_ms, health_error,
-               nitrado_game_code, nitrado_game_icon_url
+               nitrado_game_code, nitrado_game_icon_url, use_tls
         FROM servers WHERE id = ?');
     $stmt->execute([$id]);
     nicon_send_json(nicon_server_response($stmt->fetch()));
@@ -521,6 +541,8 @@ function nicon_handle_update_server(int $userId, int $serverId): void
     $host = trim((string) ($req['host'] ?? ''));
     $port = (int) ($req['port'] ?? 0);
     $protocol = strtolower(trim((string) ($req['protocol'] ?? '')));
+    $useTls = nicon_use_tls_from_request($req, $protocol);
+    if ($useTls === null) return;
     $queryConfig = nicon_query_config($req);
     if ($queryConfig === null) return; // nicon_query_config already sent the error
     [$queryProtocol, $queryPort] = $queryConfig;
@@ -550,7 +572,7 @@ function nicon_handle_update_server(int $userId, int $serverId): void
     $pdo = nicon_db();
     $stmt = $pdo->prepare('
         UPDATE servers
-        SET name = ?, host = ?, port = ?, protocol = ?, query_protocol = ?, query_port = ?,
+        SET name = ?, host = ?, port = ?, protocol = ?, use_tls = ?, query_protocol = ?, query_port = ?,
             nitrado_game_code = CASE WHEN game <> ? THEN \'\' ELSE nitrado_game_code END,
             nitrado_game_icon_url = CASE WHEN game <> ? THEN NULL ELSE nitrado_game_icon_url END,
             game = ?,
@@ -558,12 +580,12 @@ function nicon_handle_update_server(int $userId, int $serverId): void
             health_latency_ms = NULL, health_error = NULL
         WHERE id = ? AND user_id = ?
     ');
-    $stmt->execute([$name, $host, $port, $protocol, $queryProtocol, $queryPort, $game, $game, $game, $serverId, $userId]);
+    $stmt->execute([$name, $host, $port, $protocol, $useTls ? 1 : 0, $queryProtocol, $queryPort, $game, $game, $game, $serverId, $userId]);
 
     $serverStmt = $pdo->prepare('
         SELECT id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source,
                health_ok, health_checked_at, health_latency_ms, health_error,
-               nitrado_game_code, nitrado_game_icon_url
+               nitrado_game_code, nitrado_game_icon_url, use_tls
         FROM servers WHERE id = ? AND user_id = ?
     ');
     $serverStmt->execute([$serverId, $userId]);

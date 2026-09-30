@@ -296,6 +296,8 @@ window.NICON_I18N_STRINGS.en = {
     confirm: "Confirm",
   },
   addModal: {
+    useTls: "Use TLS (wss / https)",
+    useTlsHint: "Only if the game server itself serves TLS with a certificate that is valid for this host name — the certificate is always verified.",
     title: "Add server",
     tabNitrado: "From Nitrado",
     tabManual: "Manually",
