@@ -25,6 +25,7 @@
 <meta name="apple-mobile-web-app-title" content="NiCon">
 <link rel="manifest" href="site.webmanifest">
 <link rel="stylesheet" href="style.css">
+<script src="frame-guard.js"></script>
 </head>
 <body>
 
@@ -226,6 +227,7 @@
                     <input id="filter-regex-toggle" type="checkbox" checked>
                     <span data-i18n="console.regex">Regex</span>
                   </label>
+                  <p id="filter-hint" class="filter-hint" role="status" hidden></p>
                 </div>
                 <div class="console-toolbar-actions">
                   <button type="button" id="console-follow-btn" class="icon-btn small" data-i18n="console.followOutput" data-i18n-title="console.followOutput" title="Follow output" hidden>Follow output</button>
@@ -753,6 +755,7 @@
 <script src="i18n.de.js"></script>
 <script src="i18n.js"></script>
 <script src="games.js"></script>
+<script src="safe-regex.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

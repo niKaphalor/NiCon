@@ -336,7 +336,9 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .layout-compact .card { padding: 14px; }
 .console { display: flex; min-width: 0; flex-direction: column; gap: 10px; }
 .console-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.console-filter { display: flex; min-width: 0; flex: 1; align-items: center; gap: 8px; }
+.console-filter { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; align-items: center; gap: 8px; }
+.filter-hint { flex-basis: 100%; margin: 0; color: var(--color-warn); font-size: .75rem; }
+.filter-hint[hidden] { display: none; }
 .console-toolbar input { min-height: 38px; background: var(--color-surface); font-family: var(--font-mono); font-size: 0.78rem; }
 .console-filter input { flex: 1; min-width: 0; }
 .filter-mode { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 8px; border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-muted); font-family: var(--font-mono); font-size: 0.7rem; cursor: pointer; }

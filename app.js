@@ -3565,12 +3565,37 @@
     consoleFollowBtn.hidden = !c || c.followTail !== false;
   }
 
+  // The console filter runs a user-typed regex over up to 2,000 lines of text
+  // that a game server (or other players) control. JavaScript cannot interrupt
+  // a running regex, so a pathological pattern would freeze the tab. Three
+  // guards, cheapest first: a static check that rejects the patterns that
+  // backtrack exponentially (safe-regex.js), a cap on how much of each line is
+  // tested, and a time budget for the whole pass (see renderLog).
+  var FILTER_MAX_LINE_CHARS = 2000;
+  var FILTER_TIME_BUDGET_MS = 250;
+  var filterHint = document.getElementById("filter-hint");
+
+  function setFilterHint(message) {
+    filterHint.textContent = message || "";
+    filterHint.hidden = !message;
+  }
+
   function activeFilterRegex() {
     var text = filterInput.value.trim();
+    setFilterHint("");
     if (!text) return null;
     if (!filterRegexToggle.checked) {
       text = text.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
       return new RegExp(text, "i");
+    }
+    var verdict = window.NICON_SAFE_REGEX.analyze(text);
+    if (!verdict.ok) {
+      // An unfinished pattern while typing is not worth a warning; anything
+      // else is explained so the user can simplify it.
+      if (verdict.reason !== "syntax") {
+        setFilterHint(I18N.t("console.filterRejected", { reason: I18N.t("console.filterReason_" + verdict.reason) }));
+      }
+      return null;
     }
     try {
       return new RegExp(text, "i");
@@ -3591,13 +3616,23 @@
     }
     var regex = activeFilterRegex();
 
-    c.lines.forEach(function (line) {
-      if (regex && !regex.test(line.text)) return;
+    var started = performance.now();
+    var stoppedEarly = false;
+    for (var lineIndex = 0; lineIndex < c.lines.length; lineIndex++) {
+      var line = c.lines[lineIndex];
+      if (regex) {
+        // Bounds the total cost of a pattern that is merely slow (polynomial),
+        // not catastrophic: check the clock between lines.
+        if ((lineIndex & 31) === 0 && performance.now() - started > FILTER_TIME_BUDGET_MS) { stoppedEarly = true; break; }
+        var scanned = line.text.length > FILTER_MAX_LINE_CHARS ? line.text.slice(0, FILTER_MAX_LINE_CHARS) : line.text;
+        if (!regex.test(scanned)) continue;
+      }
       var div = document.createElement("div");
       div.className = "log-line kind-" + line.kind;
       appendHighlighted(div, line.text, regex);
       log.appendChild(div);
-    });
+    }
+    if (stoppedEarly) setFilterHint(I18N.t("console.filterTooSlow"));
     if (c.followTail !== false) {
       log.scrollTop = log.scrollHeight;
     } else {
@@ -3623,7 +3658,10 @@
     var global = new RegExp(regex.source, "gi");
     var lastIndex = 0;
     var match;
-    while ((match = global.exec(text)) !== null) {
+    // Only the first FILTER_MAX_LINE_CHARS are scanned for matches; the rest
+    // of a very long line is appended as plain text below.
+    var scan = text.length > FILTER_MAX_LINE_CHARS ? text.slice(0, FILTER_MAX_LINE_CHARS) : text;
+    while ((match = global.exec(scan)) !== null) {
       if (match.index > lastIndex) {
         container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
       }

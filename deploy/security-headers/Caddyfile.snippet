@@ -1,0 +1,30 @@
+# Ready-made response headers for the static frontend (index.html, the legal
+# pages, JS/CSS). The pages already carry this policy as a <meta> tag, but a
+# meta tag CANNOT express frame-ancestors (clickjacking protection) and does
+# not cover the service worker or non-HTML files. Real headers do.
+#
+# Keep the CSP in step with the <meta http-equiv="Content-Security-Policy"> of
+# index.html — tests/browser/command-center.spec.js fails when they drift
+# apart. If your API/relay hosts differ from the defaults, change them in
+# BOTH places (see README, "Pointing the frontend at your own deployment").
+#
+# Caddy: put this inside the site block that serves the frontend, e.g.
+#
+#   app.example.com {
+#       root * /srv/nicon
+#       file_server
+#       import security-headers
+#   }
+#
+# (or paste the header block directly).
+(security-headers) {
+	header {
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: https://nitrado.net https://*.nitrado.net https://shared.fastly.steamstatic.com https://store.fastly.steamstatic.com https://www.minecraft.net https://upload.wikimedia.org; connect-src 'self' https://nicon.mylss.de https://relay.130.61.8.150.sslip.io wss://relay.130.61.8.150.sslip.io; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+}
