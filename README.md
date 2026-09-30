@@ -432,7 +432,15 @@ Once deployed, it serves the same JSON API the relay used to (except
   actions, and automatic moderation are retained. Entries are
   retained for 180 days by default and deleted on the next audit write/read
   after expiry; `audit_retention_days` can set a policy between 30 and 3650
-  days.
+  days. Both audit endpoints (`GET /audit-log`, `GET /admin/audit-log`) are
+  paginated: `?page=` (from 1) and `?per_page=` (default 25, at most 100)
+  return `{items, page, per_page, total, total_pages}`; a page past the end
+  is an empty list, out-of-range values are clamped. `GET /audit-log` also
+  takes `?server_id=` to list only one of your own server's console
+  commands. Without `page`/`per_page` the response is the old plain array
+  (newest 100 / 200), so a frontend cached from before still works. The UI
+  pages every log list (own activity and per-server audit: 10 per page, admin
+  audit log: 25, console command history: 10).
 - **Admin** (`GET /admin/users`, `DELETE /admin/users/{id}`,
   `POST /admin/users/{id}/recovery-code`): each checks the authenticated
   caller's own `is_admin` flag before doing anything, on top of the usual
