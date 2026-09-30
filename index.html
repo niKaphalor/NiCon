@@ -34,6 +34,7 @@
     <button type="button" id="nav-servers-btn" class="navlink" data-i18n="servers.title" hidden>Servers</button>
     <button type="button" id="nav-health-btn" class="navlink" data-i18n="health.navLabel" hidden>Health</button>
     <button type="button" id="nav-settings-btn" class="navlink" data-i18n="settings.navLabel">Settings</button>
+    <button type="button" id="nav-faq-btn" class="navlink" data-i18n="nav.faq">FAQ</button>
     <button type="button" id="admin-nav-btn" class="navlink" data-i18n="admin.navLabel" hidden>Admin</button>
   </nav>
   <div class="topbar-right">
@@ -349,6 +350,24 @@
             <p class="card-body" data-i18n="settings.activityHint">Your own account activity, and any admin action that affected your account.</p>
             <div id="activity-list" class="admin-notifications-list"></div>
           </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-faq" class="view" hidden>
+    <div class="settings-page">
+      <div class="settings-inner">
+        <div class="page-header">
+          <div>
+            <span class="page-eyebrow" data-i18n="faq.eyebrow">Help</span>
+            <h1 data-i18n="faq.title">Frequently asked questions</h1>
+            <p class="hint" data-i18n="faq.intro">Setup, compatibility, security, and the details that often cause confusion when connecting a game server.</p>
+          </div>
+        </div>
+        <div class="faq-card">
+          <div id="faq-list" class="faq-list"></div>
+          <p id="faq-status" hidden></p>
         </div>
       </div>
     </div>
@@ -714,8 +733,6 @@
   <a href="privacy.html" target="_blank" rel="noopener" data-i18n="nav.privacy" data-i18n-doc="privacy">Privacy</a>
   <span aria-hidden="true">·</span>
   <a href="contact.html" target="_blank" rel="noopener" data-i18n="nav.contact" data-i18n-doc="contact">Contact</a>
-  <span aria-hidden="true">·</span>
-  <a href="faq.html" target="_blank" rel="noopener" data-i18n="nav.faq" data-i18n-doc="faq">FAQ</a>
 </footer>
 
 <script src="i18n.en.js"></script>

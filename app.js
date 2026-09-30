@@ -77,6 +77,10 @@
   var navServersBtn = document.getElementById("nav-servers-btn");
   var navHealthBtn = document.getElementById("nav-health-btn");
   var navSettingsBtn = document.getElementById("nav-settings-btn");
+  var navFaqBtn = document.getElementById("nav-faq-btn");
+  var viewFaq = document.getElementById("view-faq");
+  var faqList = document.getElementById("faq-list");
+  var faqStatus = document.getElementById("faq-status");
   var adminNavBtn = document.getElementById("admin-nav-btn");
   var addServerBtn = document.getElementById("add-server-btn");
 
@@ -384,6 +388,7 @@
     renderContent();
     renderModerationRules();
     renderSupportedGamesList();
+    if (!viewFaq.hidden) loadFaq();
     if (authToken) accountUsernameLine.textContent = I18N.t("settings.accountUsernameLine", { username: currentUsername });
   });
 
@@ -1520,13 +1525,25 @@
   // doesn't touch them either.
 
   function setActiveNav(btn) {
-    [navServersBtn, navHealthBtn, navSettingsBtn, adminNavBtn].forEach(function (b) {
+    [navServersBtn, navHealthBtn, navSettingsBtn, navFaqBtn, adminNavBtn].forEach(function (b) {
       if (b === btn) b.setAttribute("aria-current", "page");
       else b.removeAttribute("aria-current");
     });
   }
 
+  // The FAQ is public content shown as its own view, addressable as
+  // index.html#faq (the old standalone faq.html redirects there). Every
+  // other view calls this first so the FAQ never stays visible underneath,
+  // and a stale #faq doesn't reopen it after a reload.
+  function leaveFaqView() {
+    viewFaq.hidden = true;
+    if (location.hash === "#faq") {
+      try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* ignore */ }
+    }
+  }
+
   function showLoginView() {
+    leaveFaqView();
     stopPlayersAutoRefresh();
     viewApp.hidden = true;
     viewSettings.hidden = true;
@@ -1550,6 +1567,7 @@
   }
 
   function showRegisterView() {
+    leaveFaqView();
     stopPlayersAutoRefresh();
     viewApp.hidden = true;
     viewSettings.hidden = true;
@@ -1561,6 +1579,7 @@
   }
 
   function showAppView() {
+    leaveFaqView();
     authShell.hidden = true;
     viewLogin.hidden = true;
     viewRegister.hidden = true;
@@ -1597,6 +1616,7 @@
   navServersBtn.addEventListener("click", showAppView);
 
   function showSettingsView() {
+    leaveFaqView();
     stopPlayersAutoRefresh();
     authShell.hidden = true;
     viewLogin.hidden = true;
@@ -1612,6 +1632,7 @@
   // --- admin panel ---
 
   function showAdminView() {
+    leaveFaqView();
     stopPlayersAutoRefresh();
     authShell.hidden = true;
     viewLogin.hidden = true;
@@ -1635,6 +1656,7 @@
   // --- server health dashboard ---
 
   function showHealthView() {
+    leaveFaqView();
     stopPlayersAutoRefresh();
     authShell.hidden = true;
     viewLogin.hidden = true;
@@ -1649,6 +1671,77 @@
   }
 
   navHealthBtn.addEventListener("click", showHealthView);
+
+  // --- public FAQ ---
+  // Same public /api/faq the standalone page used (published entries only,
+  // in the requested language, no authentication) — so it works signed out
+  // too, and its nav entry is always visible.
+
+  var faqLoadSeq = 0;
+
+  function showFaqStatus(message, isError) {
+    faqStatus.textContent = message;
+    faqStatus.className = isError ? "faq-error" : "faq-empty";
+    faqStatus.hidden = false;
+  }
+
+  function renderFaq(entries) {
+    faqList.textContent = "";
+    faqStatus.hidden = true;
+    if (!Array.isArray(entries) || !entries.length) {
+      showFaqStatus(I18N.t("faq.empty"), false);
+      return;
+    }
+    entries.forEach(function (entry, index) {
+      var details = document.createElement("details");
+      details.className = "faq-item";
+      if (index === 0) details.open = true;
+      var summary = document.createElement("summary");
+      summary.textContent = entry.question;
+      details.appendChild(summary);
+      var answer = document.createElement("div");
+      answer.className = "faq-answer";
+      answer.textContent = entry.answer;
+      details.appendChild(answer);
+      faqList.appendChild(details);
+    });
+  }
+
+  function loadFaq() {
+    var seq = ++faqLoadSeq; // a slower earlier response must not overwrite a newer one (language switch)
+    fetch(apiHttpUrl() + "/api/faq?lang=" + encodeURIComponent(I18N.getLang()), { headers: { "Accept": "application/json" } })
+      .then(function (r) {
+        if (!r.ok) throw new Error("FAQ request failed");
+        return r.json();
+      })
+      .then(function (entries) { if (seq === faqLoadSeq) renderFaq(entries); })
+      .catch(function () {
+        if (seq !== faqLoadSeq) return;
+        faqList.textContent = "";
+        showFaqStatus(I18N.t("faq.error"), true);
+      });
+  }
+
+  function showFaqView() {
+    stopPlayersAutoRefresh();
+    authShell.hidden = true;
+    viewLogin.hidden = true;
+    viewRegister.hidden = true;
+    viewApp.hidden = true;
+    viewSettings.hidden = true;
+    viewAdmin.hidden = true;
+    viewHealth.hidden = true;
+    viewFaq.hidden = false;
+    addServerBtn.hidden = true;
+    setActiveNav(navFaqBtn);
+    try { history.replaceState(null, "", "#faq"); } catch (e) { /* ignore */ }
+    loadFaq();
+  }
+
+  navFaqBtn.addEventListener("click", showFaqView);
+  window.addEventListener("hashchange", function () {
+    if (location.hash === "#faq" && viewFaq.hidden) showFaqView();
+  });
 
   function loadAdminUsers() {
     return apiFetch("/api/admin/users", { method: "GET" })
@@ -4244,11 +4337,16 @@
   renderSupportedGamesList();
   checkApi();
   checkRelay();
+  var openFaqOnBoot = location.hash === "#faq";
   if (authToken) {
     loadServers()
-      .then(function () { showAppView(); })
+      .then(function () {
+        showAppView();
+        if (openFaqOnBoot) showFaqView();
+      })
       .catch(function () { /* apiFetch already routes 401s to sessionExpired() */ });
   } else {
     showLoginView();
+    if (openFaqOnBoot) showFaqView();
   }
 })();

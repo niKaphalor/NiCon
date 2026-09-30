@@ -22,6 +22,15 @@ window.NICON_I18N = (function () {
   var dict = window.NICON_I18N_STRINGS || {};
 
   function detectInitialLang() {
+    // An explicit ?lang= (used by the redirect from the old faq.de.html)
+    // beats the stored choice for this visit; it is not persisted unless
+    // the user then switches language themselves.
+    try {
+      var requested = new URLSearchParams(location.search).get("lang");
+      if (requested && SUPPORTED.indexOf(requested) !== -1) return requested;
+    } catch (e) {
+      // no URLSearchParams / location — ignore.
+    }
     try {
       var stored = localStorage.getItem(STORAGE_KEY);
       if (stored && SUPPORTED.indexOf(stored) !== -1) return stored;
