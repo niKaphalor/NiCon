@@ -139,7 +139,7 @@ var migrations = []string{
 
 type Store struct {
 	db  *sql.DB
-	enc *encryptor
+	enc *KeyRing
 }
 
 // RCONAuditRecord is the durable, cross-server record of an operator command.
@@ -166,11 +166,15 @@ type RCONAuditRecord struct {
 // encryptionKey must be exactly EncryptionKeySize bytes (see
 // DecodeEncryptionKey / GenerateEncryptionKey).
 func Open(dsn string, encryptionKey []byte) (*Store, error) {
-	enc, err := newEncryptor(encryptionKey)
+	ring, err := newSingleKeyRing(encryptionKey)
 	if err != nil {
 		return nil, err
 	}
+	return OpenWithKeyRing(dsn, ring)
+}
 
+// OpenWithKeyRing is Open with a full key ring (key rotation, format v2).
+func OpenWithKeyRing(dsn string, enc *KeyRing) (*Store, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -536,7 +540,7 @@ func (s *Store) scanServer(row scannable) (Server, error) {
 		srv.QueryPort = &port
 	}
 	if len(passwordEnc) > 0 {
-		password, err := s.enc.Decrypt(passwordEnc)
+		password, err := s.enc.Decrypt(passwordEnc, ServerPasswordAAD(srv.UserID, srv.ID))
 		if err != nil {
 			return Server{}, fmt.Errorf("decrypt password for server %d: %w", srv.ID, err)
 		}
@@ -550,18 +554,43 @@ func (s *Store) CreateServer(ctx context.Context, srv Server) (int64, error) {
 	if srv.QueryProtocol == "" {
 		srv.QueryProtocol = "auto"
 	}
-	passwordEnc, err := s.encryptPasswordOrNil(srv.Password)
+	// In format v2 the ciphertext is bound to the server's ID, which only
+	// exists after the INSERT — so insert first, then store the password in
+	// the same transaction. (The legacy format needs no ID.)
+	insertPassword := srv.Password
+	if s.enc.WritesV2() {
+		insertPassword = ""
+	}
+	passwordEnc, err := s.encryptOrNil(insertPassword, "")
 	if err != nil {
 		return 0, err
 	}
-	res, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx,
 		`INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		srv.UserID, srv.Name, srv.Host, srv.Port, passwordEnc, srv.Protocol, srv.QueryProtocol, srv.QueryPort, srv.Game, srv.Source, srv.NitradoServiceID)
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if s.enc.WritesV2() && srv.Password != "" {
+		sealed, err := s.encryptOrNil(srv.Password, ServerPasswordAAD(srv.UserID, id))
+		if err != nil {
+			return 0, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE servers SET password_enc = ? WHERE id = ?`, sealed, id); err != nil {
+			return 0, err
+		}
+	}
+	return id, tx.Commit()
 }
 
 // UpsertNitradoServer inserts or updates a server synced from Nitrado,
@@ -583,7 +612,7 @@ func (s *Store) UpsertNitradoServer(ctx context.Context, srv Server) error {
 // UpdateServerPassword sets a server's RCON password; a no-op (returns
 // ErrNotFound) if the server doesn't belong to userID.
 func (s *Store) UpdateServerPassword(ctx context.Context, userID, serverID int64, password string) error {
-	passwordEnc, err := s.encryptPasswordOrNil(password)
+	passwordEnc, err := s.encryptOrNil(password, ServerPasswordAAD(userID, serverID))
 	if err != nil {
 		return err
 	}
@@ -797,9 +826,11 @@ func checkAffected(res sql.Result) error {
 	return nil
 }
 
-func (s *Store) encryptPasswordOrNil(password string) ([]byte, error) {
-	if password == "" {
+// encryptOrNil seals a non-empty secret for the row named by aad; the empty
+// string means "not set" and is stored as NULL.
+func (s *Store) encryptOrNil(secret, aad string) ([]byte, error) {
+	if secret == "" {
 		return nil, nil
 	}
-	return s.enc.Encrypt(password)
+	return s.enc.Encrypt(secret, aad)
 }

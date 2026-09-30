@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const NICON_TEST_MAX_SERVER_PASSWORD = 512 - 28; // mirrors NICON_MAX_SERVER_PASSWORD_BYTES
+const NICON_TEST_MAX_SERVER_PASSWORD = 512 - 32; // mirrors NICON_MAX_SERVER_PASSWORD_BYTES
 
 function fail_test(string $message): never
 {
@@ -117,12 +117,23 @@ try {
 
     $apiPort = free_port();
     $key = base64_encode(str_repeat("\x2a", 32));
+    // The suite runs once per storage format: legacy (default), v2 with the
+    // original key, and "rotated" (v2, current key 2, key 1 kept for reading).
+    $cryptoMode = getenv('NICON_TEST_CRYPTO_MODE') ?: 'legacy';
+    $cryptoEnv = ['NICON_ENCRYPTION_WRITE_V2' => $cryptoMode === 'legacy' ? '0' : '1'];
+    if ($cryptoMode === 'rotated') {
+        $cryptoEnv['NICON_ENCRYPTION_KEYS'] = '2=' . base64_encode(str_repeat("\x2b", 32));
+        $cryptoEnv['NICON_ENCRYPTION_CURRENT_KEY_ID'] = '2';
+    }
+    foreach ($cryptoEnv as $envName => $envValue) putenv("$envName=$envValue");
+    putenv('NICON_ENCRYPTION_KEY=' . $key);
     [$apiProcess, $apiLog] = start_php_server($root . '/tests/php/api_router.php', $apiPort, [
         'NICON_CONFIG_FILE' => $root . '/tests/php/config.php',
         'NICON_PHP_TEST_DB_DSN' => $dsn,
         'NICON_PHP_TEST_DB_USER' => getenv('NICON_PHP_TEST_DB_USER') ?: '',
         'NICON_PHP_TEST_DB_PASS' => getenv('NICON_PHP_TEST_DB_PASS') ?: '',
         'NICON_ENCRYPTION_KEY' => $key,
+        ...$cryptoEnv,
         'NICON_NITRADO_API_BASE_URL' => "http://127.0.0.1:$nitradoPort",
         // php -S is single-threaded by default; the last-admin race test
         // below needs genuinely concurrent requests.
@@ -202,6 +213,24 @@ try {
         'game' => "Garry's Mod",
     ], $aliceToken);
     assert_test($status === 200 && ($server['game'] ?? '') === "Garry's Mod", 'manual server game was not persisted');
+
+    // ---- storage format of the RCON password (legacy / v2 / rotated key) ----
+    require_once $root . '/webspace/lib/crypto.php';
+    $ring = nicon_key_ring_from_config(require $root . '/tests/php/config.php');
+    assert_test(is_array($ring), 'test crypto configuration must be valid');
+    $storedPassword = (string) $pdo->query('SELECT password_enc FROM servers WHERE id = ' . (int) $server['id'])->fetchColumn();
+    $aliceUserId = (int) $pdo->query("SELECT id FROM users WHERE username = '$alice'")->fetchColumn();
+    $wantV2 = $cryptoMode !== 'legacy';
+    assert_test(str_starts_with($storedPassword, 'NC2') === $wantV2, "password format must match the $cryptoMode mode");
+    assert_test(nicon_open_with_ring($ring, $storedPassword, nicon_aad_server_password($aliceUserId, (int) $server['id'])) === 'secret', 'the stored password decrypts with its own row as AAD');
+    if ($wantV2) {
+        assert_test(ord($storedPassword[3]) === ($cryptoMode === 'rotated' ? 2 : 1), 'the value names the current key');
+        foreach ([nicon_aad_server_password($aliceUserId, (int) $server['id'] + 1), nicon_aad_server_password($aliceUserId + 1, (int) $server['id']), ''] as $foreignAad) {
+            $refused = false;
+            try { nicon_open_with_ring($ring, $storedPassword, $foreignAad); } catch (RuntimeException $e) { $refused = true; }
+            assert_test($refused, 'a password copied to another server/user must not decrypt');
+        }
+    }
     assert_test(($server['query_protocol'] ?? '') === 'a2s' && ($server['query_port'] ?? 0) === 27015, 'manual query configuration was not persisted');
     assert_test(($server['has_password'] ?? false) === true && !array_key_exists('password', $server), 'server response exposed or lost password state');
     $serverId = (int) $server['id'];
@@ -282,6 +311,9 @@ try {
 
     [$status, $synced] = request_json($base, 'POST', '/api/nitrado/sync', ['token' => 'integration-token'], $aliceToken);
     assert_test($status === 200 && count($synced) === 2, 'Nitrado sync did not add the mock service');
+    $storedToken = (string) $pdo->query("SELECT nitrado_token_enc FROM users WHERE username = '$alice'")->fetchColumn();
+    assert_test(str_starts_with($storedToken, 'NC2') === $wantV2, "Nitrado token format must match the $cryptoMode mode");
+    assert_test(nicon_open_with_ring($ring, $storedToken, nicon_aad_nitrado_token($aliceUserId)) === 'integration-token', 'the stored Nitrado token decrypts with its own user as AAD');
     $nitradoServer = null;
     foreach ($synced as $candidate) if (($candidate['source'] ?? '') === 'nitrado') $nitradoServer = $candidate;
     assert_test(is_array($nitradoServer), 'Nitrado server missing from sync response');

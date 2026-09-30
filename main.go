@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -39,6 +40,9 @@ func main() {
 		case "setadmin":
 			runSetAdmin(os.Args[2:])
 			return
+		case "reencrypt":
+			runReencrypt(os.Args[2:])
+			return
 		}
 	}
 	runServer()
@@ -52,22 +56,73 @@ func dbFlags(fs *flag.FlagSet) (dsn *string, encKey *string) {
 	return dsn, encKey
 }
 
+// openStore connects to the database with the encryption key ring built from
+// the -encryption-key flag (key ID 1) plus, optionally, these environment
+// variables (see the README's "Rotating the encryption key"):
+//
+//	NICON_ENCRYPTION_KEYS           extra keys, "2=base64,3=base64"
+//	NICON_ENCRYPTION_CURRENT_KEY_ID key used for new writes (default 1)
+//	NICON_ENCRYPTION_WRITE_V2       write the v2 format (row-bound, names its key)
 func openStore(dsn, encKeyB64 string) *store.Store {
 	if dsn == "" {
 		log.Fatal("missing -db-dsn (or $NICON_DB_DSN)")
 	}
-	if encKeyB64 == "" {
+	extraKeys := os.Getenv("NICON_ENCRYPTION_KEYS")
+	if encKeyB64 == "" && extraKeys == "" {
 		log.Fatal("missing -encryption-key (or $NICON_ENCRYPTION_KEY) — generate one with: nicon-relay genkey")
 	}
-	key, err := store.DecodeEncryptionKey(encKeyB64)
-	if err != nil {
-		log.Fatalf("encryption key: %v", err)
+	currentID := 1
+	if v := strings.TrimSpace(os.Getenv("NICON_ENCRYPTION_CURRENT_KEY_ID")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			log.Fatalf("NICON_ENCRYPTION_CURRENT_KEY_ID: %v", err)
+		}
+		currentID = n
 	}
-	st, err := store.Open(dsn, key)
+	ring, err := store.ParseKeyRing(encKeyB64, extraKeys, currentID, envBool("NICON_ENCRYPTION_WRITE_V2"))
+	if err != nil {
+		log.Fatalf("encryption keys: %v", err)
+	}
+	st, err := store.OpenWithKeyRing(dsn, ring)
 	if err != nil {
 		log.Fatalf("open database: %v", err)
 	}
 	return st
+}
+
+// runReencrypt implements `nicon-relay reencrypt [-dry-run]`: migrate every
+// stored secret to the configured write format and current key.
+func runReencrypt(args []string) {
+	fs := flag.NewFlagSet("nicon-relay reencrypt", flag.ExitOnError)
+	dsn, encKey := dbFlags(fs)
+	dryRun := fs.Bool("dry-run", false, "only report what would be rewritten")
+	fs.Parse(args)
+
+	st := openStore(*dsn, *encKey)
+	defer st.Close()
+
+	report, err := st.ReencryptAll(context.Background(), *dryRun)
+	if err != nil {
+		log.Fatalf("reencrypt: %v", err)
+	}
+	verb := "rewritten"
+	if *dryRun {
+		verb = "would be rewritten"
+	}
+	fmt.Printf("RCON passwords:   %d stored, %d already current, %d %s, %d failed\n",
+		report.Servers.Scanned, report.Servers.Current, report.Servers.Rewritten, verb, report.Servers.Failed)
+	if report.TokensUnavailable {
+		fmt.Println("Nitrado tokens:   (no users.nitrado_token_enc column — skipped)")
+	} else {
+		fmt.Printf("Nitrado tokens:   %d stored, %d already current, %d %s, %d failed\n",
+			report.Tokens.Scanned, report.Tokens.Current, report.Tokens.Rewritten, verb, report.Tokens.Failed)
+	}
+	for _, failure := range report.Failures {
+		fmt.Println("FAILED:", failure)
+	}
+	if len(report.Failures) > 0 {
+		os.Exit(1)
+	}
 }
 
 func runServer() {

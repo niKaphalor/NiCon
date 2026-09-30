@@ -11,6 +11,11 @@ return [
     'nitrado_api_base_url' => getenv('NICON_NITRADO_API_BASE_URL') ?: '',
     'nitrado_cache_ttl_seconds' => 45,
     'audit_retention_days' => 180,
+    // NICON_TEST_CRYPTO_MODE (legacy | v2 | rotated) is translated into these
+    // by tests/php/api_integration.php.
+    'encryption_keys' => nicon_parse_key_list((string) getenv('NICON_ENCRYPTION_KEYS')),
+    'encryption_current_key_id' => (int) (getenv('NICON_ENCRYPTION_CURRENT_KEY_ID') ?: 1),
+    'encryption_write_v2' => getenv('NICON_ENCRYPTION_WRITE_V2') === '1',
     'maintenance_probability' => 1, // deterministic: every request may clean up
     'allowed_origins' => ['http://127.0.0.1'],
 ];

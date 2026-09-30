@@ -32,7 +32,7 @@ jobs:
       - name: Check root/docs mirrored files stay identical
         run: |
           status=0
-          for f in app.js index.html games.js style.css sw.js compatibility.md i18n.en.js i18n.de.js i18n.js faq.html faq.de.html contact.html contact.de.html contact.js imprint.html imprint.de.html privacy.html privacy.de.html; do
+          for f in app.js index.html games.js safe-regex.js style.css sw.js compatibility.md i18n.en.js i18n.de.js i18n.js faq.html faq.de.html contact.html contact.de.html contact.js imprint.html imprint.de.html privacy.html privacy.de.html; do
             if ! diff -q "$f" "docs/$f" > /dev/null 2>&1; then
               echo "::error file=$f::$f and docs/$f have drifted apart — keep them byte-identical (e.g. \`cp $f docs/$f\`)"
               status=1
@@ -141,11 +141,36 @@ jobs:
           done < <(find webspace -name '*.php' -print0)
           exit $status
 
+      # Byte-compatibility of the secret-at-rest format with the Go relay
+      # (tests/crypto-vectors.json is generated and verified by
+      # internal/store/crypto_test.go too). No database needed.
+      - name: PHP crypto test vectors
+        run: php tests/php/crypto_test.php
+
+      # The whole API suite runs once per storage format for RCON passwords
+      # and Nitrado tokens: the legacy format, format v2, and v2 after a key
+      # rotation (key 2 current, key 1 kept for reading).
       - name: PHP API integration tests
         env:
           NICON_PHP_TEST_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=nicon_test;charset=utf8mb4
           NICON_PHP_TEST_DB_USER: root
           NICON_PHP_TEST_DB_PASS: ci_test_root_password
+        run: php tests/php/api_integration.php
+
+      - name: PHP API integration tests (encryption format v2)
+        env:
+          NICON_PHP_TEST_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=nicon_test;charset=utf8mb4
+          NICON_PHP_TEST_DB_USER: root
+          NICON_PHP_TEST_DB_PASS: ci_test_root_password
+          NICON_TEST_CRYPTO_MODE: v2
+        run: php tests/php/api_integration.php
+
+      - name: PHP API integration tests (encryption format v2, rotated key)
+        env:
+          NICON_PHP_TEST_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=nicon_test;charset=utf8mb4
+          NICON_PHP_TEST_DB_USER: root
+          NICON_PHP_TEST_DB_PASS: ci_test_root_password
+          NICON_TEST_CRYPTO_MODE: rotated
         run: php tests/php/api_integration.php
 
   # go.mod's `go` directive is the supported floor; the main job builds

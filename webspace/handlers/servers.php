@@ -479,11 +479,19 @@ function nicon_handle_create_server(int $userId): void
             nicon_send_error('you already have the maximum of ' . NICON_MAX_SERVERS_PER_ACCOUNT . ' servers — remove one first', 400);
             return;
         }
+        // Format v2 binds the ciphertext to the server's ID, which exists only
+        // after the INSERT: insert first, then store the password (same
+        // transaction). The legacy format needs no ID and is written directly.
+        $v2 = nicon_writes_v2();
         $pdo->prepare('
             INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ')->execute([$userId, $name, $host, $port, nicon_encrypt_password($password, NICON_MAX_SERVER_PASSWORD_BYTES), $protocol, $queryProtocol, $queryPort, $game, 'manual']);
+        ')->execute([$userId, $name, $host, $port, $v2 ? null : nicon_encrypt_password($password, NICON_MAX_SERVER_PASSWORD_BYTES), $protocol, $queryProtocol, $queryPort, $game, 'manual']);
         $id = (int) $pdo->lastInsertId();
+        if ($v2 && $password !== '') {
+            $pdo->prepare('UPDATE servers SET password_enc = ? WHERE id = ?')
+                ->execute([nicon_encrypt_password($password, NICON_MAX_SERVER_PASSWORD_BYTES, nicon_aad_server_password($userId, $id)), $id]);
+        }
         $pdo->commit();
     } catch (Throwable $e) {
         $pdo->rollBack();
@@ -593,7 +601,7 @@ function nicon_handle_set_server_password(int $userId, int $serverId): void
     }
 
     $stmt = $pdo->prepare('UPDATE servers SET password_enc = ?, health_ok = NULL, health_checked_at = NULL, health_latency_ms = NULL, health_error = NULL WHERE id = ? AND user_id = ?');
-    $stmt->execute([nicon_encrypt_password($password, NICON_MAX_SERVER_PASSWORD_BYTES), $serverId, $userId]);
+    $stmt->execute([nicon_encrypt_password($password, NICON_MAX_SERVER_PASSWORD_BYTES, nicon_aad_server_password($userId, $serverId)), $serverId, $userId]);
     if ($stmt->rowCount() === 0) {
         nicon_send_error('404 page not found', 404);
         return;

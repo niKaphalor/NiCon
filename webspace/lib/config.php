@@ -4,6 +4,20 @@
 // `php -S` where env vars are easy to set and a config.local.php is not.
 declare(strict_types=1);
 
+// nicon_parse_key_list turns "2=base64,3=base64" (the NICON_ENCRYPTION_KEYS
+// environment variable) into [2 => 'base64', 3 => 'base64'].
+function nicon_parse_key_list(string $list): array
+{
+    $keys = [];
+    foreach (explode(',', $list) as $item) {
+        $item = trim($item);
+        if ($item === '' || !str_contains($item, '=')) continue;
+        [$id, $encoded] = explode('=', $item, 2);
+        $keys[(int) trim($id)] = trim($encoded);
+    }
+    return $keys;
+}
+
 function nicon_config(): array
 {
     static $config = null;
@@ -38,6 +52,10 @@ function nicon_config(): array
         'nitrado_api_base_url' => getenv('NICON_NITRADO_API_BASE_URL') ?: 'https://api.nitrado.net',
         'nitrado_cache_ttl_seconds' => (int) (getenv('NICON_NITRADO_CACHE_TTL_SECONDS') ?: 45),
         'audit_retention_days' => (int) (getenv('NICON_AUDIT_RETENTION_DAYS') ?: 180),
+        // Key rotation / v2 format (see README, "Rotating the encryption key").
+        'encryption_keys' => nicon_parse_key_list((string) getenv('NICON_ENCRYPTION_KEYS')),
+        'encryption_current_key_id' => (int) (getenv('NICON_ENCRYPTION_CURRENT_KEY_ID') ?: 1),
+        'encryption_write_v2' => in_array(strtolower((string) getenv('NICON_ENCRYPTION_WRITE_V2')), ['1', 'true', 'yes', 'on'], true),
         'allowed_origins' => $origins ? array_map('trim', explode(',', $origins)) : [],
     ];
     return $config;
