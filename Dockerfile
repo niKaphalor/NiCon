@@ -12,7 +12,9 @@
 # from scratch on every single rebuild — the actual reason a rebuild here
 # has been taking ~2 minutes regardless of how little source changed.
 
-FROM golang:1.26-alpine AS build
+# Base images are pinned by digest (Dependabot proposes updates); the tag is
+# kept for readability.
+FROM golang:1.26-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -22,7 +24,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -o /nicon-relay .
 
-FROM alpine:3.20
+FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 RUN apk add --no-cache ca-certificates \
     && addgroup -S nicon && adduser -S -G nicon -H -D nicon
 COPY --from=build /nicon-relay /nicon-relay

@@ -192,7 +192,10 @@ async function login(page) {
 test("login, manual game selection, profile editing, and Nitrado sync", async ({ page }) => {
   const state = await installBackend(page, []);
   await login(page);
-  await expect(page.locator("#supported-games-list .supported-game-header")).toHaveCount(30);
+  // Counts come from the game catalog itself, so adding a game doesn't
+  // break the suite.
+  const catalogSize = await page.evaluate(() => Object.keys(window.NICON_GAMES).length);
+  await expect(page.locator("#supported-games-list .supported-game-header")).toHaveCount(catalogSize);
   await expect(page.locator('#supported-games-list li[aria-label="Rust"] img')).toHaveAttribute("src", /apps\/252490\/header\.jpg/);
   await expect(page.locator('#supported-games-list li[aria-label="7 Days to Die"] .tag')).toHaveClass(/tag-tested/);
   await expect(page.locator('#supported-games-list li[aria-label="DayZ"] .tag')).toHaveClass(/tag-tested/);
@@ -230,7 +233,7 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
 
   await page.locator("#add-server-btn").click();
   await page.locator('[data-tab="manual"]').click();
-  await expect(page.locator("#manual-game option")).toHaveCount(30);
+  await expect(page.locator("#manual-game option")).toHaveCount(catalogSize + 1); // + the "Generic (no parsing)" entry
   await expect(page.locator("#manual-game")).toContainText("Counter-Strike 2");
   await expect(page.locator("#manual-game")).toContainText("Minecraft");
   await page.locator("#manual-game").selectOption("Rust");
