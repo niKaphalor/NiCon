@@ -152,14 +152,24 @@
 
       <main class="content" id="content">
         <div id="content-empty" class="content-empty" hidden>
-          <h1 data-i18n="welcome.title">Welcome to NiCon</h1>
-          <p class="hint" id="content-empty-text"></p>
-          <div class="supported-games">
-            <div class="card-kicker" data-i18n="welcome.gamesTitle">Supported games</div>
-            <p class="hint" data-i18n="welcome.gamesHint">The top badge shows what the server needs; the bottom badge shows whether the integration has been tested against a live server.</p>
-            <ul id="supported-games-list" class="supported-games-list"></ul>
+          <div class="welcome-header">
+            <div class="welcome-copy">
+              <span class="page-eyebrow" data-i18n="welcome.eyebrow">Get started</span>
+              <h1 data-i18n="welcome.title">Welcome to NiCon</h1>
+              <p class="hint" id="content-empty-text"></p>
+            </div>
+            <button type="button" id="empty-add-btn" class="btn-primary" data-i18n="servers.emptyAdd" hidden>+ Add a server</button>
           </div>
-          <button type="button" id="empty-add-btn" class="btn-primary" data-i18n="servers.emptyAdd" hidden>+ Add a server</button>
+          <section class="supported-games" aria-labelledby="supported-games-title">
+            <div class="supported-games-head">
+              <div>
+                <h2 id="supported-games-title" class="card-kicker" data-i18n="welcome.gamesTitle">Supported games</h2>
+                <p class="hint" data-i18n="welcome.gamesHint">Each game shows what the server needs and whether the integration has been tested against a live server.</p>
+              </div>
+              <span id="supported-games-count" class="tag tag-neutral supported-games-count"></span>
+            </div>
+            <ul id="supported-games-list" class="supported-games-list"></ul>
+          </section>
         </div>
 
         <div id="content-password" class="card password-card" hidden>

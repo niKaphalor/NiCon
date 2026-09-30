@@ -219,22 +219,29 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   const overviewLayout = await page.evaluate(() => {
     const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
     const panel = document.querySelector(".supported-games").getBoundingClientRect();
-    const footer = document.querySelector(".site-footer").getBoundingClientRect();
     const cards = Array.from(document.querySelectorAll("#supported-games-list li"));
     const columns = new Set(cards.map((card) => Math.round(card.getBoundingClientRect().left)));
+    const firstArt = cards[0].querySelector(".game-tile-art").getBoundingClientRect();
+    const firstBadges = Array.from(cards[0].querySelectorAll(".tag, .supported-game-integration")).map((tag) => tag.getBoundingClientRect());
     return {
       sidebarWidth: sidebar.width,
       panelRight: panel.right,
-      panelBottom: panel.bottom,
-      footerTop: footer.top,
       columns: columns.size,
       viewportWidth: window.innerWidth,
+      artWidth: firstArt.width,
+      badgeCount: firstBadges.length,
+      badgesAboveArtBottom: firstBadges.filter((badge) => badge.top < firstArt.bottom).length,
     };
   });
   expect(overviewLayout.sidebarWidth).toBe(286);
-  expect(overviewLayout.columns).toBeGreaterThanOrEqual(6);
+  // Large tiles (a handful per row, not a dense wall of thumbnails) ...
+  expect(overviewLayout.columns).toBeGreaterThanOrEqual(3);
+  expect(overviewLayout.columns).toBeLessThanOrEqual(5);
+  expect(overviewLayout.artWidth).toBeGreaterThanOrEqual(220);
+  // ... whose key art is never covered: both badges sit below the image.
+  expect(overviewLayout.badgeCount).toBe(2);
+  expect(overviewLayout.badgesAboveArtBottom).toBe(0);
   expect(overviewLayout.panelRight).toBeLessThanOrEqual(overviewLayout.viewportWidth);
-  expect(overviewLayout.panelBottom).toBeLessThanOrEqual(overviewLayout.footerTop);
 
   await page.locator("#add-server-btn").click();
   await page.locator('[data-tab="manual"]').click();

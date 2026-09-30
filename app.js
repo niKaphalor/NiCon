@@ -115,6 +115,7 @@
   var contentEmpty = document.getElementById("content-empty");
   var contentEmptyText = document.getElementById("content-empty-text");
   var supportedGamesList = document.getElementById("supported-games-list");
+  var supportedGamesCount = document.getElementById("supported-games-count");
   var emptyAddBtn = document.getElementById("empty-add-btn");
   var contentPassword = document.getElementById("content-password");
   var passwordServerName = document.getElementById("password-server-name");
@@ -4270,6 +4271,7 @@
 
   function renderSupportedGamesList() {
     supportedGamesList.innerHTML = "";
+    supportedGamesCount.textContent = I18N.t("welcome.gamesCount", { count: Object.keys(window.NICON_GAMES).length });
     Object.keys(window.NICON_GAMES).forEach(function (key) {
       var tested = TESTED_GAMES.indexOf(key) !== -1;
       var game = window.NICON_GAMES[key];
@@ -4300,8 +4302,12 @@
         image.hidden = true;
         fallback.hidden = false;
       });
-      li.appendChild(image);
-      li.appendChild(fallback);
+      // The art sits alone in its own box; the name and both badges live in
+      // a caption below it, so nothing covers the game's key art.
+      var art = document.createElement("div");
+      art.className = "game-tile-art";
+      art.appendChild(image);
+      art.appendChild(fallback);
 
       // Optional wordmark overlay for a game whose header art doesn't
       // already have its own logo baked in (Minecraft's key art doesn't —
@@ -4314,18 +4320,30 @@
         logo.alt = "";
         logo.loading = "lazy";
         logo.referrerPolicy = "no-referrer";
-        li.appendChild(logo);
+        art.appendChild(logo);
       }
+      li.appendChild(art);
 
+      var body = document.createElement("div");
+      body.className = "game-tile-body";
+      var name = document.createElement("span");
+      name.className = "game-tile-name";
+      name.textContent = game.label;
+      body.appendChild(name);
+
+      var badges = document.createElement("div");
+      badges.className = "game-tile-badges";
       var integrationTag = document.createElement("span");
       integrationTag.className = "supported-game-integration integration-" + integrationType;
       integrationTag.textContent = integrationLabel;
-      li.appendChild(integrationTag);
+      badges.appendChild(integrationTag);
 
       var tag = document.createElement("span");
       tag.className = "tag " + (tested ? "tag-tested" : "tag-untested");
       tag.textContent = I18N.t(tested ? "welcome.tested" : "welcome.untested");
-      li.appendChild(tag);
+      badges.appendChild(tag);
+      body.appendChild(badges);
+      li.appendChild(body);
       supportedGamesList.appendChild(li);
     });
   }
