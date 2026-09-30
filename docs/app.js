@@ -2679,6 +2679,22 @@
     identity.appendChild(meta);
     head.appendChild(identity);
 
+    // Top-right corner, deliberately separate from game.logoImage (the
+    // supported-games *tile* overlay, Minecraft-only) — see games.js's
+    // nitradoBackgroundSlugs comment. .head-game-logo's CSS keeps this
+    // clear of .head-actions below, which is where the buttons always
+    // render (.head is align-items:flex-end).
+    if (game && game.headerLogoImage) {
+      var headLogo = document.createElement("img");
+      headLogo.className = "head-game-logo";
+      headLogo.src = game.headerLogoImage;
+      headLogo.alt = "";
+      headLogo.loading = "lazy";
+      headLogo.referrerPolicy = "no-referrer";
+      headLogo.addEventListener("error", function () { headLogo.remove(); });
+      head.appendChild(headLogo);
+    }
+
     var actions = document.createElement("div");
     actions.className = "head-actions";
 

@@ -294,6 +294,10 @@ test("two consoles stay connected and player actions reach the selected server",
   await login(page);
 
   await page.locator(".server-row", { hasText: "GMod Alpha" }).click();
+  // Garry's Mod is one of the games with a Nitrado header logo (games.js's
+  // nitradoBackgroundSlugs) — confirms renderHead() actually renders it,
+  // distinct from the supported-games tile logo overlay (Minecraft-only).
+  await expect(page.locator("#head .head-game-logo")).toHaveAttribute("src", /garrysmod-logo\.png/);
   await expect(page.locator("#players-panel .player-name")).toHaveText("Alice");
   await page.locator('[data-server-tab="overview"]').click();
   await expect(page.locator("#server-overview-content")).toContainText("100.00%");

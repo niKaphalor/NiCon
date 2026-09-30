@@ -477,6 +477,48 @@ window.NICON_GAMES.minecraft.backgroundImage = window.NICON_GAMES.minecraft.head
 // hotlinked from Wikipedia's own hosted copy of it, not stored here.
 window.NICON_GAMES.minecraft.logoImage = "https://upload.wikimedia.org/wikipedia/en/b/be/Minecraft_game_logo_2023.png";
 
+// Nitrado's own web interface bundles a per-game header background and a
+// matching wordmark logo, hotlinked here the same way Steam's art is — for
+// the server-view header specifically (setServerBackground()/renderHead()
+// in app.js), not the supported-games tile art above (game.logoImage is
+// that tile overlay, Minecraft-only today; headerLogoImage below is a
+// separate field so this doesn't also start showing a tile logo for these
+// 17 games). Nitrado's own slugs are idiosyncratic (csgo rather than cs2,
+// dayzstandalone rather than dayz, arksa/arkse abbreviated,
+// minecraftbedrock the only Minecraft edition with one) and don't cover
+// every game NiCon supports — confirmed by directly requesting each
+// candidate slug; a game absent from this list 404s there and keeps its
+// Steam-based background (and no header logo) from the loop above instead
+// of guessing further. `?version=<hash>` is Nitrado's own cache-busting
+// query string; confirmed unnecessary for either asset — the current image
+// loads without it.
+var nitradoBackgroundSlugs = {
+  rust: "rust",
+  arma3: "arma3",
+  arksurvivalascended: "arksa",
+  arksurvivalevolved: "arkse",
+  palworld: "palworld",
+  vrising: "vrising",
+  squad: "squad",
+  soulmask: "soulmask",
+  mordhau: "mordhau",
+  insurgency: "insurgency",
+  minecraft: "minecraftbedrock",
+  dayz: "dayzstandalone",
+  armareforger: "armareforger",
+  gmod: "garrysmod",
+  counterstrike2: "csgo",
+  eightythree: "eightythree",
+  hellletloose: "hellletloose",
+};
+Object.keys(nitradoBackgroundSlugs).forEach(function (key) {
+  var game = window.NICON_GAMES[key];
+  if (!game) return;
+  var base = "https://webinterface.nitrado.net/bundles/webinterface/images/game_headers/" + nitradoBackgroundSlugs[key];
+  game.backgroundImage = base + "-bg.jpg";
+  game.headerLogoImage = base + "-logo.png";
+});
+
 // Best-effort mapping from a Nitrado "game" string (e.g. "Minecraft
 // Vanilla") to one of the keys above, for auto-selecting the parser. Most
 // keys already are the substring to look for; a few games' key names
