@@ -1,47 +1,6 @@
 <?php
 declare(strict_types=1);
 
-function nicon_rcon_audit_rows(?int $userId, int $limit): array
-{
-    $where = $userId === null ? '' : 'WHERE user_id = ?';
-    $stmt = nicon_db()->prepare("
-        SELECT server_id, username, server_name, command, action, target_player, origin,
-               result, success, upstream_ms, relay_overhead_ms, created_at
-        FROM rcon_audit_log
-        $where
-        ORDER BY created_at DESC, id DESC
-        LIMIT $limit
-    ");
-    $stmt->execute($userId === null ? [] : [$userId]);
-    return array_map(static function (array $row): array {
-        return [
-            'kind' => 'rcon',
-            'action' => 'rcon_command',
-            'rcon_action' => $row['action'],
-            'origin' => $row['origin'],
-            'command' => $row['command'],
-            'target_player' => $row['target_player'],
-            'result' => $row['result'],
-            'success' => (bool) $row['success'],
-            'upstream_ms' => $row['upstream_ms'] !== null ? (float) $row['upstream_ms'] : null,
-            'relay_overhead_ms' => $row['relay_overhead_ms'] !== null ? (float) $row['relay_overhead_ms'] : null,
-            'actor_username' => $row['username'],
-            'server_id' => (int) $row['server_id'],
-            'server_name' => $row['server_name'],
-            'target_username' => null,
-            'detail' => null,
-            'created_at' => gmdate('Y-m-d\TH:i:s\Z', strtotime($row['created_at'])),
-        ];
-    }, $stmt->fetchAll());
-}
-
-function nicon_merge_audit_rows(array $accountRows, array $rconRows, int $limit): array
-{
-    $rows = array_merge($accountRows, $rconRows);
-    usort($rows, static fn(array $a, array $b): int => strcmp($b['created_at'], $a['created_at']));
-    return array_slice($rows, 0, $limit);
-}
-
 // ---------------------------------------------------------------------------
 // Pagination
 //
@@ -57,21 +16,12 @@ function nicon_merge_audit_rows(array $accountRows, array $rconRows, int $limit)
 // ---------------------------------------------------------------------------
 
 const NICON_AUDIT_DEFAULT_PER_PAGE = 25;
-const NICON_AUDIT_MAX_PER_PAGE = 100;
 
 // nicon_audit_paging returns [page, perPage] for a paginated request, or
-// null for a legacy one. Out-of-range values are clamped, never an error.
+// null for a legacy one (see nicon_page_params in lib/http.php).
 function nicon_audit_paging(): ?array
 {
-    if (!isset($_GET['page']) && !isset($_GET['per_page'])) {
-        return null;
-    }
-    $page = max(1, (int) ($_GET['page'] ?? 1));
-    $perPage = (int) ($_GET['per_page'] ?? NICON_AUDIT_DEFAULT_PER_PAGE);
-    if ($perPage < 1) {
-        $perPage = NICON_AUDIT_DEFAULT_PER_PAGE;
-    }
-    return [$page, min($perPage, NICON_AUDIT_MAX_PER_PAGE)];
+    return nicon_page_params(NICON_AUDIT_DEFAULT_PER_PAGE, 100);
 }
 
 // nicon_audit_fetch returns [rows, total]: audit_log and rcon_audit_log as
@@ -199,13 +149,7 @@ function nicon_send_audit_response(?int $userId, ?array $server, bool $includeIp
     }
     [$page, $perPage] = $paging;
     [$rows, $total] = nicon_audit_fetch($userId, $server, $perPage, ($page - 1) * $perPage, $includeIp);
-    nicon_send_json([
-        'items' => $rows,
-        'page' => $page,
-        'per_page' => $perPage,
-        'total' => $total,
-        'total_pages' => max(1, (int) ceil($total / $perPage)),
-    ]);
+    nicon_send_json(nicon_page_payload($rows, $page, $perPage, $total));
 }
 
 // nicon_handle_list_audit_log: the authenticated user's own activity —

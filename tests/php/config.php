@@ -11,5 +11,6 @@ return [
     'nitrado_api_base_url' => getenv('NICON_NITRADO_API_BASE_URL') ?: '',
     'nitrado_cache_ttl_seconds' => 45,
     'audit_retention_days' => 180,
+    'maintenance_probability' => 1, // deterministic: every request may clean up
     'allowed_origins' => ['http://127.0.0.1'],
 ];

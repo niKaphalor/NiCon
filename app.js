@@ -1749,14 +1749,21 @@
     if (location.hash === "#faq" && viewFaq.hidden) showFaqView();
   });
 
-  function loadAdminUsers() {
-    return apiFetch("/api/admin/users", { method: "GET" })
-      .then(function (r) {
-        if (!r.ok) throw new Error(I18N.t("errors.adminLoadFailed"));
-        return r.json();
-      })
-      .then(function (users) {
-        renderAdminUsers(users || []);
+  var ADMIN_USERS_PER_PAGE = 25;
+  var ADMIN_NOTICES_PER_PAGE = 10;
+  var ADMIN_FAQ_PER_PAGE = 10;
+  var adminUsersPage = 1;
+  var adminNoticesPage = 1;
+  var adminFaqPage = 1;
+
+  function loadAdminUsers(page) {
+    if (page) adminUsersPage = page;
+    return fetchPagedList("/api/admin/users", adminUsersPage, ADMIN_USERS_PER_PAGE, null, null, I18N.t("errors.adminLoadFailed"))
+      .then(function (data) {
+        if (!data.items.length && data.page > 1) return loadAdminUsers(Math.max(1, data.total_pages));
+        adminUsersPage = data.page;
+        renderAdminUsers(data.items);
+        renderPager(pagerHostFor(adminUsersBody.closest(".table-shell")), data, loadAdminUsers);
       })
       .catch(function (err) { showToast(err.message); });
   }
@@ -1847,13 +1854,15 @@
 
   // --- admin: notifications (broadcast to every signed-in user) ---
 
-  function loadAdminNotifications() {
-    return apiFetch("/api/notifications", { method: "GET" })
-      .then(function (r) {
-        if (!r.ok) throw new Error(I18N.t("errors.notificationsLoadFailed"));
-        return r.json();
+  function loadAdminNotifications(page) {
+    if (page) adminNoticesPage = page;
+    return fetchPagedList("/api/notifications", adminNoticesPage, ADMIN_NOTICES_PER_PAGE, null, null, I18N.t("errors.notificationsLoadFailed"))
+      .then(function (data) {
+        if (!data.items.length && data.page > 1) return loadAdminNotifications(Math.max(1, data.total_pages));
+        adminNoticesPage = data.page;
+        renderAdminNotifications(data.items);
+        renderPager(pagerHostFor(adminNotificationsList), data, loadAdminNotifications);
       })
-      .then(function (list) { renderAdminNotifications(list || []); })
       .catch(function (err) { showToast(err.message); });
   }
 
@@ -1987,17 +1996,17 @@
     });
   }
 
-  // --- log pagination ---
-  // Every log list is shown a page at a time. The audit endpoints paginate
+  // --- list pagination ---
+  // Every log list and every admin list is shown a page at a time. The list endpoints paginate
   // server-side ({items, page, per_page, total, total_pages}); an API that
   // predates that answers with one plain array instead, which is paginated
   // here so the UI behaves the same against either.
 
-  function fetchLogPage(path, page, perPage, extraQuery, clientFilter) {
+  function fetchPagedList(path, page, perPage, extraQuery, clientFilter, failText) {
     var query = "page=" + page + "&per_page=" + perPage + (extraQuery ? "&" + extraQuery : "");
     return apiFetch(path + "?" + query, { method: "GET" })
       .then(function (r) {
-        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || "request failed"); });
+        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || failText || "request failed"); });
         return r.json();
       })
       .then(function (data) {
@@ -2055,7 +2064,7 @@
 
   function loadActivity(page) {
     if (page) activityPage = page;
-    return fetchLogPage("/api/audit-log", activityPage, ACTIVITY_PER_PAGE)
+    return fetchPagedList("/api/audit-log", activityPage, ACTIVITY_PER_PAGE)
       .then(function (data) {
         // Entries expire, so the last page can vanish underneath us.
         if (!data.items.length && data.page > 1) return loadActivity(Math.max(1, data.total_pages));
@@ -2068,7 +2077,7 @@
 
   function loadAdminAuditLog(page) {
     if (page) adminAuditPage = page;
-    return fetchLogPage("/api/admin/audit-log", adminAuditPage, AUDIT_PER_PAGE)
+    return fetchPagedList("/api/admin/audit-log", adminAuditPage, AUDIT_PER_PAGE)
       .then(function (data) {
         if (!data.items.length && data.page > 1) return loadAdminAuditLog(Math.max(1, data.total_pages));
         adminAuditPage = data.page;
@@ -2109,13 +2118,15 @@
     faqEditorCancel.hidden = true;
   }
 
-  function loadAdminFaq() {
-    return apiFetch("/api/admin/faq", { method: "GET" })
-      .then(function (r) {
-        if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t) || I18N.t("errors.faqLoadFailed")); });
-        return r.json();
+  function loadAdminFaq(page) {
+    if (page) adminFaqPage = page;
+    return fetchPagedList("/api/admin/faq", adminFaqPage, ADMIN_FAQ_PER_PAGE, null, null, I18N.t("errors.faqLoadFailed"))
+      .then(function (data) {
+        if (!data.items.length && data.page > 1) return loadAdminFaq(Math.max(1, data.total_pages));
+        adminFaqPage = data.page;
+        renderAdminFaq(data.items);
+        renderPager(pagerHostFor(adminFaqList), data, loadAdminFaq);
       })
-      .then(function (list) { renderAdminFaq(list || []); })
       .catch(function (err) { showToast(err.message); });
   }
 
@@ -2596,7 +2607,10 @@
         var x = Math.max(0, Math.min(149, (Date.parse(sample.at) - start) * 150 / rangeMs));
         rect.setAttribute("x", String(x)); rect.setAttribute("y", "3");
         rect.setAttribute("width", "1.5"); rect.setAttribute("height", "28");
-        rect.setAttribute("class", sample.online ? "online" : "offline"); svg.appendChild(rect);
+        // Condensed (hourly/daily) samples carry the share of the bucket that
+        // was online; a bucket that was only partly online gets its own colour.
+        var ratio = typeof sample.online_ratio === "number" ? sample.online_ratio : (sample.online ? 1 : 0);
+        rect.setAttribute("class", ratio >= 0.999 ? "online" : (ratio <= 0.001 ? "offline" : "partial")); svg.appendChild(rect);
       });
       return svg;
     }
@@ -2934,7 +2948,7 @@
     var sameServer = function (entry) {
       return entry.kind === "rcon" && (Number(entry.server_id) === Number(server.id) || (!entry.server_id && entry.server_name === server.name));
     };
-    return fetchLogPage("/api/audit-log", serverAuditPage, ACTIVITY_PER_PAGE, "server_id=" + encodeURIComponent(server.id), sameServer)
+    return fetchPagedList("/api/audit-log", serverAuditPage, ACTIVITY_PER_PAGE, "server_id=" + encodeURIComponent(server.id), sameServer)
       .then(function (data) {
         if (serverAuditServerId !== server.id) return; // the user switched servers meanwhile
         if (!data.items.length && data.page > 1) return loadServerAudit(server, Math.max(1, data.total_pages));

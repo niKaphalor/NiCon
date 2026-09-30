@@ -399,6 +399,132 @@ try {
         assert_test(!array_key_exists('ip_address', $item), 'a user\'s own activity must never expose IP addresses');
     }
 
+    // ---- health history: SQL aggregation == the old PHP computation ---------
+    $pdo->prepare('DELETE FROM server_health_samples WHERE server_id = ?')->execute([$serverId]);
+    $pdo->prepare('DELETE FROM health_history_cache WHERE server_id = ?')->execute([$serverId]);
+    $seed = $pdo->prepare('INSERT INTO server_health_samples (server_id, sampled_at, online, latency_ms, player_current, player_max, source) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    $slotBase = intdiv(time(), 300) * 300 - 150;
+    for ($i = 0; $i < 864; $i++) {                    // three days of 5-minute slots
+        $ts = $slotBase - $i * 300;
+        $age = time() - $ts;
+        if ($age > 86400 - 900 && $age < 86400 + 900) continue;   // stay clear of the 24 h cutoff
+        $at = gmdate('Y-m-d H:i:s', $ts);
+        $up = ($i % 17) !== 0;                                     // regular outages
+        $seed->execute([$serverId, $at, $up ? 1 : 0, $up ? 20 + $i % 30 : null, null, null, 'relay']);
+        if ($i % 2 === 0) $seed->execute([$serverId, $at, 1, null, 5 + $i % 11, 20, 'a2s']);
+        if ($i % 4 === 0) $seed->execute([$serverId, $at, 1, null, 9 + $i % 7, 24, 'nitrado']);   // beats a2s in the same slot
+        if ($i % 9 === 0) $seed->execute([$serverId, $at, 1, null, 30, null, 'client']);           // never counts for availability
+    }
+    $rawRows = (int) $pdo->query("SELECT COUNT(*) FROM server_health_samples WHERE server_id = $serverId")->fetchColumn();
+    assert_test($rawRows > 1500, 'health-history fixture should be large');
+
+    // The previous implementation, verbatim, as the reference.
+    $referenceHistory = static function (PDO $pdo, int $serverId, int $days): array {
+        $stmt = $pdo->prepare("SELECT sampled_at, online, player_current, source FROM server_health_samples
+            WHERE server_id = ? AND sampled_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL $days DAY) ORDER BY sampled_at ASC");
+        $stmt->execute([$serverId]);
+        $availabilityBuckets = [];
+        $playerBuckets = [];
+        foreach ($stmt as $row) {
+            $isOnline = (bool) $row['online'];
+            $source = (string) $row['source'];
+            $bucket = (int) floor(strtotime((string) $row['sampled_at']) / 300);
+            if ($source !== 'client') {
+                $priority = $source === 'relay' ? 20 : 10;
+                if (!isset($availabilityBuckets[$bucket]) || $priority > $availabilityBuckets[$bucket]['priority']) {
+                    $availabilityBuckets[$bucket] = ['online' => $isOnline, 'priority' => $priority];
+                }
+            }
+            $current = $row['player_current'] === null ? null : (int) $row['player_current'];
+            if ($current !== null) {
+                $priority = $source === 'nitrado' ? 40 : (in_array($source, ['a2s', 'mcquery'], true) ? 30 : ($source === 'client' ? 20 : 10));
+                if (!isset($playerBuckets[$bucket]) || $priority > $playerBuckets[$bucket]['priority']) {
+                    $playerBuckets[$bucket] = ['players' => $current, 'priority' => $priority];
+                }
+            }
+        }
+        $count = count($availabilityBuckets);
+        $online = count(array_filter($availabilityBuckets, static fn(array $x): bool => $x['online']));
+        $values = array_column($playerBuckets, 'players');
+        return [
+            'uptime' => $count ? round($online * 100 / $count, 2) : null,
+            'completeness' => round(min(100, $count * 100 / ($days * 24 * 12)), 2),
+            'average' => $values ? round(array_sum($values) / count($values), 1) : null,
+            'peak' => $values ? max($values) : null,
+        ];
+    };
+    foreach (['24h' => 1, '7d' => 7, '30d' => 30, '90d' => 90] as $rangeKey => $daysInRange) {
+        [$status, $history] = request_json($base, 'GET', "/api/servers/$serverId/health-history?range=$rangeKey", null, $aliceToken);
+        assert_test($status === 200, "health history $rangeKey failed");
+        $expectedStats = $referenceHistory($pdo, $serverId, $daysInRange);
+        assert_test($history['uptime_percent'] === $expectedStats['uptime'] || abs($history['uptime_percent'] - $expectedStats['uptime']) < 0.005, "uptime differs for $rangeKey: " . json_encode([$history['uptime_percent'], $expectedStats['uptime']]));
+        assert_test(abs($history['sample_completeness_percent'] - $expectedStats['completeness']) < 0.005, "completeness differs for $rangeKey");
+        assert_test(abs($history['players_average'] - $expectedStats['average']) < 0.05, "average players differ for $rangeKey: " . json_encode([$history['players_average'], $expectedStats['average']]));
+        assert_test($history['players_peak'] === $expectedStats['peak'], "peak players differ for $rangeKey");
+
+        if ($rangeKey === '24h') {
+            $within = (int) $pdo->query("SELECT COUNT(*) FROM server_health_samples WHERE server_id = $serverId AND sampled_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)")->fetchColumn();
+            assert_test(count($history['samples']) === $within && !isset($history['resolution_seconds']), '24 h stays a raw series');
+            continue;
+        }
+        $resolution = $daysInRange > 30 ? 86400 : 3600;
+        assert_test(($history['resolution_seconds'] ?? 0) === $resolution, "$rangeKey resolution is $resolution seconds");
+        assert_test(count($history['samples']) <= ceil(3 * 86400 / $resolution) + 2, "$rangeKey series must be condensed, got " . count($history['samples']));
+        assert_test(count($history['samples']) < $rawRows / 10, "$rangeKey must be far smaller than the raw rows");
+        foreach ($history['samples'] as $sample) {
+            assert_test(strtotime($sample['at']) % $resolution === 0, 'aggregated samples sit on bucket boundaries');
+            assert_test($sample['source'] !== 'client' || $sample['online_ratio'] === 1.0, 'player-only buckets are marked "client"');
+            assert_test(isset($sample['online_ratio']) && $sample['online_ratio'] >= 0 && $sample['online_ratio'] <= 1, 'online_ratio out of range');
+        }
+        assert_test(count(array_filter($history['samples'], static fn(array $x): bool => $x['source'] === 'aggregate' && $x['online_ratio'] < 1)) > 0, 'the regular outages must show up as partial buckets');
+    }
+
+    // ---- admin lists: optional pagination -----------------------------------
+    [$status, $allUsers] = request_json($base, 'GET', '/api/admin/users', null, $aliceToken);
+    assert_test($status === 200 && array_is_list($allUsers) && count($allUsers) >= 2, 'the admin user list stays a plain array without parameters');
+    $collectedUsers = [];
+    [$status, $usersPage] = request_json($base, 'GET', '/api/admin/users?page=1&per_page=1', null, $aliceToken);
+    assert_test($status === 200 && count($usersPage['items']) === 1 && $usersPage['total'] === count($allUsers) && $usersPage['total_pages'] === count($allUsers), 'admin user pagination has the wrong shape');
+    for ($pageNo = 1; $pageNo <= $usersPage['total_pages']; $pageNo++) {
+        [, $onePage] = request_json($base, 'GET', "/api/admin/users?page=$pageNo&per_page=1", null, $aliceToken);
+        foreach ($onePage['items'] as $item) $collectedUsers[] = $item;
+    }
+    assert_test(json_encode($collectedUsers) === json_encode($allUsers), 'paging through the users must reproduce the full list');
+    [$status] = request_json($base, 'GET', '/api/admin/users?page=1', null, $bobToken);
+    assert_test($status === 403, 'user pagination must not bypass the admin check');
+
+    [$status, $faqAll] = request_json($base, 'GET', '/api/admin/faq', null, $aliceToken);
+    [$status, $faqPage] = request_json($base, 'GET', '/api/admin/faq?page=2&per_page=3', null, $aliceToken);
+    assert_test($status === 200 && $faqPage['page'] === 2 && $faqPage['total'] === count($faqAll) && json_encode($faqPage['items']) === json_encode(array_slice($faqAll, 3, 3)), 'admin FAQ pagination is wrong');
+
+    $noticeIds = [];
+    foreach (['one', 'two', 'three'] as $text) {
+        [$status, $notice] = request_json($base, 'POST', '/api/admin/notifications', ['type' => 'info', 'message' => "page-test $text"], $aliceToken);
+        assert_test($status === 200, 'notification creation failed');
+        $noticeIds[] = $notice['id'];
+    }
+    [$status, $noticesAll] = request_json($base, 'GET', '/api/notifications', null, $bobToken);
+    assert_test($status === 200 && array_is_list($noticesAll) && count($noticesAll) >= 3, 'notifications stay a plain array for everyone');
+    [$status, $noticePage] = request_json($base, 'GET', '/api/notifications?page=1&per_page=2', null, $aliceToken);
+    assert_test($status === 200 && count($noticePage['items']) === 2 && $noticePage['total'] === count($noticesAll) && $noticePage['total_pages'] === (int) ceil(count($noticesAll) / 2), 'notification pagination is wrong');
+    foreach ($noticeIds as $noticeId) request_json($base, 'DELETE', "/api/admin/notifications/$noticeId", null, $aliceToken);
+
+    // ---- maintenance: batched cleanup --------------------------------------
+    $oldRow = $pdo->prepare("INSERT INTO audit_log (user_id, action, detail, created_at) VALUES (?, 'expired_bulk', 'old', DATE_SUB(UTC_TIMESTAMP(), INTERVAL 400 DAY))");
+    $pdo->beginTransaction();
+    for ($i = 0; $i < 2500; $i++) $oldRow->execute([$aliceId]);
+    $pdo->commit();
+    $countBulk = static fn(): int => (int) $pdo->query("SELECT COUNT(*) FROM audit_log WHERE action = 'expired_bulk'")->fetchColumn();
+    assert_test($countBulk() === 2500, 'maintenance fixture');
+    request_json($base, 'GET', '/api/audit-log', null, $aliceToken);
+    assert_test($countBulk() === 1500, 'one request deletes at most one batch (1000 rows) per table, got ' . $countBulk());
+    putenv('NICON_CONFIG_FILE=' . $root . '/tests/php/config.php');
+    putenv('NICON_ENCRYPTION_KEY=' . $key);
+    putenv('NICON_PHP_TEST_DB_DSN=' . $dsn);
+    $cronOutput = (string) shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($root . '/webspace/cron/sample_nitrado.php') . ' 2>&1');
+    assert_test(str_contains($cronOutput, 'cleaned'), 'the cron job runs the maintenance: ' . $cronOutput);
+    assert_test($countBulk() === 0, 'the cron job finishes the backlog');
+
     // ---- password policy, input validation --------------------------------
     $pdo->exec('DELETE FROM rate_limits');
     [$status, $body] = request_json($base, 'POST', '/api/register', [

@@ -25,8 +25,22 @@ function nicon_notification_response(array $row): array
 // this browser has already dismissed.
 function nicon_handle_list_notifications(int $userId): void
 {
-    $stmt = nicon_db()->query('SELECT id, type, message, created_at FROM notifications ORDER BY created_at DESC');
-    nicon_send_json(array_map('nicon_notification_response', $stmt->fetchAll()));
+    // Everyone's bell needs all active notices, so the default stays the full
+    // list; the admin panel asks for pages with ?page=/?per_page=.
+    $paging = nicon_page_params(25);
+    $limit = '';
+    if ($paging !== null) {
+        [$page, $perPage] = $paging;
+        $limit = ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) (($page - 1) * $perPage);
+    }
+    $stmt = nicon_db()->query('SELECT id, type, message, created_at FROM notifications ORDER BY created_at DESC, id DESC' . $limit);
+    $items = array_map('nicon_notification_response', $stmt->fetchAll());
+    if ($paging === null) {
+        nicon_send_json($items);
+        return;
+    }
+    $total = (int) nicon_db()->query('SELECT COUNT(*) FROM notifications')->fetchColumn();
+    nicon_send_json(nicon_page_payload($items, $page, $perPage, $total));
 }
 
 function nicon_handle_admin_create_notification(int $adminId): void

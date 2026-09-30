@@ -491,6 +491,7 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .health-chart { display: block; width: 150px; height: 34px; margin-top: 6px; overflow: visible; }
 .health-chart .online { fill: var(--color-success); }
 .health-chart .offline { fill: var(--color-error); }
+.health-chart .partial { fill: var(--color-warn); }
 .health-chart .unknown-bg { fill: var(--color-border); }
 .health-chart .player-line { fill: none; stroke: var(--color-accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .health-summary { display: block; white-space: nowrap; font-weight: 600; }

@@ -38,12 +38,23 @@ function nicon_handle_list_faq(): void
 
 function nicon_handle_admin_list_faq(int $adminId): void
 {
+    $paging = nicon_page_params(25);
+    $limit = '';
+    if ($paging !== null) {
+        [$page, $perPage] = $paging;
+        $limit = ' LIMIT ' . (int) $perPage . ' OFFSET ' . (int) (($page - 1) * $perPage);
+    }
     $stmt = nicon_db()->query('
         SELECT id, question_de, answer_de, question_en, answer_en, sort_order, is_published, updated_at
         FROM faq_entries
-        ORDER BY sort_order ASC, id ASC
-    ');
-    nicon_send_json(array_map(static fn(array $row): array => nicon_faq_response($row, true), $stmt->fetchAll()));
+        ORDER BY sort_order ASC, id ASC' . $limit);
+    $items = array_map(static fn(array $row): array => nicon_faq_response($row, true), $stmt->fetchAll());
+    if ($paging === null) {
+        nicon_send_json($items);
+        return;
+    }
+    $total = (int) nicon_db()->query('SELECT COUNT(*) FROM faq_entries')->fetchColumn();
+    nicon_send_json(nicon_page_payload($items, $page, $perPage, $total));
 }
 
 function nicon_faq_text_length(string $value): int

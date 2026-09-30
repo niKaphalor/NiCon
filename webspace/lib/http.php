@@ -121,6 +121,35 @@ function nicon_body_string(array $req, string $key, string $default = ''): ?stri
     return null;
 }
 
+// nicon_page_params returns [page, perPage] when the client sent ?page=
+// and/or ?per_page=, or null for a legacy (unpaginated) request. Bad values
+// are clamped, never an error: page >= 1, 1 <= per_page <= $maxPerPage.
+function nicon_page_params(int $defaultPerPage = 25, int $maxPerPage = 100): ?array
+{
+    if (!isset($_GET['page']) && !isset($_GET['per_page'])) {
+        return null;
+    }
+    $page = max(1, (int) ($_GET['page'] ?? 1));
+    $perPage = (int) ($_GET['per_page'] ?? $defaultPerPage);
+    if ($perPage < 1) {
+        $perPage = $defaultPerPage;
+    }
+    return [$page, min($perPage, $maxPerPage)];
+}
+
+// nicon_page_payload is the paginated response shape shared by every list
+// endpoint that supports ?page=/?per_page=.
+function nicon_page_payload(array $items, int $page, int $perPage, int $total): array
+{
+    return [
+        'items' => $items,
+        'page' => $page,
+        'per_page' => $perPage,
+        'total' => $total,
+        'total_pages' => max(1, (int) ceil($total / $perPage)),
+    ];
+}
+
 function nicon_send_json($data, int $status = 200): void
 {
     http_response_code($status);
