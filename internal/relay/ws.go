@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,7 +38,7 @@ import (
 // look them up by. Answered with {"type":"test_result", ok, message}
 // (message set only when ok is false) and never leaves a connection
 // open either way; it goes through connectGame() the same as "connect"
-// does, so it's covered by the same metadata-host guard.
+// does, so it's covered by the same target guard (netguard.go).
 type wsMessage struct {
 	Type          string `json:"type"`
 	Token         string `json:"token,omitempty"`
@@ -106,53 +107,20 @@ const (
 	writeWait  = 10 * time.Second
 )
 
-// blockedMetadataHosts/blockedMetadataIPs mirror
-// webspace/handlers/servers.php's nicon_is_cloud_metadata_host — same
-// list, same reasoning (these endpoints hand out unauthenticated
-// high-privilege cloud credentials to whatever can reach them, with no
-// legitimate use as an RCON target; this deliberately does NOT block
-// localhost/private/LAN addresses, since a self-hosted game server on the
-// same network is the documented primary use case).
-//
-// The PHP check alone has a DNS-rebinding gap: a host that resolves to a
-// safe IP when a server is first added could resolve to a metadata IP by
-// the time this process actually connects to it, since DNS is looked up
-// fresh here, in a different process, later. This check happens
-// immediately before dialing — the only place that gap can actually be
-// closed — checked against every resolved IP, not just the literal host
-// string.
-var blockedMetadataHosts = map[string]bool{
-	"metadata.google.internal": true,
-}
-
-var blockedMetadataIPs = map[string]bool{
-	"169.254.169.254": true, // AWS, GCP, Azure, DigitalOcean, Oracle Cloud, ...
-	"169.254.170.2":   true, // AWS ECS task metadata
-	"fd00:ec2::254":   true, // AWS IMDSv2, IPv6
-	"100.100.100.200": true, // Alibaba Cloud
-}
-
-func isBlockedMetadataHost(host string) bool {
-	normalized := strings.ToLower(strings.Trim(host, "[]"))
-	if blockedMetadataHosts[normalized] || blockedMetadataIPs[normalized] {
-		return true
-	}
-	ips, err := net.LookupIP(normalized)
-	if err != nil {
-		return false // unresolvable either way — dialing will fail on its own
-	}
-	for _, ip := range ips {
-		if blockedMetadataIPs[ip.String()] {
-			return true
-		}
-	}
-	return false
-}
-
 func connectGame(srv store.Server) (gameConn, error) {
-	if isBlockedMetadataHost(srv.Host) {
-		return nil, errors.New("this host is not allowed")
+	if !validPort(srv.Port) {
+		return nil, errors.New("invalid port")
 	}
+	if !knownProtocols[srv.Protocol] {
+		return nil, errors.New("unknown protocol")
+	}
+	// Resolve once, vet every address, then dial the vetted IP itself so a
+	// second (rebinding) DNS answer can't redirect the connection.
+	pinned, err := resolveTarget(srv.Host)
+	if err != nil {
+		return nil, err
+	}
+	srv.Host = pinned
 	switch srv.Protocol {
 	case "webrcon":
 		return dialWebRcon(srv.Host, srv.Port, srv.Password)
@@ -165,8 +133,7 @@ func connectGame(srv store.Server) (gameConn, error) {
 	case "battlebit":
 		return dialBattlebit(srv.Host, srv.Port, srv.Password)
 	default:
-		address := fmt.Sprintf("%s:%d", srv.Host, srv.Port)
-		return dialSourceRCON(address, srv.Password)
+		return dialSourceRCON(net.JoinHostPort(srv.Host, strconv.Itoa(srv.Port)), srv.Password)
 	}
 }
 
@@ -350,12 +317,22 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case "test":
+			if !rel.testAllowed(userID) {
+				_ = writeJSON(wsMessage{Type: "test_result", OK: false, Message: "too many connection tests — try again shortly"})
+				continue
+			}
+			releaseProbe, busyErr := acquireProbeSlot()
+			if busyErr != nil {
+				_ = writeJSON(wsMessage{Type: "test_result", OK: false, Message: busyErr.Error()})
+				continue
+			}
 			testConn, dialErr := connectGame(store.Server{
 				Host:     msg.Host,
 				Port:     msg.Port,
 				Password: msg.Password,
 				Protocol: msg.Protocol,
 			})
+			releaseProbe()
 			if dialErr != nil {
 				_ = writeJSON(wsMessage{Type: "test_result", OK: false, Message: dialErr.Error()})
 				continue
@@ -368,10 +345,16 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 				_ = writeJSON(wsMessage{Type: "query_test_result", OK: false, Message: "too many status query tests — try again shortly"})
 				continue
 			}
+			releaseProbe, busyErr := acquireProbeSlot()
+			if busyErr != nil {
+				_ = writeJSON(wsMessage{Type: "query_test_result", OK: false, Message: busyErr.Error()})
+				continue
+			}
 			queryPort := msg.Port
 			online, players, maxPlayers, queryErr := PublicInfoCheck(store.Server{
 				Host: msg.Host, Port: msg.Port, QueryProtocol: msg.QueryProtocol, QueryPort: &queryPort,
 			})
+			releaseProbe()
 			if queryErr != nil || !online {
 				message := "query did not answer"
 				if queryErr != nil {

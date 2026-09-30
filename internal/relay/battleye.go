@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -65,7 +66,7 @@ type battleyePending struct {
 }
 
 func dialBattleye(host string, port int, password string) (*battleyeConn, error) {
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", host, port))
+	addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return nil, fmt.Errorf("battleye: %w", err)
 	}

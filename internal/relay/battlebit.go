@@ -3,8 +3,10 @@ package relay
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,7 +29,7 @@ type battlebitConn struct {
 }
 
 func dialBattlebit(host string, port int, password string) (*battlebitConn, error) {
-	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", host, port), Path: "/"}
+	u := url.URL{Scheme: "ws", Host: net.JoinHostPort(host, strconv.Itoa(port)), Path: "/"}
 	header := http.Header{}
 	header.Set("x-password", password)
 	ws, _, err := websocket.DefaultDialer.Dial(u.String(), header)

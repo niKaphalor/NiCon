@@ -49,6 +49,14 @@ const (
 	queryTestWindow = time.Minute
 )
 
+// testLimit/testWindow bound on-demand "test" messages the same way: each
+// one opens a real outbound TCP/UDP connection to a caller-supplied
+// host:port, which is a port-scan primitive if left unlimited.
+const (
+	testLimit  = 10
+	testWindow = time.Minute
+)
+
 type Relay struct {
 	log            *log.Logger
 	allowedOrigins map[string]bool
@@ -61,6 +69,9 @@ type Relay struct {
 
 	queryTestMu  sync.Mutex
 	queryTestLog map[int64][]time.Time
+
+	testMu  sync.Mutex
+	testLog map[int64][]time.Time
 }
 
 func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.Auth) *Relay {
@@ -72,6 +83,7 @@ func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.
 		log: logger, allowedOrigins: origins, store: st, auth: au,
 		connsByUser:  make(map[int64]int),
 		queryTestLog: make(map[int64][]time.Time),
+		testLog:      make(map[int64][]time.Time),
 	}
 	rel.upgrader = websocket.Upgrader{CheckOrigin: rel.checkOrigin}
 	return rel
@@ -83,20 +95,36 @@ func New(logger *log.Logger, allowedOrigins []string, st *store.Store, au *auth.
 // survive a restart or be shared across instances — see maxConnsPerUser
 // for the same reasoning applied to connection count).
 func (rel *Relay) queryTestAllowed(userID int64) bool {
-	rel.queryTestMu.Lock()
-	defer rel.queryTestMu.Unlock()
+	return slidingAllow(&rel.queryTestMu, rel.queryTestLog, userID, queryTestLimit, queryTestWindow)
+}
+
+// testAllowed is queryTestAllowed's counterpart for "test" messages.
+func (rel *Relay) testAllowed(userID int64) bool {
+	if rel.testLog == nil { // Relay literals built without New (tests)
+		rel.testMu.Lock()
+		if rel.testLog == nil {
+			rel.testLog = make(map[int64][]time.Time)
+		}
+		rel.testMu.Unlock()
+	}
+	return slidingAllow(&rel.testMu, rel.testLog, userID, testLimit, testWindow)
+}
+
+func slidingAllow(mu *sync.Mutex, log map[int64][]time.Time, userID int64, limit int, window time.Duration) bool {
+	mu.Lock()
+	defer mu.Unlock()
 	now := time.Now()
 	var kept []time.Time
-	for _, t := range rel.queryTestLog[userID] {
-		if now.Sub(t) < queryTestWindow {
+	for _, t := range log[userID] {
+		if now.Sub(t) < window {
 			kept = append(kept, t)
 		}
 	}
-	if len(kept) >= queryTestLimit {
-		rel.queryTestLog[userID] = kept
+	if len(kept) >= limit {
+		log[userID] = kept
 		return false
 	}
-	rel.queryTestLog[userID] = append(kept, now)
+	log[userID] = append(kept, now)
 	return true
 }
 

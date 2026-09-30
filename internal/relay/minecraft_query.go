@@ -39,7 +39,7 @@ type MinecraftStat struct {
 // not as text — in the actual stat request, or the server silently
 // ignores it.
 func QueryMinecraftStat(host string, port int) (MinecraftStat, error) {
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", host, port))
+	addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return MinecraftStat{}, fmt.Errorf("minecraft query: %w", err)
 	}

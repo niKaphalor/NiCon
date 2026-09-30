@@ -2,7 +2,9 @@ package relay
 
 import (
 	"fmt"
+	"net"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -58,7 +60,7 @@ type webRconConn struct {
 func dialWebRcon(host string, port int, password string) (*webRconConn, error) {
 	u := url.URL{
 		Scheme: "ws",
-		Host:   fmt.Sprintf("%s:%d", host, port),
+		Host:   net.JoinHostPort(host, strconv.Itoa(port)),
 		Path:   "/" + url.PathEscape(password),
 	}
 	ws, _, err := websocket.DefaultDialer.Dial(u.String(), nil)

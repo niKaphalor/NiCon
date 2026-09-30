@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 )
 
@@ -54,7 +55,7 @@ type A2SInfo struct {
 // framing used by very long A2S_RULES/A2S_PLAYER responses isn't handled
 // here.
 func QueryA2SInfo(host string, port int) (A2SInfo, error) {
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", host, port))
+	addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return A2SInfo{}, fmt.Errorf("a2s: %w", err)
 	}

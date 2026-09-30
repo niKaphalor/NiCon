@@ -361,10 +361,12 @@ Once deployed, it serves the same JSON API the relay used to (except
   otherwise-legitimate host/port passthrough. This is a convenience
   check, not the authoritative one (a hostname could re-resolve
   differently by the time the relay itself connects later): the relay's
-  own `isBlockedMetadataHost` (`internal/relay/ws.go`) re-checks the same
-  list immediately before dialing. Deliberately not blocked: localhost
-  and private/LAN addresses, since a locally hosted game server is the
-  documented primary use case. The game itself must be one of NiCon's
+  own target guard (`resolveTarget`, `internal/relay/netguard.go`) re-checks
+  immediately before dialing, resolving the name once and dialing that
+  vetted IP (no second lookup, so DNS rebinding can't swap the target).
+  By default localhost and private/LAN addresses stay allowed, since a
+  locally hosted game server is the documented primary use case; hosted
+  deployments can block them (see "Hosted mode" below). The game itself must be one of NiCon's
   explicitly allow-listed supported games (empty is allowed, for a plain
   unparsed console). `GET /servers/{id}/health-history` (`range` one of
   `24h`/`7d`/`30d`/`90d`) returns per-sample online/latency/player data
@@ -576,6 +578,23 @@ connections open at once (across every server and browser tab combined) —
 a cap against one compromised or runaway client exhausting the relay's
 own connection pool, not a limit anyone doing normal multi-console work
 should ever hit.
+
+**Hosted mode / outbound target policy.** Host and port of a connection are
+caller-supplied, so on a relay open to other people's accounts it could be
+used to probe internal services. Cloud metadata endpoints, link-local
+(`169.254.0.0/16`, `fe80::/10`), unspecified and multicast addresses are
+always refused. Start the relay with `-block-private-targets` (or
+`NICON_BLOCK_PRIVATE_TARGETS=1`) to also refuse loopback, private
+(RFC 1918 / ULA) and CGNAT (`100.64.0.0/10`) targets, and re-admit specific
+networks with `-target-allowlist` / `NICON_TARGET_ALLOWLIST`, e.g.
+`192.168.1.0/24,10.9.9.9`. Every address a hostname resolves to must pass;
+the connection then goes to that one checked IP. On top of that, the
+`test` message is limited to 10 per minute per account (like `query_test`),
+at most 16 such probes run relay-wide at once, and the background health
+and public-info loops back off exponentially (up to 6 h) for servers that
+keep failing — after 3 consecutive failures, so a server that is merely
+restarting loses nothing. Backed-off servers get fewer samples until they
+answer again.
 
 The relay binary is also still how you manage accounts from the command
 line — see [User accounts](#user-accounts) and [Admin panel](#admin-panel)
@@ -818,7 +837,7 @@ export NICON_TEST_DB_DSN="nicon:<password>@tcp(localhost:3306)/nicon_test?parseT
 go test ./...
 ```
 
-The relay tests cover its HTTP health/CORS surface, metadata-host blocking,
+The relay tests cover its HTTP health/CORS surface, target-policy (SSRF/metadata) blocking, probe rate/concurrency limits, health-check backoff,
 and a full browser-WebSocket-to-mock-game-server round trip for Source RCON,
 Rust WebRCON, Palworld REST, and BattlEye. Protocol-specific tests additionally
 cover BattlEye framing/reassembly, Palworld request mapping, and (against a
