@@ -406,11 +406,22 @@ Object.assign(window.NICON_GAMES, {
 // the hash-qualified URLs returned by Steam's own app-details API.
 var steamAssets = {
   sevendaystodie: { appId: 251570 },
-  eightythree: { appId: 1059220, header: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1059220/b7ccd7a2b80ef91a8aa93d8cef2755b01aebe8a6/header.jpg" },
-  arksurvivalascended: { appId: 2399830 },
+  // Steam doesn't publish a page_bg_raw.jpg for every app (confirmed by
+  // request: these seven 404 there, unlike the rest) — an explicit
+  // `background` override falls back to the older, universally-available
+  // generated one for exactly those, while everything else below picks up
+  // page_bg_raw.jpg (the actual unprocessed store-page background, not
+  // Steam's tinted/blurred "generated" derivative) from the default
+  // formula further down.
+  eightythree: {
+    appId: 1059220,
+    header: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1059220/b7ccd7a2b80ef91a8aa93d8cef2755b01aebe8a6/header.jpg",
+    background: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/1059220/page_bg_generated_v6b.jpg",
+  },
+  arksurvivalascended: { appId: 2399830, background: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/2399830/page_bg_generated_v6b.jpg" },
   arksurvivalevolved: { appId: 346110 },
-  arma2: { appId: 33900 },
-  arma3: { appId: 107410 },
+  arma2: { appId: 33900, background: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/33900/page_bg_generated_v6b.jpg" },
+  arma3: { appId: 107410, background: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/107410/page_bg_generated_v6b.jpg" },
   armareforger: { appId: 1874880 },
   atlas: { appId: 834910 },
   battlebit: { appId: 671860 },
@@ -427,14 +438,14 @@ var steamAssets = {
     background: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/3079210/11f2f56dd8945194aed2ee44376b54b1bee6c122/page_bg_raw.jpg",
   },
   insurgency: { appId: 222880 },
-  mordhau: { appId: 629760 },
+  mordhau: { appId: 629760, background: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/629760/page_bg_generated_v6b.jpg" },
   palworld: { appId: 1623730 },
-  projectzomboid: { appId: 108600 },
+  projectzomboid: { appId: 108600, background: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/108600/page_bg_generated_v6b.jpg" },
   risingstorm2: { appId: 418460 },
   rust: { appId: 252490 },
   squad: { appId: 393380 },
   squad44: { appId: 736220 },
-  soulmask: { appId: 2646460 },
+  soulmask: { appId: 2646460, background: "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/2646460/page_bg_generated_v6b.jpg" },
   vrising: { appId: 1604030 },
   wardogs: {
     appId: 1867240,
@@ -448,7 +459,7 @@ Object.keys(steamAssets).forEach(function (key) {
   if (!game || !asset) return;
   game.steamAppId = asset.appId;
   game.headerImage = asset.header || "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/" + asset.appId + "/header.jpg";
-  game.backgroundImage = asset.background || "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/" + asset.appId + "/page_bg_generated_v6b.jpg";
+  game.backgroundImage = asset.background || "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/" + asset.appId + "/page_bg_raw.jpg";
 });
 
 // Minecraft isn't on Steam, so it has no steamAssets entry above — official
