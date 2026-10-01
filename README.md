@@ -135,8 +135,10 @@ The command center includes:
 
 The same responsive visual system is used for authentication, server workspaces,
 settings, administration, fleet health, dialogs, and every English/German
-contact, imprint, and privacy page. The repository keeps the canonical `docs/`
-frontend and its GitHub Pages copy in the repository root byte-identical.
+contact, imprint, and privacy page. `docs/` is the single copy of the frontend:
+GitHub Pages publishes it as it is and the browser tests serve it unchanged —
+there is no build step and no mirror to keep in sync (CI fails if frontend
+files reappear in the repository root).
 
 Each server's **Overview** tab combines the relay's automatic five-minute
 RCON checks with retained 24-hour, 7-day, 30-day, and 90-day uptime/player

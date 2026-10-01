@@ -21,23 +21,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # The repository root and docs/ (GitHub Pages) keep several files
-      # byte-identical by hand — nothing enforced that before this step,
-      # relying purely on remembering to `cp` after every edit. That
-      # already silently drifted at least once during development (caught
-      # by chance, not by any check) before this step existed. A
-      # deliberate one-way difference (root vs. docs diverging on
-      # purpose) would need to update this list too, not just be
-      # surprised by a red build.
-      - name: Check root/docs mirrored files stay identical
+      # docs/ is the ONE copy of the static frontend: GitHub Pages publishes it
+      # as it is and the browser tests serve it unchanged. The repository root
+      # used to carry a byte-identical mirror that had to be kept in sync by
+      # hand (and drifted at least once); this step makes sure nobody brings
+      # one back.
+      - name: No frontend files outside docs/
         run: |
           status=0
-          for f in app.js index.html games.js safe-regex.js frame-guard.js style.css sw.js compatibility.md i18n.en.js i18n.de.js i18n.js faq.html faq.de.html contact.html contact.de.html contact.js imprint.html imprint.de.html privacy.html privacy.de.html; do
-            if ! diff -q "$f" "docs/$f" > /dev/null 2>&1; then
-              echo "::error file=$f::$f and docs/$f have drifted apart — keep them byte-identical (e.g. \`cp $f docs/$f\`)"
+          for f in docs/*; do
+            name=$(basename "$f")
+            if [ "$name" != "fonts" ] && [ -f "$f" ] && [ -e "$name" ]; then
+              echo "::error file=$name::$name exists in the repository root and in docs/ — docs/ is the only copy"
               status=1
             fi
           done
+          [ -e fonts ] && { echo "::error file=fonts::fonts/ belongs in docs/fonts/"; status=1; }
           exit $status
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

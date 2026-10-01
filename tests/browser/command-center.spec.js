@@ -623,7 +623,8 @@ test("a risky filter regex is explained and not applied; a safe one filters", as
 
 test("the ready-made security header files carry the page CSP plus frame-ancestors", async () => {
   const root = path.join(__dirname, "..", "..");
-  const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  const site = path.join(root, "docs"); // the one copy of the static frontend
+  const html = fs.readFileSync(path.join(site, "index.html"), "utf8");
   const metaPolicy = /Content-Security-Policy" content="([^"]*)"/.exec(html)[1];
   expect(metaPolicy).not.toContain("frame-ancestors"); // a <meta> CSP cannot express it
   for (const file of ["_headers", "Caddyfile.snippet", "nginx.conf.snippet", "apache.htaccess"]) {
@@ -634,7 +635,7 @@ test("the ready-made security header files carry the page CSP plus frame-ancesto
   }
   // Every app page carries the same policy, so one header set fits them all.
   for (const page of ["contact.html", "contact.de.html", "imprint.html", "imprint.de.html", "privacy.html", "privacy.de.html"]) {
-    const other = fs.readFileSync(path.join(root, page), "utf8");
+    const other = fs.readFileSync(path.join(site, page), "utf8");
     expect(/Content-Security-Policy" content="([^"]*)"/.exec(other)[1], page).toBe(metaPolicy);
   }
 });
