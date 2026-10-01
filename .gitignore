@@ -14,3 +14,5 @@
 # rule; this only keeps a NEW .sql file from being swept in by `git add -A`.
 *.sql
 !/webspace/schema.sql
+# The schema migrations are source code, not dumps.
+!/internal/store/migrations/*.sql

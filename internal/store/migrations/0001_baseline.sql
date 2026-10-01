@@ -1,0 +1,315 @@
+-- Baseline: the complete schema as it stood when migrations were introduced.
+--
+-- Every statement in every migration MUST be idempotent (CREATE TABLE IF NOT
+-- EXISTS, ADD COLUMN IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, INSERT
+-- IGNORE ...): this file is also applied to installations that already have
+-- all of it, and the generated webspace/schema.sql (run by hand in phpMyAdmin)
+-- replays every migration each time. A test enforces the statement shapes.
+--
+-- Do not edit an existing migration once it has shipped — add the next
+-- numbered file (0002_<what>.sql) and run `python3 scripts/build_schema.py`.
+--
+-- Three groups of tables live here, historically managed by different
+-- components: users/sessions/servers/server_health_samples/rcon_audit_log
+-- (the Go relay used to create these itself) and the PHP-only ones
+-- (rate_limits, notifications, faq_entries, command_templates,
+-- moderation_rules, audit_log, health_history_cache, nitrado_cache plus the
+-- users.nitrado_token_enc column).
+
+CREATE TABLE IF NOT EXISTS users (
+	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	username VARCHAR(64) NOT NULL UNIQUE,
+	password_hash VARCHAR(255) NOT NULL,
+	recovery_code_hash VARCHAR(255) NULL,
+	is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- nitrado_token_enc doesn't live in the CREATE TABLE above: if the Go
+-- relay created `users` first (its own schema has no such column), that
+-- CREATE TABLE IF NOT EXISTS is a no-op and the column would otherwise
+-- never get added. This ALTER runs every time and is a no-op itself once
+-- the column exists, so it's safe on both a fresh table and one the Go
+-- relay already created.
+--
+-- Same AES-256-GCM scheme as servers.password_enc (see lib/crypto.php) —
+-- encrypted, not hashed: a Nitrado sync needs the actual token back to
+-- call Nitrado's API with, which a one-way hash can't give back. PHP-only
+-- column; the Go relay never touches Nitrado sync.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS nitrado_token_enc VARBINARY(2048) NULL;
+
+CREATE TABLE IF NOT EXISTS sessions (
+	token CHAR(64) PRIMARY KEY,
+	user_id INT UNSIGNED NOT NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	expires_at TIMESTAMP NOT NULL,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS servers (
+	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	user_id INT UNSIGNED NOT NULL,
+	name VARCHAR(255) NOT NULL,
+	host VARCHAR(255) NOT NULL,
+	port INT UNSIGNED NOT NULL,
+	password_enc VARBINARY(512) NULL,
+	protocol VARCHAR(16) NOT NULL DEFAULT 'source',
+	query_protocol VARCHAR(16) NOT NULL DEFAULT 'auto',
+	query_port INT UNSIGNED NULL,
+	game VARCHAR(255) NOT NULL DEFAULT '',
+	source VARCHAR(16) NOT NULL DEFAULT 'manual',
+	nitrado_service_id INT UNSIGNED NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+	UNIQUE KEY uniq_user_nitrado_service (user_id, nitrado_service_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Written by the Go relay's periodic health-check loop (main.go's
+-- runHealthChecks — a real RCON connect attempt against every server with
+-- a password, every 5 minutes, not just a TCP reachability check), read
+-- by this API's GET /servers so the frontend doesn't need its own
+-- passive/client-only tracking to know whether a server is actually
+-- reachable right now. Same idempotent-ALTER reasoning as
+-- nitrado_token_enc above: these columns exist in
+-- internal/store/store.go's own migrations, so a Go-relay-first install
+-- already has them, but this still needs to run for a PHP-first one.
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_checked_at TIMESTAMP NULL;
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_ok BOOLEAN NULL;
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_latency_ms INT UNSIGNED NULL;
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_error VARCHAR(255) NULL;
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_code VARCHAR(128) NOT NULL DEFAULT '';
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_icon_url VARCHAR(2048) NULL;
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS query_protocol VARCHAR(16) NOT NULL DEFAULT 'auto';
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS query_port INT UNSIGNED NULL;
+-- Connect over TLS (wss / https) for the protocols that support it (WebRCON,
+-- BattleBit, Palworld REST); certificates are always verified. Off by default:
+-- most game servers speak the plain variant only.
+ALTER TABLE servers ADD COLUMN IF NOT EXISTS use_tls BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS server_health_samples (
+	id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	server_id INT UNSIGNED NOT NULL,
+	sampled_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	online BOOLEAN NOT NULL,
+	latency_ms INT UNSIGNED NULL,
+	player_current INT UNSIGNED NULL,
+	player_max INT UNSIGNED NULL,
+	source VARCHAR(16) NOT NULL DEFAULT 'relay',
+	FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+	INDEX idx_health_server_time (server_id, sampled_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- server_id is the leading column of idx_health_server_time above, so it
+-- can't serve a sampled_at-only range scan — needed by the Go relay's daily
+-- CleanupHealthSamples DELETE (WHERE sampled_at < ?), which would otherwise
+-- full-scan this table as it grows. Same statement also lives in
+-- internal/store/store.go's own migrations list, for a Go-relay-first
+-- install; CREATE INDEX IF NOT EXISTS makes running it from both sides safe.
+CREATE INDEX IF NOT EXISTS idx_health_sampled_at ON server_health_samples (sampled_at);
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+	bucket_key CHAR(64) NOT NULL,
+	window_start INT UNSIGNED NOT NULL,
+	count INT UNSIGNED NOT NULL DEFAULT 0,
+	PRIMARY KEY (bucket_key, window_start)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- window_start is only the second column of the primary key above, so
+-- nicon_maybe_cleanup_rate_limits' DELETE (WHERE window_start < ?) can't use
+-- it either — same reasoning as idx_health_sampled_at above, just a smaller,
+-- lower-priority table.
+CREATE INDEX IF NOT EXISTS idx_rate_limits_window ON rate_limits (window_start);
+
+-- Admin-authored, shown to every signed-in user until they dismiss it
+-- (tracked client-side, not here) or an admin deletes it. Another
+-- PHP-only table, like rate_limits — the Go relay has no reason to know
+-- about it.
+CREATE TABLE IF NOT EXISTS notifications (
+	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	type VARCHAR(16) NOT NULL DEFAULT 'info',
+	message TEXT NOT NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Public help content. Admins edit both languages in NiCon's admin panel;
+-- the unauthenticated /faq endpoint exposes only published entries and only
+-- the requested language. Explicit seed IDs plus INSERT IGNORE make these
+-- useful first-run defaults without overwriting later admin edits.
+CREATE TABLE IF NOT EXISTS faq_entries (
+	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	question_de VARCHAR(255) NOT NULL,
+	answer_de TEXT NOT NULL,
+	question_en VARCHAR(255) NOT NULL,
+	answer_en TEXT NOT NULL,
+	sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+	is_published BOOLEAN NOT NULL DEFAULT TRUE,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	INDEX idx_faq_public_order (is_published, sort_order, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO faq_entries (id, question_de, answer_de, question_en, answer_en, sort_order, is_published) VALUES
+(1, 'Was ist NiCon?',
+ 'NiCon bündelt die Remote-Konsolen deiner unterstützten Spieleserver im Browser. Du kannst Konsolenbefehle senden, Spielerlisten prüfen, Moderationsaktionen ausführen und den Zustand deiner Server überwachen.',
+ 'What is NiCon?',
+ 'NiCon brings the remote consoles of your supported game servers into one browser workspace. You can send console commands, inspect player lists, perform moderation actions, and monitor server health.', 10, TRUE),
+(2, 'Welche Ports brauche ich?',
+ 'Spiel-Port, Query-Port und RCON-Port erfüllen unterschiedliche Aufgaben. NiCon benötigt für die Verwaltung den Remote-Konsolen-Port und das zugehörige Passwort. Der optionale Query-Port liefert nur öffentliche Statusdaten wie Spielerzahl oder Karte.',
+ 'Which ports do I need?',
+ 'The game port, query port, and RCON port serve different purposes. NiCon needs the remote-console port and its password for administration. The optional query port only provides public status data such as player count or map.', 20, TRUE),
+(3, 'Warum kann NiCon keine Verbindung herstellen?',
+ 'Prüfe, ob die Remote-Konsole auf dem Server aktiviert ist, Protokoll, Host, Port und Passwort stimmen und der TCP- oder UDP-Port in Firewall und Hosting-Panel freigegeben ist. Einige Spiele verwenden statt Source RCON ein eigenes Protokoll; wähle in NiCon genau das zum Spiel passende.',
+ 'Why can’t NiCon connect?',
+ 'Check that the remote console is enabled, the protocol, host, port, and password are correct, and the required TCP or UDP port is open in both firewall and hosting panel. Some games use their own protocol instead of Source RCON; select the one that matches the game.', 30, TRUE),
+(4, 'Was bedeuten die Markierungen bei den Spielen?',
+ '„Ohne Server-Mod“ bedeutet, dass der dedizierte Server die nötige Fernsteuerung selbst mitbringt. „Eigenes Serverprotokoll“ kennzeichnet integrierte Alternativen wie BattlEye, Telnet, WebRCON oder REST. „Server-Mod nötig“ erfordert eine Erweiterung nur auf dem Server. „Vorläufige Integration“ ist implementiert, aber noch nicht live gegen einen echten Server bestätigt.',
+ 'What do the game badges mean?',
+ '“No server mod” means the dedicated server already includes the required remote-control endpoint. “Dedicated server protocol” identifies built-in alternatives such as BattlEye, Telnet, WebRCON, or REST. “Server mod required” needs a server-side extension. “Provisional integration” is implemented but not yet confirmed against a live server.', 40, TRUE),
+(5, 'Wie richte ich Valheim ein?',
+ 'Valheim besitzt keine eingebaute RCON-Schnittstelle. Installiere BepInEx und genau eine serverseitige RCON-Lösung wie RCON Next oder ValheimRcon im BepInEx-Plugin-Verzeichnis. Starte den Server einmal, setze in der erzeugten Konfiguration ein starkes Passwort und einen freien TCP-Port und gib diesen Port nur für vertrauenswürdige Netze frei. In NiCon verwendest du anschließend Source RCON. Spieler benötigen den Mod nicht auf ihren Clients.',
+ 'How do I set up Valheim?',
+ 'Valheim has no built-in RCON endpoint. Install BepInEx and exactly one server-side RCON solution such as RCON Next or ValheimRcon in the BepInEx plugin directory. Start the server once, set a strong password and an available TCP port in the generated configuration, and expose that port only to trusted networks. Then select Source RCON in NiCon. Players do not need the mod on their clients.', 50, TRUE),
+(6, 'Brauchen Spieler Mods auf ihren Clients?',
+ 'Für NiCon selbst nein. Auch Valheims RCON-Erweiterung läuft ausschließlich auf dem dedizierten Server. Andere Gameplay-Mods können unabhängig davon eigene Client-Anforderungen haben.',
+ 'Do players need client mods?',
+ 'Not for NiCon itself. Valheim’s RCON extension also runs only on the dedicated server. Other gameplay mods may independently have their own client requirements.', 60, TRUE),
+(7, 'Warum ist die Spieleransicht leer, obwohl die Konsole funktioniert?',
+ 'NiCon liest die Spielerliste aus der Antwort eines spielspezifischen Befehls. Ausgabeformat und verfügbare IDs unterscheiden sich je Spiel und Version. Die Rohausgabe bleibt in der Konsole sichtbar, wenn NiCon eine Antwort nicht zuverlässig parsen kann.',
+ 'Why is the player view empty while the console works?',
+ 'NiCon reads the player list from a game-specific command response. Output format and available identifiers vary by game and version. The raw response remains visible in the console whenever NiCon cannot parse it reliably.', 70, TRUE),
+(8, 'Ist Palworld über RCON angebunden?',
+ 'NiCon verwendet für Palworld die offizielle REST-API des dedizierten Servers. Die frühere RCON-Anbindung gilt als veraltet. Wähle deshalb beim manuellen Hinzufügen „Palworld-REST-API“ und verwende das Admin-Passwort des Servers.',
+ 'Does Palworld use RCON?',
+ 'NiCon uses the dedicated server’s official REST API for Palworld. The earlier RCON integration is deprecated. When adding the server manually, select “Palworld REST API” and use the server admin password.', 80, TRUE),
+(9, 'Wie schütze ich meine Remote-Konsole?',
+ 'Verwende ein langes, eigenes Passwort, gib den Verwaltungsport nicht unnötig öffentlich frei und beschränke den Zugriff per Firewall, IP-Allowlist oder VPN. Nutze nie das gleiche Passwort wie für dein NiCon-Konto und teile Zugangsdaten nicht in Screenshots oder Logs.',
+ 'How do I secure my remote console?',
+ 'Use a long, unique password, avoid exposing the administration port to the public Internet, and restrict access with a firewall, IP allowlist, or VPN. Never reuse your NiCon account password and do not share credentials in screenshots or logs.', 90, TRUE),
+(10, 'Was importiert die Nitrado-Synchronisierung?',
+ 'NiCon übernimmt passende Dienste mit Name, Host, Verwaltungsport, Spiel und Protokoll. Dein API-Token wird verschlüsselt gespeichert und nach dem Speichern nicht wieder im Browser angezeigt. Kontrolliere importierte Ports trotzdem, weil Anbieter-Konfigurationen abweichen können.',
+ 'What does Nitrado sync import?',
+ 'NiCon imports eligible services with name, host, administration port, game, and protocol. Your API token is stored encrypted and is not shown in the browser again after saving. Still verify imported ports because provider configurations can differ.', 100, TRUE);
+
+-- Per-account saved commands for one-click reuse from the console (the
+-- "Templates" panel next to Quick Commands/History). PHP-only, same as
+-- rate_limits/notifications above: the Go relay never reads or writes
+-- this table, it only ever sees whatever command string the frontend
+-- sends over the WebSocket — a template is indistinguishable from one
+-- typed by hand once it's sent.
+CREATE TABLE IF NOT EXISTS command_templates (
+	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	user_id INT UNSIGNED NOT NULL,
+	name VARCHAR(64) NOT NULL,
+	command VARCHAR(500) NOT NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS moderation_rules (
+	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	user_id INT UNSIGNED NOT NULL,
+	pattern VARCHAR(128) NOT NULL,
+	action VARCHAR(16) NOT NULL DEFAULT 'highlight',
+	enabled BOOLEAN NOT NULL DEFAULT TRUE,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+	INDEX idx_moderation_rules_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Admin actions (deleting a user, regenerating a recovery code, sending/
+-- deleting a notification) and security-relevant account actions (login
+-- success/failure, password/username changes, account deletion, adding/
+-- removing a server) — see lib/audit.php. PHP-only, like rate_limits/
+-- notifications/command_templates above: the Go relay's account-mutating
+-- endpoints were removed once this all moved to the PHP API, so nothing
+-- there could log to this table anyway.
+--
+-- user_id/target_user_id use ON DELETE SET NULL, not CASCADE: deleting an
+-- account should not erase the record that it (or an admin, on its
+-- behalf) did something — that's the opposite of what an audit log is
+-- for. detail is kept short and deliberately never holds a password,
+-- token, or recovery code. lib/audit.php applies the configured retention
+-- policy (180 days by default) whenever this log is written or viewed.
+CREATE TABLE IF NOT EXISTS audit_log (
+	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	user_id INT UNSIGNED NULL,
+	action VARCHAR(64) NOT NULL,
+	target_user_id INT UNSIGNED NULL,
+	detail VARCHAR(255) NULL,
+	ip_address VARCHAR(45) NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+	FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL,
+	INDEX idx_audit_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- nicon_handle_list_audit_log filters on `user_id = ? OR target_user_id = ?`
+-- then sorts by created_at — idx_audit_created_at alone means MariaDB has to
+-- walk the created_at-ordered index checking each row against the OR
+-- condition until it accumulates LIMIT 100 matches, which degrades toward a
+-- full scan as the table grows relative to one user's share of it. These
+-- mirror the (user_id, created_at) / (server_id, created_at) pattern
+-- rcon_audit_log already uses for the equivalent query below.
+CREATE INDEX IF NOT EXISTS idx_audit_log_user_time ON audit_log (user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_target_time ON audit_log (target_user_id, created_at);
+
+-- Commands executed through the relay. Actor and server names are retained as
+-- snapshots so the record remains useful after an account or profile is
+-- deleted; the nullable foreign keys still provide referential integrity while
+-- those objects exist. Automatic player-list polling is intentionally excluded
+-- by the relay because it is telemetry, not an administrative action.
+CREATE TABLE IF NOT EXISTS rcon_audit_log (
+	id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	user_id INT UNSIGNED NULL,
+	server_id INT UNSIGNED NULL,
+	username VARCHAR(64) NOT NULL,
+	server_name VARCHAR(255) NOT NULL,
+	command TEXT NOT NULL,
+	action VARCHAR(64) NOT NULL DEFAULT 'command',
+	target_player VARCHAR(255) NULL,
+	origin VARCHAR(32) NOT NULL DEFAULT 'manual',
+	result TEXT NULL,
+	success BOOLEAN NOT NULL,
+	upstream_ms DECIMAL(12,3) NULL,
+	relay_overhead_ms DECIMAL(12,3) NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+	FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE SET NULL,
+	INDEX idx_rcon_audit_user_time (user_id, created_at),
+	INDEX idx_rcon_audit_server_time (server_id, created_at),
+	INDEX idx_rcon_audit_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Short-lived cache of GET /servers/{id}/health-history's already-bucketed
+-- response JSON. The underlying samples only change every ~5 minutes (the
+-- Go relay's own health-check/public-info loop interval), but without this
+-- every page view/tab switch re-fetches and re-buckets in PHP from
+-- scratch — for the 90d range that's tens of thousands of raw rows per
+-- server, recomputed on every single request. A short TTL means served
+-- data is never more than a couple of minutes stale, which is well inside
+-- the noise of that same 5-minute sampling interval anyway. PHP-only,
+-- same as nitrado_cache below: the Go relay never reads this table.
+CREATE TABLE IF NOT EXISTS health_history_cache (
+	server_id INT UNSIGNED NOT NULL,
+	range_key VARCHAR(8) NOT NULL,
+	response_json MEDIUMTEXT NOT NULL,
+	expires_at DATETIME NOT NULL,
+	PRIMARY KEY (server_id, range_key),
+	FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
+	INDEX idx_health_history_cache_expires (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Short-lived, process-independent Nitrado GET cache. The token itself is
+-- never stored here: token_hash is an HMAC scoped with the installation's
+-- encryption key, while request_key identifies only the base URL + path.
+-- Responses expire after 30-60 seconds (45 by default) and expired rows are
+-- deleted whenever a new value is written.
+CREATE TABLE IF NOT EXISTS nitrado_cache (
+	token_hash CHAR(64) NOT NULL,
+	request_key CHAR(64) NOT NULL,
+	response_json MEDIUMTEXT NOT NULL,
+	expires_at DATETIME NOT NULL,
+	PRIMARY KEY (token_hash, request_key),
+	INDEX idx_nitrado_cache_expires (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
