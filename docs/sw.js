@@ -3,7 +3,7 @@
 // Bump this version whenever the app shell changes. The new worker installs
 // alongside the current one and waits; app.js offers the update to the user
 // before sending SKIP_WAITING, avoiding a mid-session code swap.
-const CACHE_NAME = "nicon-shell-v30";
+const CACHE_NAME = "nicon-shell-v31";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -16,6 +16,24 @@ const APP_SHELL = [
   "./safe-regex.js",
   "./frame-guard.js",
   "./app.js",
+  "./js/admin.js",
+  "./js/api.js",
+  "./js/auth.js",
+  "./js/commands.js",
+  "./js/console.js",
+  "./js/consolelog.js",
+  "./js/detail.js",
+  "./js/dom.js",
+  "./js/faq.js",
+  "./js/health.js",
+  "./js/lists.js",
+  "./js/notifications.js",
+  "./js/players.js",
+  "./js/servers.js",
+  "./js/state.js",
+  "./js/ui.js",
+  "./js/views.js",
+  "./js/welcome.js",
   "./contact.html",
   "./contact.de.html",
   "./contact.js",

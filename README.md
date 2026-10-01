@@ -58,7 +58,7 @@ hands-off production control plane.
    not per session) and the [relay](#relay) locally, both pointed at the
    same MariaDB database. The topbar shows two status pills — **API** and
    **relay** — each green once reachable. Their addresses are compiled into
-   `docs/app.js` (`API_URL`/`RELAY_URL`) rather than editable at runtime —
+   `docs/js/api.js` (`API_URL`/`RELAY_URL`) rather than editable at runtime —
    see [Pointing the frontend at your own deployment](#pointing-the-frontend-at-your-own-deployment)
    if you're not using this repo's own hosted instance.
 3. Sign in, or create an account yourself (see
@@ -802,14 +802,14 @@ case-insensitive substrings, not regexes.
 
 ## Pointing the frontend at your own deployment
 
-`docs/app.js` compiles in the Cloud API and relay addresses as constants
+`docs/js/api.js` compiles in the Cloud API and relay addresses as constants
 (`API_URL`, `RELAY_URL` near the top of the file) rather than reading them
 from a runtime Settings field — earlier versions of this README described
 an editable "Relay address" field in Settings, but the frontend redesign
 removed it in favor of these two constants. If you're running your own
 Cloud API and/or relay instead of this repo's own hosted instance, edit
 those two constants to point at them (`RELAY_URL` should be the plain
-`https://` address — `docs/app.js` derives the `wss://` WebSocket URL from
+`https://` address — `docs/js/api.js` derives the `wss://` WebSocket URL from
 it automatically, same as it always did) and redeploy `docs/` — GitHub
 Pages serves whatever's committed there, so there's no way to point one
 person's browser at a different backend than another's without a rebuild.
@@ -971,7 +971,13 @@ language.
 - `docs/` — the static frontend (plain HTML/CSS/vanilla JS, no framework,
   no build step), including a versioned service worker and installable PWA
   manifest, deployed to GitHub Pages by
-  `.github/workflows/pages.yml`
+  `.github/workflows/pages.yml`. The app is native ES modules (no bundler):
+  `app.js` only boots; `js/` holds one module per concern — `state` (the
+  shared mutable state), `dom` (element lookups), `api`, `ui`, `auth`,
+  `servers`, `views`, `admin`, `health`, `faq`, `lists` (pagination),
+  `notifications`, `detail`, `console`, `consolelog`, `players`, `commands`,
+  `welcome`. A new file in `js/` must also be added to the service worker's
+  `APP_SHELL` (a browser test checks this) and its cache name bumped.
 
 ## Testing
 

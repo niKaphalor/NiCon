@@ -9,7 +9,7 @@
      through textContent/createElement, never innerHTML with dynamic
      content), so a strict script-src/style-src costs nothing here and
      blocks arbitrary script execution if something ever did get injected.
-     connect-src is scoped to the exact API/relay origins app.js compiles
+     connect-src is scoped to the exact API/relay origins js/api.js compiles
      in (API_URL/RELAY_URL, both fetch and the derived wss:// URL) — these
      are no longer user-configurable at runtime (see README's "Pointing the
      frontend at your own deployment"), so there's no reason for this to
@@ -705,6 +705,6 @@
 <script src="games-catalog.js"></script>
 <script src="games.js"></script>
 <script src="safe-regex.js"></script>
-<script src="app.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

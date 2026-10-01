@@ -633,6 +633,14 @@ test("a risky filter regex is explained and not applied; a safe one filters", as
   await expect(page.locator("#log .log-line", { hasText: "hello world" })).toBeVisible();
 });
 
+test("every app module is in the service worker's app shell (offline start needs all of them)", async () => {
+  const site = path.join(__dirname, "..", "..", "docs");
+  const shell = fs.readFileSync(path.join(site, "sw.js"), "utf8");
+  const modules = fs.readdirSync(path.join(site, "js")).filter((f) => f.endsWith(".js"));
+  expect(modules.length).toBeGreaterThan(10);
+  for (const file of modules) expect(shell, `js/${file} missing from sw.js APP_SHELL`).toContain(`"./js/${file}"`);
+});
+
 test("the ready-made security header files carry the page CSP plus frame-ancestors", async () => {
   const root = path.join(__dirname, "..", "..");
   const site = path.join(root, "docs"); // the one copy of the static frontend
