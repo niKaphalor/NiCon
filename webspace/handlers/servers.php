@@ -25,15 +25,10 @@ const NICON_SERVERS_RATE_WINDOW = 300;       // 5 minutes
 function nicon_game_is_allowed(string $game): bool
 {
     if ($game === '') return true; // generic console, not a game integration
-    return in_array($game, [
-        '7 Days to Die', '83', 'ARK: Survival Ascended', 'ARK: Survival Evolved',
-        'Arma 2', 'Arma 3', 'Arma Reforger', 'ATLAS', 'BattleBit Remastered',
-        'Beyond the Wire', 'Conan Exiles', 'Counter-Strike 2', 'Dark and Light',
-        'DayZ', "Garry's Mod", 'Hell Let Loose', 'Hell Let Loose: Vietnam',
-        'Insurgency', 'Minecraft', 'MORDHAU', 'Palworld', 'Project Zomboid',
-        'Rising Storm 2: Vietnam', 'Rust', 'Squad', 'Squad 44', 'Soulmask',
-        'V Rising', 'Valheim', 'WARDOGS',
-    ], true);
+    foreach (NICON_GAME_CATALOG as [$label]) {
+        if ($label === $game) return true;
+    }
+    return false;
 }
 
 // nicon_query_config returns null (after already sending the 400 itself)

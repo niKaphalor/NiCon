@@ -218,53 +218,24 @@ function nicon_nitrado_saved_token(PDO $pdo, int $userId): string
 
 function nicon_supported_game(string $label): ?array
 {
-    $games = [
-        ['7 Days to Die', 'telnet', ['7 days to die', '7dtd']],
-        ['83', 'source', ['83']],
-        ['ARK: Survival Ascended', 'source', ['ark: survival ascended', 'ark survival ascended', 'arksa']],
-        ['ARK: Survival Evolved', 'source', ['ark: survival evolved', 'ark survival evolved', 'arkse']],
-        ['Arma 2', 'battleye', ['arma 2', 'arma2']],
-        ['Arma 3', 'battleye', ['arma 3', 'arma3']],
-        ['Arma Reforger', 'battleye', ['arma reforger', 'reforger']],
-        ['ATLAS', 'source', ['atlas']],
-        ['BattleBit Remastered', 'battlebit', ['battlebit']],
-        ['Beyond the Wire', 'source', ['beyond the wire']],
-        ['Conan Exiles', 'source', ['conan exiles']],
-        ['Counter-Strike 2', 'source', ['counter-strike 2', 'counter strike 2', 'cs2']],
-        ['Dark and Light', 'source', ['dark and light']],
-        ['DayZ', 'battleye', ['dayz', 'day z']],
-        ["Garry's Mod", 'source', ["garry's mod", 'garrys mod', 'gmod']],
-        ['Hell Let Loose: Vietnam', 'source', ['hell let loose: vietnam', 'hell let loose vietnam']],
-        ['Hell Let Loose', 'source', ['hell let loose']],
-        ['Insurgency', 'source', ['insurgency']],
-        // Minecraft's remote console is the same wire protocol as Source
-        // RCON (just a different command set — see games.js), so it's
-        // eligible the same way any other 'source' entry here is.
-        ['Minecraft', 'source', ['minecraft']],
-        ['MORDHAU', 'source', ['mordhau']],
-        ['Palworld', 'palworld_rest', ['palworld']],
-        ['Project Zomboid', 'source', ['project zomboid']],
-        ['Rising Storm 2: Vietnam', 'source', ['rising storm 2', 'rising storm ii']],
-        ['Rust', 'webrcon', ['rust']],
-        ['Squad 44', 'source', ['squad 44', 'post scriptum']],
-        ['Squad', 'source', ['squad']],
-        ['Soulmask', 'source', ['soulmask']],
-        ['V Rising', 'source', ['v rising', 'vrising']],
-        // Valheim needs a server-side BepInEx RCON plugin; the service is
-        // still importable once its operator has installed/configured one.
-        ['Valheim', 'source', ['valheim']],
-        ['WARDOGS', 'source', ['wardogs', 'war dogs']],
-    ];
+    // The catalog (lib/games_catalog.php, generated from data/games.json) is the
+    // list of games. The longest matching alias wins, so "hell let loose:
+    // vietnam" beats "hell let loose" and "squad 44" beats "squad".
     $lower = strtolower($label);
-    foreach ($games as [$name, $protocol, $aliases]) {
+    $best = null;
+    $bestLength = -1;
+    foreach (NICON_GAME_CATALOG as [$name, $protocol, $aliases]) {
         foreach ($aliases as $alias) {
             $matches = $alias === '83'
                 ? preg_match('/(?:^|[^0-9])83(?:[^0-9]|$)/', $lower) === 1
                 : str_contains($lower, $alias);
-            if ($matches) return ['name' => $name, 'protocol' => $protocol];
+            if ($matches && strlen($alias) > $bestLength) {
+                $best = ['name' => $name, 'protocol' => $protocol];
+                $bestLength = strlen($alias);
+            }
         }
     }
-    return null;
+    return $best;
 }
 
 // nicon_nitrado_query_protocol always returns 'auto': the actual
