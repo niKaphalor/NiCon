@@ -32,112 +32,6 @@ const mysqlDuplicateEntry = 1062
 // than as an independently-chosen number.
 const MaxOpenConns = 25
 
-const schema = `
-CREATE TABLE IF NOT EXISTS users (
-	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-	username VARCHAR(64) NOT NULL UNIQUE,
-	password_hash VARCHAR(255) NOT NULL,
-	recovery_code_hash VARCHAR(255) NULL,
-	is_admin BOOLEAN NOT NULL DEFAULT FALSE,
-	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS sessions (
-	token CHAR(64) PRIMARY KEY,
-	user_id INT UNSIGNED NOT NULL,
-	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	expires_at TIMESTAMP NOT NULL,
-	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS servers (
-	id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-	user_id INT UNSIGNED NOT NULL,
-	name VARCHAR(255) NOT NULL,
-	host VARCHAR(255) NOT NULL,
-	port INT UNSIGNED NOT NULL,
-	password_enc VARBINARY(512) NULL,
-	protocol VARCHAR(16) NOT NULL DEFAULT 'source',
-	query_protocol VARCHAR(16) NOT NULL DEFAULT 'auto',
-	query_port INT UNSIGNED NULL,
-	game VARCHAR(255) NOT NULL DEFAULT '',
-	source VARCHAR(16) NOT NULL DEFAULT 'manual',
-	nitrado_service_id INT UNSIGNED NULL,
-	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-	UNIQUE KEY uniq_user_nitrado_service (user_id, nitrado_service_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS server_health_samples (
-	id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-	server_id INT UNSIGNED NOT NULL,
-	sampled_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	online BOOLEAN NOT NULL,
-	latency_ms INT UNSIGNED NULL,
-	player_current INT UNSIGNED NULL,
-	player_max INT UNSIGNED NULL,
-	source VARCHAR(16) NOT NULL DEFAULT 'relay',
-	FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE,
-	INDEX idx_health_server_time (server_id, sampled_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS rcon_audit_log (
-	id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-	user_id INT UNSIGNED NULL,
-	server_id INT UNSIGNED NULL,
-	username VARCHAR(64) NOT NULL,
-	server_name VARCHAR(255) NOT NULL,
-	command TEXT NOT NULL,
-	action VARCHAR(64) NOT NULL DEFAULT 'command',
-	target_player VARCHAR(255) NULL,
-	origin VARCHAR(32) NOT NULL DEFAULT 'manual',
-	result TEXT NULL,
-	success BOOLEAN NOT NULL,
-	upstream_ms DECIMAL(12,3) NULL,
-	relay_overhead_ms DECIMAL(12,3) NULL,
-	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-	FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE SET NULL,
-	INDEX idx_rcon_audit_user_time (user_id, created_at),
-	INDEX idx_rcon_audit_server_time (server_id, created_at),
-	INDEX idx_rcon_audit_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-`
-
-// migrations covers columns added after a table's initial CREATE TABLE IF
-// NOT EXISTS, so an existing installation picks them up too. Each statement
-// must be safe to run every time the relay starts (IF NOT EXISTS or
-// equivalent) since there's no migration-version tracking — just an
-// idempotent list applied in order.
-var migrations = []string{
-	`ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_code_hash VARCHAR(255) NULL`,
-	`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE`,
-	// Written by the periodic health-check loop in main.go (runHealthChecks),
-	// the only thing that ever updates these — a real RCON connect attempt
-	// against every stored server, not just a TCP reachability check, so
-	// "healthy" actually means "host, port, and password are all still
-	// correct," not just "something is listening." health_ok is NULL until
-	// the first check runs, then true/false; health_error is set only when
-	// health_ok is false.
-	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_checked_at TIMESTAMP NULL`,
-	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_ok BOOLEAN NULL`,
-	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_latency_ms INT UNSIGNED NULL`,
-	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS health_error VARCHAR(255) NULL`,
-	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_code VARCHAR(128) NOT NULL DEFAULT ''`,
-	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_icon_url VARCHAR(2048) NULL`,
-	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS query_protocol VARCHAR(16) NOT NULL DEFAULT 'auto'`,
-	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS query_port INT UNSIGNED NULL`,
-	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS use_tls BOOLEAN NOT NULL DEFAULT FALSE`,
-	// idx_health_server_time (server_id, sampled_at) doesn't help the daily
-	// CleanupHealthSamples DELETE below, which filters on sampled_at alone —
-	// server_id being the leading column means that composite can't be used
-	// for a server_id-agnostic range scan. A second, single-column index
-	// gives the cleanup query (and any other sampled_at-only range query) a
-	// path that doesn't degrade into a full table scan as this table grows.
-	`CREATE INDEX IF NOT EXISTS idx_health_sampled_at ON server_health_samples (sampled_at)`,
-}
-
 type Store struct {
 	db  *sql.DB
 	enc *KeyRing
@@ -204,17 +98,9 @@ func OpenWithKeyRing(dsn string, enc *KeyRing) (*Store, error) {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
-	for _, stmt := range splitSchema(schema) {
-		if _, err := db.Exec(stmt); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("migrate schema: %w", err)
-		}
-	}
-	for _, stmt := range migrations {
-		if _, err := db.Exec(stmt); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("run migration %q: %w", stmt, err)
-		}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate schema: %w", err)
 	}
 
 	return &Store{db: db, enc: enc}, nil
@@ -222,37 +108,6 @@ func OpenWithKeyRing(dsn string, enc *KeyRing) (*Store, error) {
 
 func (s *Store) Close() error {
 	return s.db.Close()
-}
-
-// splitSchema splits the schema constant on ";\n" so each CREATE TABLE runs
-// as its own statement (the mysql driver doesn't run multi-statement
-// strings by default, which is the safer default).
-func splitSchema(schema string) []string {
-	var stmts []string
-	var cur string
-	for _, line := range splitLines(schema) {
-		cur += line + "\n"
-		if len(line) > 0 && line[len(line)-1] == ';' {
-			stmts = append(stmts, cur)
-			cur = ""
-		}
-	}
-	return stmts
-}
-
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
 }
 
 // --- users ---

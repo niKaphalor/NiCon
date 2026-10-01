@@ -17,6 +17,8 @@
 package relay
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -196,6 +198,7 @@ func (rel *Relay) Routes() http.Handler {
 	mux.HandleFunc("GET /healthz", rel.handleHealth)
 	mux.HandleFunc("OPTIONS /healthz", rel.handleHealth)
 	mux.HandleFunc("GET /ws/rcon", rel.handleWS)
+	mux.HandleFunc("GET /readyz", rel.handleReady)
 	return securityHeaders(mux)
 }
 
@@ -212,6 +215,25 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Cache-Control", "no-store")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// handleReady answers whether the relay can actually serve: the database is
+// reachable and has every migration this build expects. /healthz only says the
+// process is up; this is the one to check after a deploy (a database that
+// missed a migration otherwise surfaces as scattered errors on single features).
+func (rel *Relay) handleReady(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	version, err := rel.store.SchemaVersion(ctx)
+	if err != nil {
+		http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if want := store.ExpectedSchemaVersion(); version < want {
+		http.Error(w, fmt.Sprintf("database schema is outdated (has %d, needs %d)", version, want), http.StatusServiceUnavailable)
+		return
+	}
+	_, _ = w.Write([]byte("ok"))
 }
 
 func (rel *Relay) handleHealth(w http.ResponseWriter, r *http.Request) {

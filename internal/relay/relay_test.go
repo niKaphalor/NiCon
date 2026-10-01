@@ -97,6 +97,15 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
+func TestReadyz(t *testing.T) {
+	handler := newTestRelay(t)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest("GET", "/readyz", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "ok" {
+		t.Fatalf("/readyz = HTTP %d %q, want 200 ok", rec.Code, rec.Body.String())
+	}
+}
+
 func TestCORSPreflight(t *testing.T) {
 	handler := newTestRelay(t)
 
