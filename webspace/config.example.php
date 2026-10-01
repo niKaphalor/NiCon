@@ -20,6 +20,14 @@ return [
     // Same base64-encoded 32-byte key as the Go relay's -encryption-key.
     'encryption_key_base64' => 'REPLACE_ME',
 
+    // Optional: key rotation and the row-bound v2 storage format (see the
+    // README, "Encryption at rest, and rotating the key"). The relay needs the
+    // same values as environment variables. Leave these out until both the API
+    // and the relay run a version that can READ v2.
+    // 'encryption_keys' => [2 => 'BASE64_OF_A_NEW_32_BYTE_KEY'],   // extra keys by ID; key 1 is the one above
+    // 'encryption_current_key_id' => 2,                             // key for new values (default 1)
+    // 'encryption_write_v2' => true,                                // write v2 (needed when the current key is not 1)
+
     // Optional. Enables public Steam profile and ban information in the
     // player list. The key is used server-side and is never returned to
     // the browser. Create one in Steam's Web API key administration.

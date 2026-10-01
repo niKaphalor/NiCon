@@ -1104,9 +1104,31 @@
     return value >= 1 && value <= 65535 ? value : null;
   }
 
+  // TLS (wss / https) exists only for the HTTP/WebSocket based protocols. The
+  // checkbox is shown for those and cleared when it is hidden, so a stale tick
+  // can never be sent along with, say, a Source RCON server.
+  var TLS_PROTOCOLS = ["webrcon", "battlebit", "palworld_rest"];
+  var manualProtocolSelect = document.getElementById("manual-protocol");
+  var manualTlsRow = document.getElementById("manual-tls-row");
+  var manualTls = document.getElementById("manual-tls");
+  var editServerTlsRow = document.getElementById("edit-server-tls-row");
+  var editServerTls = document.getElementById("edit-server-tls");
+
+  function syncTlsRow(protocolSelect, row, checkbox) {
+    var supported = TLS_PROTOCOLS.indexOf(protocolSelect.value) !== -1;
+    row.hidden = !supported;
+    if (!supported) checkbox.checked = false;
+  }
+
+  function syncManualTls() { syncTlsRow(manualProtocolSelect, manualTlsRow, manualTls); }
+  function syncEditTls() { syncTlsRow(editServerProtocol, editServerTlsRow, editServerTls); }
+  manualProtocolSelect.addEventListener("change", syncManualTls);
+  editServerProtocol.addEventListener("change", syncEditTls);
+
   manualGameSelect.addEventListener("change", function () {
     document.getElementById("manual-protocol").value = suggestedProtocolForGame(manualGameSelect.value);
     manualQueryProtocol.value = suggestedQueryProtocolForGame(manualGameSelect.value);
+    syncManualTls();
   });
 
   function setGameSelectValue(select, game) {
@@ -1130,6 +1152,8 @@
     editServerHost.value = server.host;
     editServerPort.value = server.port;
     editServerProtocol.value = server.protocol || "source";
+    editServerTls.checked = !!server.use_tls;
+    syncEditTls();
     editServerQueryProtocol.value = server.query_protocol || "auto";
     editServerQueryPort.value = server.query_port || "";
     setGameSelectValue(editServerGame, server.game);
@@ -1147,6 +1171,7 @@
   editServerGame.addEventListener("change", function () {
     editServerProtocol.value = suggestedProtocolForGame(editServerGame.value);
     editServerQueryProtocol.value = suggestedQueryProtocolForGame(editServerGame.value);
+    syncEditTls();
   });
   passwordEditServerBtn.addEventListener("click", function () {
     var server = findServer(selectedServerId);
@@ -1164,6 +1189,7 @@
       host: editServerHost.value.trim(),
       port: parseInt(editServerPort.value, 10),
       protocol: editServerProtocol.value,
+      use_tls: editServerTls.checked,
       query_protocol: editServerQueryProtocol.value,
       query_port: optionalPort(editServerQueryPort),
       game: editServerGame.value,
@@ -1481,7 +1507,7 @@
         return;
       }
       if (msg.type === "authenticated") {
-        socket.send(JSON.stringify({ type: "test", host: host, port: port, password: password, protocol: protocol }));
+        socket.send(JSON.stringify({ type: "test", host: host, port: port, password: password, protocol: protocol, use_tls: manualTls.checked }));
       } else if (msg.type === "test_result") {
         finish(msg.ok ? I18N.t("addModal.testOk") : I18N.t("addModal.testFailed", { message: msg.message || "" }), !msg.ok);
       } else if (msg.type === "error") {
@@ -1506,7 +1532,7 @@
     apiFetch("/api/servers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name, host: host, port: port, password: password, protocol: protocol, query_protocol: queryProtocol, query_port: queryPort, game: game }),
+      body: JSON.stringify({ name: name, host: host, port: port, password: password, protocol: protocol, use_tls: manualTls.checked, query_protocol: queryProtocol, query_port: queryPort, game: game }),
     })
       .then(function (r) {
         if (!r.ok) return r.text().then(function (t) { throw new Error(apiErrorMessage(t)); });
@@ -1517,6 +1543,7 @@
         renderServers();
         renderContent();
         manualForm.reset();
+        syncManualTls();
         manualTestStatus.hidden = true;
         manualQueryTestStatus.hidden = true;
         addModal.close();
@@ -3097,7 +3124,7 @@
     var game = gameKey ? window.NICON_GAMES[gameKey] : null;
     var eyebrow = document.createElement("div");
     eyebrow.className = "server-eyebrow";
-    eyebrow.textContent = (game ? game.label : server.game || I18N.t("info.genericOption")) + " · " + protocolLabel(server.protocol);
+    eyebrow.textContent = (game ? game.label : server.game || I18N.t("info.genericOption")) + " · " + protocolLabel(server.protocol) + (server.use_tls ? " · TLS" : "");
     identity.appendChild(eyebrow);
 
     var h1 = document.createElement("h1");
@@ -3565,12 +3592,37 @@
     consoleFollowBtn.hidden = !c || c.followTail !== false;
   }
 
+  // The console filter runs a user-typed regex over up to 2,000 lines of text
+  // that a game server (or other players) control. JavaScript cannot interrupt
+  // a running regex, so a pathological pattern would freeze the tab. Three
+  // guards, cheapest first: a static check that rejects the patterns that
+  // backtrack exponentially (safe-regex.js), a cap on how much of each line is
+  // tested, and a time budget for the whole pass (see renderLog).
+  var FILTER_MAX_LINE_CHARS = 2000;
+  var FILTER_TIME_BUDGET_MS = 250;
+  var filterHint = document.getElementById("filter-hint");
+
+  function setFilterHint(message) {
+    filterHint.textContent = message || "";
+    filterHint.hidden = !message;
+  }
+
   function activeFilterRegex() {
     var text = filterInput.value.trim();
+    setFilterHint("");
     if (!text) return null;
     if (!filterRegexToggle.checked) {
       text = text.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
       return new RegExp(text, "i");
+    }
+    var verdict = window.NICON_SAFE_REGEX.analyze(text);
+    if (!verdict.ok) {
+      // An unfinished pattern while typing is not worth a warning; anything
+      // else is explained so the user can simplify it.
+      if (verdict.reason !== "syntax") {
+        setFilterHint(I18N.t("console.filterRejected", { reason: I18N.t("console.filterReason_" + verdict.reason) }));
+      }
+      return null;
     }
     try {
       return new RegExp(text, "i");
@@ -3591,13 +3643,23 @@
     }
     var regex = activeFilterRegex();
 
-    c.lines.forEach(function (line) {
-      if (regex && !regex.test(line.text)) return;
+    var started = performance.now();
+    var stoppedEarly = false;
+    for (var lineIndex = 0; lineIndex < c.lines.length; lineIndex++) {
+      var line = c.lines[lineIndex];
+      if (regex) {
+        // Bounds the total cost of a pattern that is merely slow (polynomial),
+        // not catastrophic: check the clock between lines.
+        if ((lineIndex & 31) === 0 && performance.now() - started > FILTER_TIME_BUDGET_MS) { stoppedEarly = true; break; }
+        var scanned = line.text.length > FILTER_MAX_LINE_CHARS ? line.text.slice(0, FILTER_MAX_LINE_CHARS) : line.text;
+        if (!regex.test(scanned)) continue;
+      }
       var div = document.createElement("div");
       div.className = "log-line kind-" + line.kind;
       appendHighlighted(div, line.text, regex);
       log.appendChild(div);
-    });
+    }
+    if (stoppedEarly) setFilterHint(I18N.t("console.filterTooSlow"));
     if (c.followTail !== false) {
       log.scrollTop = log.scrollHeight;
     } else {
@@ -3623,7 +3685,10 @@
     var global = new RegExp(regex.source, "gi");
     var lastIndex = 0;
     var match;
-    while ((match = global.exec(text)) !== null) {
+    // Only the first FILTER_MAX_LINE_CHARS are scanned for matches; the rest
+    // of a very long line is appended as plain text below.
+    var scan = text.length > FILTER_MAX_LINE_CHARS ? text.slice(0, FILTER_MAX_LINE_CHARS) : text;
+    while ((match = global.exec(scan)) !== null) {
       if (match.index > lastIndex) {
         container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
       }

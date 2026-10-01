@@ -38,7 +38,7 @@ function nicon_handle_export_account_data(int $userId): void
     $serversStmt = $pdo->prepare('
         SELECT id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source,
                health_ok, health_checked_at, health_latency_ms, health_error,
-               nitrado_game_code, nitrado_game_icon_url
+               nitrado_game_code, nitrado_game_icon_url, use_tls
         FROM servers WHERE user_id = ? ORDER BY name');
     $serversStmt->execute([$userId]);
     $servers = array_map('nicon_server_response', $serversStmt->fetchAll());

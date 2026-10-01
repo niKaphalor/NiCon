@@ -25,6 +25,7 @@
 <meta name="apple-mobile-web-app-title" content="NiCon">
 <link rel="manifest" href="site.webmanifest">
 <link rel="stylesheet" href="style.css">
+<script src="frame-guard.js"></script>
 </head>
 <body>
 
@@ -226,6 +227,7 @@
                     <input id="filter-regex-toggle" type="checkbox" checked>
                     <span data-i18n="console.regex">Regex</span>
                   </label>
+                  <p id="filter-hint" class="filter-hint" role="status" hidden></p>
                 </div>
                 <div class="console-toolbar-actions">
                   <button type="button" id="console-follow-btn" class="icon-btn small" data-i18n="console.followOutput" data-i18n-title="console.followOutput" title="Follow output" hidden>Follow output</button>
@@ -588,6 +590,10 @@
         <option value="battlebit">BattleBit WebRCON</option>
         <option value="palworld_rest" data-i18n="addModal.protocolPalworldRest">Palworld REST API</option>
       </select>
+      <label class="checkbox-row tls-row" id="manual-tls-row" hidden>
+        <input type="checkbox" id="manual-tls">
+        <span><span data-i18n="addModal.useTls">Use TLS (wss / https)</span> <span class="hint" data-i18n="addModal.useTlsHint">Only if the game server itself serves TLS with a certificate that is valid for this host name — the certificate is always verified.</span></span>
+      </label>
       <select id="manual-game" aria-label="Game" data-i18n-aria-label="info.gameAriaLabel">
         <option value="" data-i18n="info.genericOption">Generic (no parsing)</option>
         <option value="7 Days to Die">7 Days to Die</option>
@@ -664,6 +670,10 @@
       <option value="battlebit">BattleBit WebRCON</option>
       <option value="palworld_rest" data-i18n="addModal.protocolPalworldRest">Palworld REST API</option>
     </select>
+    <label class="checkbox-row tls-row" id="edit-server-tls-row" hidden>
+      <input type="checkbox" id="edit-server-tls">
+      <span><span data-i18n="addModal.useTls">Use TLS (wss / https)</span> <span class="hint" data-i18n="addModal.useTlsHint">Only if the game server itself serves TLS with a certificate that is valid for this host name — the certificate is always verified.</span></span>
+    </label>
     <select id="edit-server-game" aria-label="Game" data-i18n-aria-label="info.gameAriaLabel">
       <option value="" data-i18n="info.genericOption">Generic (no parsing)</option>
       <option value="7 Days to Die">7 Days to Die</option>
@@ -753,6 +763,7 @@
 <script src="i18n.de.js"></script>
 <script src="i18n.js"></script>
 <script src="games.js"></script>
+<script src="safe-regex.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -196,7 +196,22 @@ func (rel *Relay) Routes() http.Handler {
 	mux.HandleFunc("GET /healthz", rel.handleHealth)
 	mux.HandleFunc("OPTIONS /healthz", rel.handleHealth)
 	mux.HandleFunc("GET /ws/rcon", rel.handleWS)
-	return mux
+	return securityHeaders(mux)
+}
+
+// securityHeaders adds defence-in-depth headers to every response. The relay
+// only ever answers plain text (/healthz), errors, and the WebSocket upgrade,
+// so the CSP is "nothing may load, nothing may frame me".
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		h.Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (rel *Relay) handleHealth(w http.ResponseWriter, r *http.Request) {

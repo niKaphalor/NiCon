@@ -16,7 +16,7 @@ require_once dirname(__DIR__) . '/handlers/nitrado_sync.php';
 
 $pdo = nicon_db();
 $stmt = $pdo->query('
-    SELECT s.id, s.nitrado_service_id, u.nitrado_token_enc
+    SELECT s.id, s.user_id, s.nitrado_service_id, u.nitrado_token_enc
     FROM servers s
     JOIN users u ON u.id = s.user_id
     WHERE s.source = \'nitrado\' AND s.nitrado_service_id IS NOT NULL AND u.nitrado_token_enc IS NOT NULL
@@ -24,7 +24,7 @@ $stmt = $pdo->query('
 $inserted = 0;
 foreach ($stmt as $row) {
     try {
-        $token = nicon_decrypt_password($row['nitrado_token_enc']);
+        $token = nicon_decrypt_password($row['nitrado_token_enc'], nicon_aad_nitrado_token((int) $row['user_id']));
         $serviceId = (int) $row['nitrado_service_id'];
         $data = nicon_nitrado_get($token, "/services/$serviceId/gameservers");
         $gs = $data['gameserver'] ?? [];

@@ -128,6 +128,7 @@ var migrations = []string{
 	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS nitrado_game_icon_url VARCHAR(2048) NULL`,
 	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS query_protocol VARCHAR(16) NOT NULL DEFAULT 'auto'`,
 	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS query_port INT UNSIGNED NULL`,
+	`ALTER TABLE servers ADD COLUMN IF NOT EXISTS use_tls BOOLEAN NOT NULL DEFAULT FALSE`,
 	// idx_health_server_time (server_id, sampled_at) doesn't help the daily
 	// CleanupHealthSamples DELETE below, which filters on sampled_at alone —
 	// server_id being the leading column means that composite can't be used
@@ -139,7 +140,7 @@ var migrations = []string{
 
 type Store struct {
 	db  *sql.DB
-	enc *encryptor
+	enc *KeyRing
 }
 
 // RCONAuditRecord is the durable, cross-server record of an operator command.
@@ -166,11 +167,15 @@ type RCONAuditRecord struct {
 // encryptionKey must be exactly EncryptionKeySize bytes (see
 // DecodeEncryptionKey / GenerateEncryptionKey).
 func Open(dsn string, encryptionKey []byte) (*Store, error) {
-	enc, err := newEncryptor(encryptionKey)
+	ring, err := newSingleKeyRing(encryptionKey)
 	if err != nil {
 		return nil, err
 	}
+	return OpenWithKeyRing(dsn, ring)
+}
 
+// OpenWithKeyRing is Open with a full key ring (key rotation, format v2).
+func OpenWithKeyRing(dsn string, enc *KeyRing) (*Store, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -479,11 +484,14 @@ type Server struct {
 	Game             string
 	Source           string
 	NitradoServiceID *int64
+	// UseTLS connects over TLS (wss / https) for the protocols that support it
+	// (WebRCON, BattleBit, Palworld REST); certificates are always verified.
+	UseTLS bool
 }
 
 func (s *Store) ListServers(ctx context.Context, userID int64) ([]Server, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id
+		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id, use_tls
 		 FROM servers WHERE user_id = ? ORDER BY name`, userID)
 	if err != nil {
 		return nil, err
@@ -505,7 +513,7 @@ func (s *Store) ListServers(ctx context.Context, userID int64) ([]Server, error)
 // by someone else looks identical to a nonexistent one to the caller.
 func (s *Store) GetServer(ctx context.Context, userID, serverID int64) (*Server, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id
+		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id, use_tls
 		 FROM servers WHERE id = ? AND user_id = ?`, serverID, userID)
 	srv, err := s.scanServer(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -527,7 +535,7 @@ func (s *Store) scanServer(row scannable) (Server, error) {
 	var queryPort sql.NullInt64
 	if err := row.Scan(
 		&srv.ID, &srv.UserID, &srv.Name, &srv.Host, &srv.Port, &passwordEnc,
-		&srv.Protocol, &srv.QueryProtocol, &queryPort, &srv.Game, &srv.Source, &srv.NitradoServiceID,
+		&srv.Protocol, &srv.QueryProtocol, &queryPort, &srv.Game, &srv.Source, &srv.NitradoServiceID, &srv.UseTLS,
 	); err != nil {
 		return Server{}, err
 	}
@@ -536,7 +544,7 @@ func (s *Store) scanServer(row scannable) (Server, error) {
 		srv.QueryPort = &port
 	}
 	if len(passwordEnc) > 0 {
-		password, err := s.enc.Decrypt(passwordEnc)
+		password, err := s.enc.Decrypt(passwordEnc, ServerPasswordAAD(srv.UserID, srv.ID))
 		if err != nil {
 			return Server{}, fmt.Errorf("decrypt password for server %d: %w", srv.ID, err)
 		}
@@ -550,18 +558,43 @@ func (s *Store) CreateServer(ctx context.Context, srv Server) (int64, error) {
 	if srv.QueryProtocol == "" {
 		srv.QueryProtocol = "auto"
 	}
-	passwordEnc, err := s.encryptPasswordOrNil(srv.Password)
+	// In format v2 the ciphertext is bound to the server's ID, which only
+	// exists after the INSERT — so insert first, then store the password in
+	// the same transaction. (The legacy format needs no ID.)
+	insertPassword := srv.Password
+	if s.enc.WritesV2() {
+		insertPassword = ""
+	}
+	passwordEnc, err := s.encryptOrNil(insertPassword, "")
 	if err != nil {
 		return 0, err
 	}
-	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		srv.UserID, srv.Name, srv.Host, srv.Port, passwordEnc, srv.Protocol, srv.QueryProtocol, srv.QueryPort, srv.Game, srv.Source, srv.NitradoServiceID)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO servers (user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id, use_tls)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		srv.UserID, srv.Name, srv.Host, srv.Port, passwordEnc, srv.Protocol, srv.QueryProtocol, srv.QueryPort, srv.Game, srv.Source, srv.NitradoServiceID, srv.UseTLS)
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if s.enc.WritesV2() && srv.Password != "" {
+		sealed, err := s.encryptOrNil(srv.Password, ServerPasswordAAD(srv.UserID, id))
+		if err != nil {
+			return 0, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE servers SET password_enc = ? WHERE id = ?`, sealed, id); err != nil {
+			return 0, err
+		}
+	}
+	return id, tx.Commit()
 }
 
 // UpsertNitradoServer inserts or updates a server synced from Nitrado,
@@ -583,7 +616,7 @@ func (s *Store) UpsertNitradoServer(ctx context.Context, srv Server) error {
 // UpdateServerPassword sets a server's RCON password; a no-op (returns
 // ErrNotFound) if the server doesn't belong to userID.
 func (s *Store) UpdateServerPassword(ctx context.Context, userID, serverID int64, password string) error {
-	passwordEnc, err := s.encryptPasswordOrNil(password)
+	passwordEnc, err := s.encryptOrNil(password, ServerPasswordAAD(userID, serverID))
 	if err != nil {
 		return err
 	}
@@ -612,7 +645,7 @@ func (s *Store) DeleteServer(ctx context.Context, userID, serverID int64) error 
 // per-request query.
 func (s *Store) ListServersForHealthCheck(ctx context.Context) ([]Server, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id
+		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id, use_tls
 		 FROM servers WHERE password_enc IS NOT NULL`)
 	if err != nil {
 		return nil, err
@@ -646,7 +679,7 @@ func (s *Store) ListServersForHealthCheck(ctx context.Context) ([]Server, error)
 // that don't have one yet.
 func (s *Store) ListServersForPublicInfoCheck(ctx context.Context) ([]Server, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id
+		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id, use_tls
 		 FROM servers
 		 WHERE query_protocol IN ('a2s', 'minecraft')
 		    OR (query_protocol = 'auto' AND (protocol = 'source' OR game = 'Minecraft'))`)
@@ -797,9 +830,11 @@ func checkAffected(res sql.Result) error {
 	return nil
 }
 
-func (s *Store) encryptPasswordOrNil(password string) ([]byte, error) {
-	if password == "" {
+// encryptOrNil seals a non-empty secret for the row named by aad; the empty
+// string means "not set" and is stored as NULL.
+func (s *Store) encryptOrNil(secret, aad string) ([]byte, error) {
+	if secret == "" {
 		return nil, nil
 	}
-	return s.enc.Encrypt(password)
+	return s.enc.Encrypt(secret, aad)
 }

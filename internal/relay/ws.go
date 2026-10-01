@@ -50,6 +50,7 @@ type wsMessage struct {
 	Port          int    `json:"port,omitempty"`
 	Password      string `json:"password,omitempty"`
 	Protocol      string `json:"protocol,omitempty"`
+	UseTLS        bool   `json:"use_tls,omitempty"`
 	QueryProtocol string `json:"query_protocol,omitempty"`
 	OK            bool   `json:"ok,omitempty"`
 	Players       *int   `json:"players,omitempty"`
@@ -120,18 +121,20 @@ func connectGame(srv store.Server) (gameConn, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The name as entered still drives the Host header and TLS verification.
+	opts := dialOptions{ServerName: strings.Trim(srv.Host, "[]"), TLS: srv.UseTLS && tlsCapableProtocols[srv.Protocol]}
 	srv.Host = pinned
 	switch srv.Protocol {
 	case "webrcon":
-		return dialWebRcon(srv.Host, srv.Port, srv.Password)
+		return dialWebRcon(srv.Host, srv.Port, srv.Password, opts)
 	case "palworld_rest":
-		return dialPalworldRest(srv.Host, srv.Port, srv.Password)
+		return dialPalworldRest(srv.Host, srv.Port, srv.Password, opts)
 	case "battleye":
 		return dialBattleye(srv.Host, srv.Port, srv.Password)
 	case "telnet":
 		return dialTelnet(srv.Host, srv.Port, srv.Password)
 	case "battlebit":
-		return dialBattlebit(srv.Host, srv.Port, srv.Password)
+		return dialBattlebit(srv.Host, srv.Port, srv.Password, opts)
 	default:
 		return dialSourceRCON(net.JoinHostPort(srv.Host, strconv.Itoa(srv.Port)), srv.Password)
 	}
@@ -331,6 +334,7 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 				Port:     msg.Port,
 				Password: msg.Password,
 				Protocol: msg.Protocol,
+				UseTLS:   msg.UseTLS,
 			})
 			releaseProbe()
 			if dialErr != nil {

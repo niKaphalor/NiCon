@@ -213,7 +213,7 @@ function nicon_nitrado_saved_token(PDO $pdo, int $userId): string
     $stmt = $pdo->prepare('SELECT nitrado_token_enc FROM users WHERE id = ?');
     $stmt->execute([$userId]);
     $encrypted = $stmt->fetchColumn();
-    return $encrypted ? nicon_decrypt_password($encrypted) : '';
+    return $encrypted ? nicon_decrypt_password($encrypted, nicon_aad_nitrado_token($userId)) : '';
 }
 
 function nicon_supported_game(string $label): ?array
@@ -327,12 +327,12 @@ function nicon_handle_nitrado_sync(int $userId): void
             // Its cache entries have a hard maximum lifetime of 60 seconds.
         }
         $pdo->prepare('UPDATE users SET nitrado_token_enc = ? WHERE id = ?')
-            ->execute([nicon_encrypt_password($token, NICON_MAX_NITRADO_TOKEN_BYTES), $userId]);
+            ->execute([nicon_encrypt_password($token, NICON_MAX_NITRADO_TOKEN_BYTES, nicon_aad_nitrado_token($userId)), $userId]);
     } else {
         $stmt = $pdo->prepare('SELECT nitrado_token_enc FROM users WHERE id = ?');
         $stmt->execute([$userId]);
         $enc = $stmt->fetchColumn();
-        $token = $enc ? nicon_decrypt_password($enc) : '';
+        $token = $enc ? nicon_decrypt_password($enc, nicon_aad_nitrado_token($userId)) : '';
         if ($token === '') {
             nicon_send_error('no saved Nitrado token — enter one to sync', 400);
             return;
@@ -436,7 +436,7 @@ function nicon_handle_nitrado_power(int $userId, int $serverId): void
     $tokenStmt->execute([$userId]);
     $encryptedToken = $tokenStmt->fetchColumn();
     try {
-        $token = $encryptedToken ? nicon_decrypt_password($encryptedToken) : '';
+        $token = $encryptedToken ? nicon_decrypt_password($encryptedToken, nicon_aad_nitrado_token($userId)) : '';
     } catch (RuntimeException $e) {
         nicon_send_error('saved Nitrado token could not be read', 500);
         return;

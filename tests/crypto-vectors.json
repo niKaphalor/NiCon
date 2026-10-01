@@ -1,0 +1,35 @@
+{
+  "keys": {
+    "1": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    "2": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8="
+  },
+  "vectors": [
+    {
+      "name": "legacy, key 1, no AAD",
+      "version": 1,
+      "key_id": 1,
+      "aad": "",
+      "plaintext": "hunter2",
+      "nonce_hex": "a0a1a2a3a4a5a6a7a8a9aaab",
+      "blob_base64": "oKGio6Slpqeoqaqrjm0SWSC5MCfL5aobdPsWtGz5Z/PKjqM="
+    },
+    {
+      "name": "v2, key 1, server password",
+      "version": 2,
+      "key_id": 1,
+      "aad": "nicon:v2:servers.password_enc:7:42",
+      "plaintext": "rcon-pässwörd 🔑",
+      "nonce_hex": "b0b1b2b3b4b5b6b7b8b9babb",
+      "blob_base64": "TkMyAbCxsrO0tba3uLm6u+s2NcXBvXj7NIvgYXsv7OJ0o91DPwG4C/QbAix6uprY906rUA=="
+    },
+    {
+      "name": "v2, key 2, Nitrado token",
+      "version": 2,
+      "key_id": 2,
+      "aad": "nicon:v2:users.nitrado_token_enc:7",
+      "plaintext": "nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-nitrado-token-",
+      "nonce_hex": "c0c1c2c3c4c5c6c7c8c9cacb",
+      "blob_base64": "TkMyAsDBwsPExcbHyMnKywT6TYPiCyTGDko13kfwrWX1PuO0c4oiAhIqboyb2N1G4Kg9ZZ4RSDORvFCdq43mjPZUXVghnwJYS1Pyi2dtxAwcKonpkj72TdlXcENx/CB4WJtJvjlU/G3UJy10UHedlrJC0Mh4zShixYvbSJ1Sam5galMBfopoPzGgXvgWfLZLwjnzB9G+XEKYc8ryBcRBcJzdXWuADAdGMmTGkk1N5KQcBhr9uZZo0U+pS0c4q/SdpcUQO2Prv/dvwChNPKqTZS/n4CUt2WIRowAQYZCyRCX1Lyv3t0/54dUfq6A/n3mHN1BCDgccD4jun5JdhjxQE/NgYlcWXvRu+3005toOkNoupRDBRMF5VKJ1uy8RFT2PQnq3mRGdxqqbisXoZhhMAWbRhp3L3RE1"
+    }
+  ]
+}

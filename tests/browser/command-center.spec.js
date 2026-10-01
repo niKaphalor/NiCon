@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const { test, expect } = require("@playwright/test");
 
 const API_ORIGIN = "https://nicon.mylss.de";
@@ -578,6 +580,100 @@ test("admin lists are paginated (server-side pages for users, client-side for an
   await expect(faqPager).toContainText("Page 1 of 2");
   await faqPager.getByRole("button", { name: /Next/ }).click();
   await expect(faqRows).toHaveCount(4);
+});
+
+test("the console filter rejects regexes that backtrack catastrophically", async ({ page }) => {
+  await page.goto("/index.html");
+  const verdicts = await page.evaluate(() => {
+    const check = window.NICON_SAFE_REGEX.analyze;
+    const dangerous = ["(a+)+$", "(a*)*b", "(a|aa)+c", "(x+x+)+y", "((a+)b)+", "(.*a){12}", "^(\\w+\\s?)*$", "(a|a?)+",
+      "(foo|bar)+", "(\\d+)\\1", "(?<n>a)\\k<n>", "a{5000}", "a+a+a+a+", "(?:a+)+", "([a-z]+)*", "(a{1,50}){1,50}", "x".repeat(101)];
+    const harmless = ["error", "^\\[.*\\] joined", "player (\\d+) (left|joined)", "kick(ed)?", "\\d{1,3}(\\.\\d{1,3}){3}",
+      "warn(ing)?|error", "a.*b.*c", "[^a-z]+x", "(?=.*abc)def", "\\bfoo\\b", "x{2,4}y", "a\\+b", "(a{1,5}){1,5}"];
+    return {
+      dangerousAccepted: dangerous.filter((p) => check(p).ok),
+      harmlessRejected: harmless.filter((p) => !check(p).ok),
+    };
+  });
+  expect(verdicts.dangerousAccepted).toEqual([]);
+  expect(verdicts.harmlessRejected).toEqual([]);
+});
+
+test("a risky filter regex is explained and not applied; a safe one filters", async ({ page }) => {
+  const state = await installBackend(page, [server({ id: 1 })]);
+  await login(page);
+  await page.locator(".server-row", { hasText: "GMod Alpha" }).click();
+  await expect(page.locator("#players-panel .player-name")).toHaveText("Alice");
+  const gameSocket = state.sockets.find((connection) => connection.serverId === 1);
+  gameSocket.socket.send(JSON.stringify({ type: "broadcast", output: "Alice: hello world" }));
+  gameSocket.socket.send(JSON.stringify({ type: "broadcast", output: "Bob: something else" }));
+  await expect(page.locator("#log .log-line", { hasText: "hello world" })).toBeVisible();
+
+  await page.locator("#filter-input").fill("(a+)+$");
+  await expect(page.locator("#filter-hint")).toBeVisible();
+  await expect(page.locator("#filter-hint")).toContainText("Filter not applied");
+  // Nothing is hidden by a rejected pattern.
+  await expect(page.locator("#log .log-line", { hasText: "something else" })).toBeVisible();
+
+  await page.locator("#filter-input").fill("hello");
+  await expect(page.locator("#filter-hint")).toBeHidden();
+  await expect(page.locator("#log .log-line", { hasText: "something else" })).toHaveCount(0);
+  await expect(page.locator("#log .log-line", { hasText: "hello world" })).toBeVisible();
+});
+
+test("the ready-made security header files carry the page CSP plus frame-ancestors", async () => {
+  const root = path.join(__dirname, "..", "..");
+  const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  const metaPolicy = /Content-Security-Policy" content="([^"]*)"/.exec(html)[1];
+  expect(metaPolicy).not.toContain("frame-ancestors"); // a <meta> CSP cannot express it
+  for (const file of ["_headers", "Caddyfile.snippet", "nginx.conf.snippet", "apache.htaccess"]) {
+    const text = fs.readFileSync(path.join(root, "deploy", "security-headers", file), "utf8");
+    expect(text, file).toContain(`${metaPolicy}; frame-ancestors 'none'`);
+    expect(text, file).toContain("X-Frame-Options");
+    expect(text, file).toContain("nosniff");
+  }
+  // Every app page carries the same policy, so one header set fits them all.
+  for (const page of ["contact.html", "contact.de.html", "imprint.html", "imprint.de.html", "privacy.html", "privacy.de.html"]) {
+    const other = fs.readFileSync(path.join(root, page), "utf8");
+    expect(/Content-Security-Policy" content="([^"]*)"/.exec(other)[1], page).toBe(metaPolicy);
+  }
+});
+
+test("the frame guard hides the app when another page embeds it", async ({ page }) => {
+  await page.setContent('<iframe id="embedded" src="http://127.0.0.1:4173/contact.html"></iframe>');
+  const frame = await (await page.locator("#embedded").elementHandle()).contentFrame();
+  await frame.waitForLoadState("domcontentloaded");
+  await expect.poll(() => frame.evaluate(() => document.documentElement.style.display)).toBe("none");
+
+  // Not framed: nothing is hidden.
+  await page.goto("/contact.html");
+  expect(await page.evaluate(() => document.documentElement.style.display)).toBe("");
+});
+
+test("TLS can be chosen for HTTP/WebSocket based protocols only", async ({ page }) => {
+  const state = await installBackend(page, []);
+  await login(page);
+  await page.locator("#add-server-btn").click();
+  await page.locator('[data-tab="manual"]').click();
+
+  const tlsRow = page.locator("#manual-tls-row");
+  await expect(tlsRow).toBeHidden(); // default protocol: Source RCON
+  await page.locator("#manual-protocol").selectOption("webrcon");
+  await expect(tlsRow).toBeVisible();
+  await page.locator("#manual-tls").check();
+  await page.locator("#manual-protocol").selectOption("telnet");
+  await expect(tlsRow).toBeHidden();
+  await expect(page.locator("#manual-tls")).not.toBeChecked(); // a hidden tick never survives
+
+  await page.locator("#manual-protocol").selectOption("palworld_rest");
+  await page.locator("#manual-tls").check();
+  await page.locator("#manual-name").fill("Palworld over TLS");
+  await page.locator("#manual-host").fill("pal.example.com");
+  await page.locator("#manual-port").fill("8212");
+  await page.locator("#manual-password").fill("secret");
+  await page.locator('#manual-form button[type="submit"]').click();
+  await expect.poll(() => state.servers.find((s) => s.name === "Palworld over TLS")?.use_tls).toBe(true);
+  await expect(page.locator(".server-row", { hasText: "Palworld over TLS" })).toBeVisible();
 });
 
 test("signed in, FAQ sits between Settings and Admin and Servers returns to the console", async ({ page }) => {

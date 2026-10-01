@@ -683,6 +683,103 @@ Once it's up, `https://<RELAY_DOMAIN>/healthz` should return `ok`. See
 [Pointing the frontend at your own deployment](#pointing-the-frontend-at-your-own-deployment)
 for wiring that address into the frontend.
 
+## Hardening a deployment
+
+### Encryption at rest, and rotating the key
+
+RCON passwords and Nitrado API tokens are stored as AES-256-GCM ciphertexts.
+Two formats exist and both are always readable by the Cloud API *and* the
+relay:
+
+| | layout | key | bound to its row |
+|---|---|---|---|
+| v1 (legacy) | `nonce ‖ ciphertext ‖ tag` | always key 1 | no |
+| v2 | `"NC2" ‖ key-ID ‖ nonce ‖ ciphertext ‖ tag` | any key in the ring | yes — the row (user, server) is authenticated as *additional data* |
+
+v2 names its key, so keys can be rotated, and a ciphertext copied onto
+another row (by someone who can write to the database but has no key) no
+longer decrypts — it could otherwise be used to make an attacker-controlled
+server receive a victim's stored password. **v2 is only written once you
+enable it**, so both components can be upgraded first; the longest storable
+RCON password is 480 bytes (v2's header takes 32 of the 512 bytes column).
+
+Settings, on both sides (same values):
+
+| Cloud API (`config.local.php`) | Relay (environment) | meaning |
+|---|---|---|
+| `encryption_key_base64` | `NICON_ENCRYPTION_KEY` | key **1** (the existing key) |
+| `encryption_keys` => `[2 => '…']` | `NICON_ENCRYPTION_KEYS=2=…,3=…` | additional keys, by ID (1–255) |
+| `encryption_current_key_id` | `NICON_ENCRYPTION_CURRENT_KEY_ID` | key used for new values (default 1) |
+| `encryption_write_v2` | `NICON_ENCRYPTION_WRITE_V2=1` | write v2 (required for a current key other than 1) |
+
+**Rotation, step by step** — every step is safe on its own:
+
+1. Deploy this version to the Cloud API and the relay. Nothing changes yet.
+2. `./nicon-relay genkey` (or `docker compose run --rm relay genkey`) → the new key. Add it as key **2**
+   on both sides (`encryption_keys` / `NICON_ENCRYPTION_KEYS`) and deploy. Both can now *read* it.
+3. Switch writing: `encryption_current_key_id => 2`, `encryption_write_v2 => true` and
+   `NICON_ENCRYPTION_CURRENT_KEY_ID=2`, `NICON_ENCRYPTION_WRITE_V2=1`. New and changed secrets are v2 under key 2.
+   *(Only want v2 without changing the key? Skip 2 and just set the two `write_v2` options.)*
+4. Migrate what is already stored:
+   ```sh
+   docker compose run --rm relay reencrypt -dry-run   # what would change?
+   docker compose run --rm relay reencrypt            # rewrite it
+   ```
+   Each row is rewritten with a compare-and-swap, so a concurrent change made through the app is never overwritten.
+   The command fails (exit code 1, listing the rows) for any value it cannot decrypt — those are left untouched.
+5. When a second `-dry-run` reports nothing left to rewrite, remove key 1 from both configurations.
+   Keep a copy of the old key for as long as database **backups** made before step 4 may have to be restored.
+
+### Security headers for the static frontend
+
+The pages carry their Content-Security-Policy as a `<meta>` tag, but a meta
+tag cannot express `frame-ancestors` (clickjacking protection) and does not
+cover the service worker or non-HTML files. GitHub Pages does not let you set
+response headers, so there `frame-guard.js` is a fallback: a page that finds
+itself framed hides itself and tries to break out. If you host the frontend
+yourself, use real headers — ready-made configuration for Netlify/Cloudflare
+Pages (`_headers`), Caddy, nginx and Apache is in
+[`deploy/security-headers/`](deploy/security-headers/) (CSP with
+`frame-ancestors 'none'`, `X-Frame-Options`, `nosniff`, HSTS, …). A browser
+test keeps their CSP identical to the pages' — change hosts in both places.
+The relay and the Cloud API set their own security headers on every response.
+
+### Protecting the RCON connection
+
+Most game protocols have no encryption: Source RCON, Telnet (7 Days to Die),
+BattlEye and plain WebRCON/BattleBit send the password and every command in
+clear text, and Palworld's REST API uses HTTP Basic auth. NiCon cannot add TLS
+to those. What to do instead:
+
+- **Keep the relay close to the game servers** — same host or private network — and never
+  expose an RCON port to the internet. The browser talks to the relay over
+  HTTPS/WSS; only the hop from the relay to the game server is exposed.
+- **Use a VPN** (WireGuard, Tailscale, …) between the relay and remote game servers, or an SSH tunnel.
+- **Use TLS where the game server offers it.** WebRCON, BattleBit and the Palworld REST API can run
+  over `wss://` / `https://`: tick *Use TLS* for the server (add / edit dialog, or `use_tls` in the API).
+  The certificate is **always verified** against the system roots and the host name you entered — a
+  self-signed certificate is rejected, and there is deliberately no "skip verification" switch. Off by
+  default because most game servers only speak the plain variant.
+- On a public relay, run it with `-block-private-targets` (see "Hosted mode") so it cannot be used to reach internal services.
+
+The relay also dials **directly** (never through `HTTP_PROXY`), and never
+follows an HTTP redirect from a game server, so neither can steer it to a
+target that was not checked.
+
+### Console filter regexes
+
+The console filter accepts a regular expression that is run over up to 2,000
+log lines whose text a game server (or other players) controls. A pathological
+pattern such as `(a+)+$` can freeze a browser tab, and JavaScript cannot
+interrupt a running regex, so `safe-regex.js` rejects the risky shapes before
+they run: back-references, a repeat inside a repeat, repeated alternations,
+counts above 1,000, more than three unbounded quantifiers, and patterns over
+100 characters. The UI names the reason and shows everything unfiltered.
+Bounded patterns such as an IP address (`\d{1,3}(\.\d{1,3}){3}`) are fine. As
+a second line of defence only the first 2,000 characters of each line are
+tested and filtering stops after 250 ms. Moderation rules are plain
+case-insensitive substrings, not regexes.
+
 ## Pointing the frontend at your own deployment
 
 `docs/app.js` compiles in the Cloud API and relay addresses as constants
