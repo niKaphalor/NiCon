@@ -83,6 +83,18 @@ hands-off production control plane.
    **Stop**, and **Restart** controls; those go through the always-on Cloud
    API and therefore don't require the RCON relay.
 
+   *Adding or changing a game:* the list of supported games lives once, in
+   [`data/games.json`](data/games.json) (label stored with a server, usual RCON
+   protocol, how the `auto` public query resolves, the "tested" flag, the
+   integration type, and the names Nitrado servers are matched by). Run
+   `python3 scripts/build_games.py` to regenerate what the three components
+   read — `docs/games-catalog.js` (game selects, protocol suggestions, name
+   matching), `webspace/lib/games_catalog.php` (the API's allowlist and Nitrado
+   matching) and `internal/relay/games_catalog.go` (the relay's `auto` query
+   decision); CI fails if they are stale. The browser-only parts — player-list
+   parser, commands, artwork — stay in `docs/games.js`, and loading fails
+   loudly if the two sides list different games.
+
 7 Days to Die uses its configured **Telnet Port**, not a Source-RCON port.
 Selecting the game chooses NiCon's dedicated Telnet transport automatically.
 Several games use proprietary or game-specific protocol variants;

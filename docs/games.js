@@ -93,7 +93,6 @@ function battleyeBan(player) { return "ban " + player.id + " 0 Banned by admin";
 
 window.NICON_GAMES = {
   minecraft: {
-    label: "Minecraft",
     command: "list",
     parse: function (text) {
       // Known phrasings across versions:
@@ -131,7 +130,6 @@ window.NICON_GAMES = {
   },
 
   rust: {
-    label: "Rust",
     command: "playerlist",
     parse: function (text) {
       var data;
@@ -175,7 +173,6 @@ window.NICON_GAMES = {
   ark: {
     // Survival Ascended reuses the same Source RCON commands as Evolved
     // (same studio, same server tooling) — no separate entry needed.
-    label: "ARK: Survival Evolved / Ascended",
     command: "ListPlayers",
     parse: function (text) {
       // Documented shape: "<index>. <PlayerName>, <SteamID>" per line.
@@ -213,7 +210,6 @@ window.NICON_GAMES = {
   // verb the relay maps to GET /v1/api/players, whose JSON is what's
   // parsed below.
   palworld: {
-    label: "Palworld",
     command: "players",
     parse: function (text) {
       var data;
@@ -247,7 +243,6 @@ window.NICON_GAMES = {
   },
 
   arma3: {
-    label: "Arma 3",
     command: "players",
     parse: parseBattleyePlayers,
     kick: battleyeKick,
@@ -264,7 +259,6 @@ window.NICON_GAMES = {
   },
 
   dayz: {
-    label: "DayZ",
     command: "players",
     parse: parseBattleyePlayers,
     kick: battleyeKick,
@@ -282,7 +276,6 @@ window.NICON_GAMES = {
   //   # userid name uniqueid connected ping loss state
   //   #    2 "PlayerName" STEAM_0:1:12345678 05:23 45 0 active
   gmod: {
-    label: "Garry's Mod",
     command: "status",
     parse: function (text) {
       var lines = text.split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
@@ -359,16 +352,16 @@ function parseSevenDaysPlayers(text) {
 }
 
 Object.assign(window.NICON_GAMES, {
-  sevendaystodie: { label: "7 Days to Die", protocol: "telnet", command: "lp", parse: parseSevenDaysPlayers,
+  sevendaystodie: { command: "lp", parse: parseSevenDaysPlayers,
     kick: function (p) { return "kick " + p.id; }, ban: function (p) { return "ban add " + p.id + " 100 years Banned by admin"; },
     commands: ["lp", "say", "kick", "ban", "saveworld", "shutdown", "getgamepref"] },
-  eightythree: { label: "83", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status"] },
-  arksurvivalascended: Object.assign({}, window.NICON_GAMES.ark, { label: "ARK: Survival Ascended" }),
-  arksurvivalevolved: Object.assign({}, window.NICON_GAMES.ark, { label: "ARK: Survival Evolved" }),
-  arma2: Object.assign({}, window.NICON_GAMES.arma3, { label: "Arma 2" }),
-  armareforger: Object.assign({}, window.NICON_GAMES.arma3, { label: "Arma Reforger" }),
-  atlas: { label: "ATLAS", protocol: "source", command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "Broadcast", "SaveWorld", "DoExit"] },
-  battlebit: { label: "BattleBit Remastered", protocol: "battlebit", command: "playerlist", parse: function (text) {
+  eightythree: { command: "status", parse: parseLoosePlayerLines, commands: ["status"] },
+  arksurvivalascended: Object.assign({}, window.NICON_GAMES.ark),
+  arksurvivalevolved: Object.assign({}, window.NICON_GAMES.ark),
+  arma2: Object.assign({}, window.NICON_GAMES.arma3),
+  armareforger: Object.assign({}, window.NICON_GAMES.arma3),
+  atlas: { command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "Broadcast", "SaveWorld", "DoExit"] },
+  battlebit: { command: "playerlist", parse: function (text) {
     try {
       var data = JSON.parse(text); var list = Array.isArray(data.players) ? data.players : [];
       return { columns: ["name", "steamid", "ping"], summary: list.length + " players online", players: list.map(function (p) {
@@ -376,25 +369,25 @@ Object.assign(window.NICON_GAMES, {
       }) };
     } catch (_) { return null; }
   }, kick: function (p) { return "kick " + p.id; }, commands: ["playerlist", "state", "say", "kick"] },
-  beyondthewire: { label: "Beyond the Wire", protocol: "source", command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "AdminKick", "AdminBan", "AdminBroadcast"] },
-  conanexiles: { label: "Conan Exiles", protocol: "source", command: "listplayers", parse: parseLoosePlayerLines, commands: ["listplayers", "broadcast", "kick", "ban"] },
-  counterstrike2: { label: "Counter-Strike 2", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status", "say", "kickid", "banid", "changelevel"] },
-  darkandlight: { label: "Dark and Light", protocol: "source", command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "Broadcast", "SaveWorld", "DoExit"] },
-  hellletloose: { label: "Hell Let Loose", protocol: "source", command: "get playerids", parse: parseLoosePlayerLines, commands: ["get playerids", "kick", "punish", "broadcast"] },
-  hellletloosevietnam: { label: "Hell Let Loose: Vietnam", protocol: "source", command: "get playerids", parse: parseLoosePlayerLines, commands: ["get playerids", "kick", "punish", "broadcast"] },
-  insurgency: { label: "Insurgency", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status", "say", "kickid", "banid"] },
-  mordhau: { label: "MORDHAU", protocol: "source", command: "playerlist", parse: parseLoosePlayerLines, commands: ["playerlist", "say", "kick", "ban"] },
-  projectzomboid: { label: "Project Zomboid", protocol: "source", command: "players", parse: parseLoosePlayerLines, commands: ["players", "servermsg", "kickuser", "banuser", "save", "quit"] },
-  risingstorm2: { label: "Rising Storm 2: Vietnam", protocol: "source", command: "get playerlist", parse: parseLoosePlayerLines, commands: ["get playerlist", "broadcast", "kick", "ban"] },
-  squad: { label: "Squad", protocol: "source", command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "AdminKick", "AdminBan", "AdminBroadcast"] },
-  squad44: { label: "Squad 44", protocol: "source", command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "AdminKick", "AdminBan", "AdminBroadcast"] },
-  soulmask: { label: "Soulmask", protocol: "source", command: "listplayers", parse: parseLoosePlayerLines, commands: ["listplayers", "say", "kick", "ban"] },
-  vrising: { label: "V Rising", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status", "announce", "announcerestart"] },
-  wardogs: { label: "WARDOGS", protocol: "source", command: "status", parse: parseLoosePlayerLines, commands: ["status"] },
+  beyondthewire: { command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "AdminKick", "AdminBan", "AdminBroadcast"] },
+  conanexiles: { command: "listplayers", parse: parseLoosePlayerLines, commands: ["listplayers", "broadcast", "kick", "ban"] },
+  counterstrike2: { command: "status", parse: parseLoosePlayerLines, commands: ["status", "say", "kickid", "banid", "changelevel"] },
+  darkandlight: { command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "Broadcast", "SaveWorld", "DoExit"] },
+  hellletloose: { command: "get playerids", parse: parseLoosePlayerLines, commands: ["get playerids", "kick", "punish", "broadcast"] },
+  hellletloosevietnam: { command: "get playerids", parse: parseLoosePlayerLines, commands: ["get playerids", "kick", "punish", "broadcast"] },
+  insurgency: { command: "status", parse: parseLoosePlayerLines, commands: ["status", "say", "kickid", "banid"] },
+  mordhau: { command: "playerlist", parse: parseLoosePlayerLines, commands: ["playerlist", "say", "kick", "ban"] },
+  projectzomboid: { command: "players", parse: parseLoosePlayerLines, commands: ["players", "servermsg", "kickuser", "banuser", "save", "quit"] },
+  risingstorm2: { command: "get playerlist", parse: parseLoosePlayerLines, commands: ["get playerlist", "broadcast", "kick", "ban"] },
+  squad: { command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "AdminKick", "AdminBan", "AdminBroadcast"] },
+  squad44: { command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "AdminKick", "AdminBan", "AdminBroadcast"] },
+  soulmask: { command: "listplayers", parse: parseLoosePlayerLines, commands: ["listplayers", "say", "kick", "ban"] },
+  vrising: { command: "status", parse: parseLoosePlayerLines, commands: ["status", "announce", "announcerestart"] },
+  wardogs: { command: "status", parse: parseLoosePlayerLines, commands: ["status"] },
   // Valheim itself has no RCON listener. NiCon can talk to it only after a
   // server-side BepInEx plugin such as RCON Next or ValheimRcon exposes a
   // Source-RCON endpoint. Players do not need that plugin on their clients.
-  valheim: { label: "Valheim", protocol: "source", command: "players", parse: parseLoosePlayerLines,
+  valheim: { command: "players", parse: parseLoosePlayerLines,
     kick: function (p) { return "kick " + p.id; }, ban: function (p) { return "ban " + p.id; },
     commands: ["list", "players", "say", "kick", "ban", "save"] },
 });
@@ -461,28 +454,32 @@ var steamAssets = {
   },
 };
 
-// What an operator must enable before NiCon can connect. This is kept next
-// to the integration catalog so the supported-games overview cannot drift
-// away from the protocol that is actually selected for a game.
-//
-// native: the dedicated server ships the remote-console endpoint.
-// protocol: built in, but intentionally not labelled as classic RCON
-//           (BattlEye, Telnet, a REST API, or BattleBit WebRCON).
-// mod: no endpoint in the vanilla server; a server-only plugin is required.
-// provisional: implemented from published/community command formats but the
-//              exact transport still needs a live-server confirmation.
-var protocolIntegrations = ["sevendaystodie", "arma2", "arma3", "armareforger", "battlebit", "dayz", "palworld"];
-var provisionalIntegrations = ["eightythree", "hellletloose", "hellletloosevietnam", "risingstorm2", "soulmask", "vrising", "wardogs"];
-Object.keys(window.NICON_GAMES).forEach(function (key) {
-  window.NICON_GAMES[key].integrationType = "native";
-});
-protocolIntegrations.forEach(function (key) {
-  if (window.NICON_GAMES[key]) window.NICON_GAMES[key].integrationType = "protocol";
-});
-provisionalIntegrations.forEach(function (key) {
-  if (window.NICON_GAMES[key]) window.NICON_GAMES[key].integrationType = "provisional";
-});
-window.NICON_GAMES.valheim.integrationType = "mod";
+// Which games exist, their labels, RCON protocols, integration type
+// (native: the dedicated server ships the remote-console endpoint; protocol:
+// built in but not classic RCON — BattlEye, Telnet, a REST API, BattleBit
+// WebRCON; mod: a server-only plugin is required; provisional: implemented
+// from published/community command formats, transport still awaiting a
+// live-server confirmation), the "tested" flag and the name aliases come from
+// data/games.json via the generated docs/games-catalog.js — the same source
+// the API and relay use. This file adds what only the browser needs (parsers,
+// commands, artwork). A game present on one side only is a build error.
+(function () {
+  var catalog = window.NICON_GAME_CATALOG || [];
+  var seen = {};
+  catalog.forEach(function (entry) {
+    var game = window.NICON_GAMES[entry.key];
+    if (!game) throw new Error("games-catalog.js lists '" + entry.key + "' but games.js has no integration for it");
+    seen[entry.key] = true;
+    game.label = entry.label;
+    game.protocol = entry.protocol;
+    game.autoQuery = entry.autoQuery || "";
+    game.tested = !!entry.tested;
+    game.integrationType = entry.integration;
+  });
+  Object.keys(window.NICON_GAMES).forEach(function (key) {
+    if (!seen[key]) throw new Error("games.js defines '" + key + "' but data/games.json does not list it");
+  });
+})();
 Object.keys(steamAssets).forEach(function (key) {
   var game = window.NICON_GAMES[key];
   var asset = steamAssets[key];
@@ -559,52 +556,20 @@ Object.keys(nitradoBackgroundSlugs).forEach(function (key) {
 });
 
 // Best-effort mapping from a Nitrado "game" string (e.g. "Minecraft
-// Vanilla") to one of the keys above, for auto-selecting the parser. Most
-// keys already are the substring to look for; a few games' key names
-// don't literally appear in Nitrado's label (a space, an abbreviation, an
-// apostrophe), so those get an explicit alias list instead.
-window.NICON_GUESS_GAME_ALIASES = {
-  sevendaystodie: ["7 days to die", "7dtd", "seven days to die"],
-  eightythree: ["83"],
-  arksurvivalascended: ["ark: survival ascended", "ark survival ascended", "arksa"],
-  arksurvivalevolved: ["ark: survival evolved", "ark survival evolved", "arkse"],
-  arma2: ["arma 2", "arma2"],
-  arma3: ["arma 3", "arma3"],
-  armareforger: ["arma reforger", "reforger"],
-  atlas: ["atlas"],
-  battlebit: ["battlebit remastered", "battlebit"],
-  beyondthewire: ["beyond the wire"],
-  conanexiles: ["conan exiles"],
-  counterstrike2: ["counter-strike 2", "counter strike 2", "cs2"],
-  darkandlight: ["dark and light"],
-  dayz: ["dayz", "day z"],
-  gmod: ["garry's mod", "garrys mod", "gmod"],
-  hellletloosevietnam: ["hell let loose: vietnam", "hell let loose vietnam"],
-  hellletloose: ["hell let loose"],
-  insurgency: ["insurgency"],
-  mordhau: ["mordhau"],
-  palworld: ["palworld"],
-  projectzomboid: ["project zomboid"],
-  risingstorm2: ["rising storm 2", "rising storm ii"],
-  rust: ["rust"],
-  squad44: ["squad 44", "post scriptum"],
-  squad: ["squad"],
-  soulmask: ["soulmask"],
-  vrising: ["v rising", "vrising"],
-  wardogs: ["wardogs", "war dogs"],
-};
+// Vanilla") to one of the keys above, for auto-selecting the parser. The
+// aliases are the catalog's; the longest matching alias wins.
 window.NICON_GUESS_GAME = function (gameLabel) {
   if (!gameLabel) return "";
   var lower = gameLabel.toLowerCase();
-  var keys = Object.keys(window.NICON_GAMES);
+  var catalog = window.NICON_GAME_CATALOG;
   var bestKey = "";
   var bestLength = -1;
-  for (var i = 0; i < keys.length; i++) {
-    var aliases = window.NICON_GUESS_GAME_ALIASES[keys[i]] || [keys[i]];
-    for (var j = 0; j < aliases.length; j++) {
-      if (lower.indexOf(aliases[j]) !== -1 && aliases[j].length > bestLength) {
-        bestKey = keys[i];
-        bestLength = aliases[j].length;
+  for (var i = 0; i < catalog.length; i++) {
+    for (var j = 0; j < catalog[i].aliases.length; j++) {
+      var alias = catalog[i].aliases[j];
+      if (lower.indexOf(alias) !== -1 && alias.length > bestLength) {
+        bestKey = catalog[i].key;
+        bestLength = alias.length;
       }
     }
   }

@@ -221,6 +221,16 @@
   var editServerPort = document.getElementById("edit-server-port");
   var editServerProtocol = document.getElementById("edit-server-protocol");
   var editServerGame = document.getElementById("edit-server-game");
+  // The game choices come from the shared catalog (data/games.json), not from
+  // a hand-kept <option> list in index.html.
+  [manualGameSelect, editServerGame].forEach(function (select) {
+    window.NICON_GAME_CATALOG.forEach(function (entry) {
+      var option = document.createElement("option");
+      option.value = entry.label;
+      option.textContent = entry.label;
+      select.appendChild(option);
+    });
+  });
   var editServerQueryProtocol = document.getElementById("edit-server-query-protocol");
   var editServerQueryPort = document.getElementById("edit-server-query-port");
   var editServerQueryTestBtn = document.getElementById("edit-server-query-test-btn");
@@ -1081,21 +1091,16 @@
     return null;
   }
 
+  // Both come from the shared game catalog (data/games.json).
   function suggestedProtocolForGame(game) {
     var key = window.NICON_GUESS_GAME(game);
-    if (key === "sevendaystodie") return "telnet";
-    if (["arma2", "arma3", "armareforger", "dayz"].indexOf(key) !== -1) return "battleye";
-    if (key === "battlebit") return "battlebit";
-    if (key === "rust") return "webrcon";
-    if (key === "palworld") return "palworld_rest";
-    return "source";
+    return key ? window.NICON_GAMES[key].protocol : "source";
   }
 
   function suggestedQueryProtocolForGame(game) {
     var key = window.NICON_GUESS_GAME(game);
-    if (key === "minecraft") return "minecraft";
-    if (["rust", "arma2", "arma3", "armareforger", "dayz"].indexOf(key) !== -1) return "a2s";
-    return "auto";
+    var mode = key ? window.NICON_GAMES[key].autoQuery : "";
+    return mode === "a2s" || mode === "minecraft" ? mode : "auto";
   }
 
   function optionalPort(input) {
@@ -4447,17 +4452,16 @@
   // Driven by NICON_GAMES itself (docs/games.js) rather than a hand-kept
   // duplicate list here, so it can't drift when a game is added/removed.
 
-  // This badge deliberately means a real game-server verification, not
-  // merely a passing parser fixture or protocol mock. The detailed and
-  // more granular evidence lives in docs/compatibility.md.
-  var TESTED_GAMES = ["rust", "sevendaystodie", "dayz", "arksurvivalascended", "minecraft", "palworld"];
+  // The "tested" flag (data/games.json) deliberately means a real game-server
+  // verification, not merely a passing parser fixture or protocol mock. The
+  // detailed and more granular evidence lives in docs/compatibility.md.
 
   function renderSupportedGamesList() {
     supportedGamesList.innerHTML = "";
     supportedGamesCount.textContent = I18N.t("welcome.gamesCount", { count: Object.keys(window.NICON_GAMES).length });
     Object.keys(window.NICON_GAMES).forEach(function (key) {
-      var tested = TESTED_GAMES.indexOf(key) !== -1;
       var game = window.NICON_GAMES[key];
+      var tested = game.tested;
       var li = document.createElement("li");
       var integrationType = game.integrationType || "native";
       var integrationLabel = I18N.t("welcome.integration." + integrationType);

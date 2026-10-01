@@ -1,0 +1,331 @@
+{
+  "games": [
+    {
+      "key": "sevendaystodie",
+      "label": "7 Days to Die",
+      "protocol": "telnet",
+      "tested": true,
+      "integration": "protocol",
+      "aliases": [
+        "7 days to die",
+        "7dtd",
+        "seven days to die"
+      ]
+    },
+    {
+      "key": "eightythree",
+      "label": "83",
+      "protocol": "source",
+      "tested": false,
+      "integration": "provisional",
+      "aliases": [
+        "83"
+      ]
+    },
+    {
+      "key": "arksurvivalascended",
+      "label": "ARK: Survival Ascended",
+      "protocol": "source",
+      "autoQuery": "disabled",
+      "tested": true,
+      "integration": "native",
+      "aliases": [
+        "ark: survival ascended",
+        "ark survival ascended",
+        "arksa"
+      ]
+    },
+    {
+      "key": "arksurvivalevolved",
+      "label": "ARK: Survival Evolved",
+      "protocol": "source",
+      "tested": false,
+      "integration": "native",
+      "aliases": [
+        "ark: survival evolved",
+        "ark survival evolved",
+        "arkse"
+      ]
+    },
+    {
+      "key": "arma2",
+      "label": "Arma 2",
+      "protocol": "battleye",
+      "autoQuery": "a2s",
+      "tested": false,
+      "integration": "protocol",
+      "aliases": [
+        "arma 2",
+        "arma2"
+      ]
+    },
+    {
+      "key": "arma3",
+      "label": "Arma 3",
+      "protocol": "battleye",
+      "autoQuery": "a2s",
+      "tested": false,
+      "integration": "protocol",
+      "aliases": [
+        "arma 3",
+        "arma3"
+      ]
+    },
+    {
+      "key": "armareforger",
+      "label": "Arma Reforger",
+      "protocol": "battleye",
+      "autoQuery": "a2s",
+      "tested": false,
+      "integration": "protocol",
+      "aliases": [
+        "arma reforger",
+        "reforger"
+      ]
+    },
+    {
+      "key": "atlas",
+      "label": "ATLAS",
+      "protocol": "source",
+      "tested": false,
+      "integration": "native",
+      "aliases": [
+        "atlas"
+      ]
+    },
+    {
+      "key": "battlebit",
+      "label": "BattleBit Remastered",
+      "protocol": "battlebit",
+      "tested": false,
+      "integration": "protocol",
+      "aliases": [
+        "battlebit remastered",
+        "battlebit"
+      ]
+    },
+    {
+      "key": "beyondthewire",
+      "label": "Beyond the Wire",
+      "protocol": "source",
+      "tested": false,
+      "integration": "native",
+      "aliases": [
+        "beyond the wire"
+      ]
+    },
+    {
+      "key": "conanexiles",
+      "label": "Conan Exiles",
+      "protocol": "source",
+      "tested": false,
+      "integration": "native",
+      "aliases": [
+        "conan exiles"
+      ]
+    },
+    {
+      "key": "counterstrike2",
+      "label": "Counter-Strike 2",
+      "protocol": "source",
+      "tested": false,
+      "integration": "native",
+      "aliases": [
+        "counter-strike 2",
+        "counter strike 2",
+        "cs2"
+      ]
+    },
+    {
+      "key": "darkandlight",
+      "label": "Dark and Light",
+      "protocol": "source",
+      "tested": false,
+      "integration": "native",
+      "aliases": [
+        "dark and light"
+      ]
+    },
+    {
+      "key": "dayz",
+      "label": "DayZ",
+      "protocol": "battleye",
+      "autoQuery": "a2s",
+      "tested": true,
+      "integration": "protocol",
+      "aliases": [
+        "dayz",
+        "day z"
+      ]
+    },
+    {
+      "key": "gmod",
+      "label": "Garry's Mod",
+      "protocol": "source",
+      "tested": false,
+      "integration": "native",
+      "aliases": [
+        "garry's mod",
+        "garrys mod",
+        "gmod"
+      ]
+    },
+    {
+      "key": "hellletloose",
+      "label": "Hell Let Loose",
+      "protocol": "source",
+      "tested": false,
+      "integration": "provisional",
+      "aliases": [
+        "hell let loose"
+      ]
+    },
+    {
+      "key": "hellletloosevietnam",
+      "label": "Hell Let Loose: Vietnam",
+      "protocol": "source",
+      "tested": false,
+      "integration": "provisional",
+      "aliases": [
+        "hell let loose: vietnam",
+        "hell let loose vietnam"
+      ]
+    },
+    {
+      "key": "insurgency",
+      "label": "Insurgency",
+      "protocol": "source",
+      "tested": false,
+      "integration": "native",
+      "aliases": [
+        "insurgency"
+      ]
+    },
+    {
+      "key": "minecraft",
+      "label": "Minecraft",
+      "protocol": "source",
+      "autoQuery": "minecraft",
+      "tested": true,
+      "integration": "native",
+      "aliases": [
+        "minecraft"
+      ]
+    },
+    {
+      "key": "mordhau",
+      "label": "MORDHAU",
+      "protocol": "source",
+      "tested": false,
+      "integration": "native",
+      "aliases": [
+        "mordhau"
+      ]
+    },
+    {
+      "key": "palworld",
+      "label": "Palworld",
+      "protocol": "palworld_rest",
+      "tested": true,
+      "integration": "protocol",
+      "aliases": [
+        "palworld"
+      ]
+    },
+    {
+      "key": "projectzomboid",
+      "label": "Project Zomboid",
+      "protocol": "source",
+      "tested": false,
+      "integration": "native",
+      "aliases": [
+        "project zomboid"
+      ]
+    },
+    {
+      "key": "risingstorm2",
+      "label": "Rising Storm 2: Vietnam",
+      "protocol": "source",
+      "tested": false,
+      "integration": "provisional",
+      "aliases": [
+        "rising storm 2",
+        "rising storm ii"
+      ]
+    },
+    {
+      "key": "rust",
+      "label": "Rust",
+      "protocol": "webrcon",
+      "autoQuery": "a2s",
+      "tested": true,
+      "integration": "native",
+      "aliases": [
+        "rust"
+      ]
+    },
+    {
+      "key": "soulmask",
+      "label": "Soulmask",
+      "protocol": "source",
+      "tested": false,
+      "integration": "provisional",
+      "aliases": [
+        "soulmask"
+      ]
+    },
+    {
+      "key": "squad",
+      "label": "Squad",
+      "protocol": "source",
+      "tested": false,
+      "integration": "native",
+      "aliases": [
+        "squad"
+      ]
+    },
+    {
+      "key": "squad44",
+      "label": "Squad 44",
+      "protocol": "source",
+      "tested": false,
+      "integration": "native",
+      "aliases": [
+        "squad 44",
+        "post scriptum"
+      ]
+    },
+    {
+      "key": "vrising",
+      "label": "V Rising",
+      "protocol": "source",
+      "tested": false,
+      "integration": "provisional",
+      "aliases": [
+        "v rising",
+        "vrising"
+      ]
+    },
+    {
+      "key": "valheim",
+      "label": "Valheim",
+      "protocol": "source",
+      "tested": false,
+      "integration": "mod",
+      "aliases": [
+        "valheim"
+      ]
+    },
+    {
+      "key": "wardogs",
+      "label": "WARDOGS",
+      "protocol": "source",
+      "tested": false,
+      "integration": "provisional",
+      "aliases": [
+        "wardogs",
+        "war dogs"
+      ]
+    }
+  ]
+}

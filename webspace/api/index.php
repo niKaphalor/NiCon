@@ -11,6 +11,7 @@ require_once __DIR__ . '/../lib/http.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/ratelimit.php';
 require_once __DIR__ . '/../lib/audit.php';
+require_once __DIR__ . '/../lib/games_catalog.php';
 require_once __DIR__ . '/../handlers/login.php';
 require_once __DIR__ . '/../handlers/register.php';
 require_once __DIR__ . '/../handlers/reset_password.php';

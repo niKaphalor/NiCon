@@ -277,6 +277,18 @@ test("login, manual game selection, profile editing, and Nitrado sync", async ({
   await page.locator("#add-server-btn").click();
   await page.locator('[data-tab="manual"]').click();
   await expect(page.locator("#manual-game option")).toHaveCount(catalogSize + 1); // + the "Generic (no parsing)" entry
+  // One catalog (data/games.json) feeds the selects, the protocol suggestions
+  // and the name matching, and games.js must describe exactly the same games.
+  const catalog = await page.evaluate(() => ({
+    labels: window.NICON_GAME_CATALOG.map((g) => g.label),
+    keys: window.NICON_GAME_CATALOG.map((g) => g.key).sort(),
+    games: Object.keys(window.NICON_GAMES).sort(),
+    options: Array.from(document.querySelectorAll("#manual-game option")).map((o) => o.value).filter(Boolean),
+    guessed: ["Hell Let Loose: Vietnam", "Squad 44 EU", "Minecraft Vanilla"].map((n) => window.NICON_GUESS_GAME(n)),
+  }));
+  expect(catalog.games).toEqual(catalog.keys);
+  expect(catalog.options).toEqual(catalog.labels);
+  expect(catalog.guessed).toEqual(["hellletloosevietnam", "squad44", "minecraft"]);
   await expect(page.locator("#manual-game")).toContainText("Counter-Strike 2");
   await expect(page.locator("#manual-game")).toContainText("Minecraft");
   await page.locator("#manual-game").selectOption("Rust");

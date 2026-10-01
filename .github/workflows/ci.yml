@@ -39,6 +39,11 @@ jobs:
           [ -e fonts ] && { echo "::error file=fonts::fonts/ belongs in docs/fonts/"; status=1; }
           exit $status
 
+      # docs/games-catalog.js, webspace/lib/games_catalog.php and
+      # internal/relay/games_catalog.go are generated from data/games.json.
+      - name: Generated game catalog files are up to date
+        run: python3 scripts/build_games.py --check
+
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           # Bumped from 1.22: govulncheck was flagging ~30 findings every
@@ -145,6 +150,9 @@ jobs:
       # internal/store/crypto_test.go too). No database needed.
       - name: PHP crypto test vectors
         run: php tests/php/crypto_test.php
+
+      - name: PHP game catalog
+        run: php tests/php/games_catalog_test.php
 
       # The whole API suite runs once per storage format for RCON passwords
       # and Nitrado tokens: the legacy format, format v2, and v2 after a key
