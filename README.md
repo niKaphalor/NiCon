@@ -249,20 +249,26 @@ built from this repo) falls back to reading
 `NICON_ALLOWED_ORIGINS` environment variables instead — meant for local
 testing with PHP's built-in server (`php -S`, where env vars are simpler
 to set than a file), not a substitute for `config.local.php` on ordinary
-shared hosting. `schema.sql` covers the same tables
-`internal/store` creates automatically, plus a few PHP-only additions
-(`rate_limits`, `notifications`, `command_templates`, `moderation_rules`,
-`audit_log`, the short-lived shared `nitrado_cache`, and a
-`nitrado_token_enc` column on `users`) that the Go
-relay's own auto-migration doesn't know about and never creates. Run it
-once regardless of which side connects to this
-database first — every statement in it is safe to run again later,
-including against a `users`/`sessions`/`servers` set the Go relay already
-created (it won't touch existing data, only add what's missing). Skipping
-it because "the relay already migrated the schema" leaves the PHP-only
-pieces missing, and register/reset-password/contact (needs
-`rate_limits`), notifications, and Nitrado sync/account (needs
-`nitrado_token_enc`) then fail with a database error until it's run.
+shared hosting.
+
+**The database schema** is a list of numbered migrations,
+`internal/store/migrations/NNNN_name.sql` — the single description of it. The
+relay applies the missing ones itself when it starts and records them in the
+`schema_migrations` table. A PHP-only deployment (shared webspace, phpMyAdmin)
+has no such runner, so `webspace/schema.sql` is **generated** from the same
+files (`python3 scripts/build_schema.py`; CI fails if it is stale): run the
+whole file after a deploy that changes the database. It is safe to run at any
+time and in any state — every statement is idempotent and an existing database
+only gains what is missing, never loses data. Skipping it leaves the API
+failing feature by feature (missing `rate_limits`, `nitrado_token_enc`,
+`use_tls`, ...); `GET /api/readyz` on the API and `GET /readyz` on the relay
+answer in one request whether the database has every migration that build
+needs (503 and the missing version otherwise) — check them after each deploy.
+
+*Changing the schema:* add the next numbered file (`0002_<what>.sql`), never
+edit a shipped one, use only idempotent statements (`CREATE TABLE IF NOT
+EXISTS`, `ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, `INSERT
+IGNORE` — a test enforces this), and run `python3 scripts/build_schema.py`.
 
 **Already had accounts in a local database from before this split?**
 Either path works:
@@ -927,7 +933,8 @@ language.
 
 ## Architecture
 
-- `internal/store` — MariaDB persistence: core schema auto-migration,
+- `internal/store` — MariaDB persistence: the numbered schema migrations
+  (`migrations/`, applied at startup),
   per-user CRUD for servers, and AES-256-GCM encryption of RCON passwords
   at rest. Still used by the relay's CLI subcommands (`adduser`,
   `gen-recovery-code`, `setadmin`, `genkey`) and by `internal/relay`'s

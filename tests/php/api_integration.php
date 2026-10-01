@@ -146,6 +146,17 @@ try {
     [$status] = request_json($base, 'GET', '/api/healthz');
     assert_test($status === 200, 'health endpoint must return 200');
 
+    // /readyz: is the database ready for this version of the API?
+    require_once $root . '/webspace/lib/schema_version.php';
+    [$status, $ready] = request_json($base, 'GET', '/api/readyz');
+    assert_test($status === 200 && ($ready['schema'] ?? 0) >= NICON_EXPECTED_SCHEMA_VERSION, 'readyz must be ok after the schema was applied');
+    $pdo->exec('DELETE FROM schema_migrations WHERE version = ' . NICON_EXPECTED_SCHEMA_VERSION);
+    [$status, $notReady] = request_json($base, 'GET', '/api/readyz');
+    assert_test($status === 503 && str_contains($notReady['error'] ?? '', 'schema.sql'), 'readyz must say 503 and what to do when a migration is missing');
+    $pdo->exec("INSERT IGNORE INTO schema_migrations (version, name) VALUES (" . NICON_EXPECTED_SCHEMA_VERSION . ", 'baseline')");
+    [$status] = request_json($base, 'GET', '/api/readyz');
+    assert_test($status === 200, 'readyz recovers once the migration is recorded again');
+
     [$status, $aliceReg] = request_json($base, 'POST', '/api/register', [
         'username' => $alice,
         'password' => 'integration-password',

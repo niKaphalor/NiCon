@@ -89,6 +89,11 @@ jobs:
           echo "MariaDB never became ready" >&2
           exit 1
 
+      # webspace/schema.sql and webspace/lib/schema_version.php are generated
+      # from internal/store/migrations/ — never edited by hand.
+      - name: Generated schema files are up to date
+        run: python3 scripts/build_schema.py --check
+
       - name: Build
         run: go build ./...
 

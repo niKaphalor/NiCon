@@ -11,6 +11,7 @@ require_once __DIR__ . '/../lib/http.php';
 require_once __DIR__ . '/../lib/auth.php';
 require_once __DIR__ . '/../lib/ratelimit.php';
 require_once __DIR__ . '/../lib/audit.php';
+require_once __DIR__ . '/../lib/schema_version.php';
 require_once __DIR__ . '/../handlers/login.php';
 require_once __DIR__ . '/../handlers/register.php';
 require_once __DIR__ . '/../handlers/reset_password.php';
@@ -30,6 +31,24 @@ function nicon_handle_healthz(): void
 {
     header('Content-Type: text/plain');
     echo 'ok';
+}
+
+// nicon_handle_readyz: is the database ready for THIS version of the API? A
+// deploy that skipped running webspace/schema.sql shows up here at once as
+// 503 and the missing version, instead of as errors in single features later.
+function nicon_handle_readyz(): void
+{
+    $found = 0;
+    try {
+        $found = (int) nicon_db()->query('SELECT COALESCE(MAX(version), 0) FROM schema_migrations')->fetchColumn();
+    } catch (Throwable $e) {
+        // No schema_migrations table: the schema was never (re)applied.
+    }
+    if ($found < NICON_EXPECTED_SCHEMA_VERSION) {
+        nicon_send_error("database schema is outdated (has $found, needs " . NICON_EXPECTED_SCHEMA_VERSION . ') — run webspace/schema.sql', 503);
+        return;
+    }
+    nicon_send_json(['ok' => true, 'schema' => $found]);
 }
 
 // Every request — including OPTIONS preflight, which nicon_cors() answers
@@ -53,6 +72,7 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 // [method, path regex, auth level ('none'|'user'|'admin'), handler]
 $routes = [
     ['GET', '#^/healthz$#', 'none', 'nicon_handle_healthz'],
+    ['GET', '#^/readyz$#', 'none', 'nicon_handle_readyz'],
 
     ['POST', '#^/login$#', 'none', 'nicon_handle_login'],
     ['POST', '#^/logout$#', 'none', 'nicon_handle_logout'],
