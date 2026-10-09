@@ -53,8 +53,13 @@ jobs:
           # current patch release those findings go away on their own, so
           # the check starts actually meaning something again. go.mod's own
           # `go 1.23` directive is the floor; setup-go still resolves the
-          # latest 1.26.x patch here.
+          # latest 1.26.x patch here. check-latest is what makes that true:
+          # without it setup-go takes whatever 1.26.x the runner image has
+          # cached, which can lag behind a stdlib security fix (1.26.9 fixed
+          # the net/http, crypto/tls and mime/multipart findings) and turn
+          # govulncheck red on code that has no problem.
           go-version: "1.26"
+          check-latest: true
 
       # No Docker health-cmd on the service above: mariadb's own
       # mysqladmin-based health check (run via `docker exec` inside the
