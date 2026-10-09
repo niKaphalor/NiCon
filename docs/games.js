@@ -373,6 +373,12 @@ Object.assign(window.NICON_GAMES, {
   conanexiles: { command: "listplayers", parse: parseLoosePlayerLines, commands: ["listplayers", "broadcast", "kick", "ban"] },
   counterstrike2: { command: "status", parse: parseLoosePlayerLines, commands: ["status", "say", "kickid", "banid", "changelevel"] },
   darkandlight: { command: "ListPlayers", parse: parseLoosePlayerLines, commands: ["ListPlayers", "Broadcast", "SaveWorld", "DoExit"] },
+  // Hytale's dedicated server has no built-in RCON; a server-side plugin
+  // exposes a Source-RCON endpoint (integration "mod"). The command names
+  // below are assumptions, not yet checked against a live server with
+  // such a plugin. No public query (autoQuery "disabled"): Hytale doesn't
+  // speak A2S.
+  hytale: { command: "who", parse: parseLoosePlayerLines, commands: ["who", "say", "kick", "ban"] },
   hellletloose: { command: "get playerids", parse: parseLoosePlayerLines, commands: ["get playerids", "kick", "punish", "broadcast"] },
   hellletloosevietnam: { command: "get playerids", parse: parseLoosePlayerLines, commands: ["get playerids", "kick", "punish", "broadcast"] },
   insurgency: { command: "status", parse: parseLoosePlayerLines, commands: ["status", "say", "kickid", "banid"] },
@@ -510,6 +516,16 @@ window.NICON_GAMES.minecraft.logoImage = "https://upload.wikimedia.org/wikipedia
 // isn't implemented here at all, so branding this with Bedrock's own art
 // would misrepresent what's actually being managed.
 window.NICON_GAMES.minecraft.headerLogoImage = window.NICON_GAMES.minecraft.logoImage;
+
+// Hytale isn't on Steam either, so — like Minecraft above — its art comes
+// straight from the official site: the hero background hytale.com itself
+// uses (a dark-faded key art, ~190 KB) and the official wordmark, which
+// the background doesn't contain, so it is overlaid as logoImage/
+// headerLogoImage. Hotlinked, never stored in this repository.
+window.NICON_GAMES.hytale.headerImage = "https://hytale.com/images/backgrounds/content-upper.webp";
+window.NICON_GAMES.hytale.backgroundImage = window.NICON_GAMES.hytale.headerImage;
+window.NICON_GAMES.hytale.logoImage = "https://hytale.com/images/logo.webp";
+window.NICON_GAMES.hytale.headerLogoImage = window.NICON_GAMES.hytale.logoImage;
 
 // Nitrado's own web interface bundles a per-game header background and a
 // matching wordmark logo, hotlinked here the same way Steam's art is — for

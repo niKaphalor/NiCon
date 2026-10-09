@@ -38,6 +38,7 @@ Last matrix review: **2026-09-30**.
 | Garry's Mod | Source RCON | `status`, structured Source parser | Pending |
 | Hell Let Loose | Provisional Source transport | `get playerids` | Pending |
 | Hell Let Loose: Vietnam | Provisional Source transport | `get playerids` | Pending |
+| Hytale | Source RCON via a server-side plugin (no public query) | `who`, conservative line parser | Pending — dedicated server has no built-in RCON |
 | Insurgency | Source RCON | `status` | Pending |
 | Minecraft | Source RCON | `list`, dedicated parser | ✅ Passed — user-confirmed live on 2026-09-29 |
 | MORDHAU | Source RCON | `playerlist` | Pending |
@@ -58,8 +59,8 @@ until tested against a disposable server.
 
 The UI separately marks whether a game works with the dedicated server as
 shipped, uses another built-in administration protocol, needs a server-side
-mod, or still has a provisional transport. Valheim is the only current entry
-that requires a server mod; the player clients do not need that plugin.
+mod, or still has a provisional transport. Valheim and Hytale are the current
+entries that require a server mod; the player clients do not need that plugin.
 
 ## Health and API coverage
 

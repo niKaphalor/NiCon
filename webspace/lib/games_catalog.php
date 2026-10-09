@@ -21,6 +21,7 @@ const NICON_GAME_CATALOG = [
     ['Garry\'s Mod', 'source', ['garry\'s mod', 'garrys mod', 'gmod']],
     ['Hell Let Loose', 'source', ['hell let loose']],
     ['Hell Let Loose: Vietnam', 'source', ['hell let loose: vietnam', 'hell let loose vietnam']],
+    ['Hytale', 'source', ['hytale']],
     ['Insurgency', 'source', ['insurgency']],
     ['Minecraft', 'source', ['minecraft']],
     ['MORDHAU', 'source', ['mordhau']],

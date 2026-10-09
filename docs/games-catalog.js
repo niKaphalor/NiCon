@@ -192,6 +192,17 @@ window.NICON_GAME_CATALOG = [
     ]
   },
   {
+    "key": "hytale",
+    "label": "Hytale",
+    "protocol": "source",
+    "autoQuery": "disabled",
+    "tested": false,
+    "integration": "mod",
+    "aliases": [
+      "hytale"
+    ]
+  },
+  {
     "key": "insurgency",
     "label": "Insurgency",
     "protocol": "source",

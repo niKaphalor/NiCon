@@ -11,6 +11,7 @@ var gameAutoQuery = map[string]string{
 	"Arma 3":                 "a2s",
 	"Arma Reforger":          "a2s",
 	"DayZ":                   "a2s",
+	"Hytale":                 "disabled",
 	"Minecraft":              "minecraft",
 	"Rust":                   "a2s",
 }
