@@ -1,6 +1,9 @@
 package relay
 
 import (
+	"bufio"
+	"net"
+	"strings"
 	"testing"
 
 	"github.com/niKaphalor/NiCon/internal/store"
@@ -30,6 +33,7 @@ func TestEffectivePublicQueryProtocol(t *testing.T) {
 		{"Rust auto opts into A2S despite webrcon protocol", store.Server{Protocol: "webrcon", Game: "Rust", QueryProtocol: "auto"}, "a2s"},
 		{"Arma 3 auto opts into A2S despite battleye protocol", store.Server{Protocol: "battleye", Game: "Arma 3", QueryProtocol: "auto"}, "a2s"},
 		{"DayZ auto opts into A2S despite battleye protocol", store.Server{Protocol: "battleye", Game: "DayZ", QueryProtocol: "auto"}, "a2s"},
+		{"7 Days to Die auto opts into A2S despite telnet protocol", store.Server{Protocol: "telnet", Game: "7 Days to Die", QueryProtocol: "auto"}, "a2s"},
 		{"a non-Source, non-listed game still doesn't guess", store.Server{Protocol: "battlebit", Game: "BattleBit Remastered", QueryProtocol: "auto"}, "disabled"},
 	}
 	for _, tt := range tests {
@@ -38,5 +42,37 @@ func TestEffectivePublicQueryProtocol(t *testing.T) {
 				t.Fatalf("EffectivePublicQueryProtocol() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// A Minecraft server with enable-query=false (the default) must still report
+// player counts, via Server List Ping on the same port number.
+func TestPublicInfoCheckMinecraftFallsBackToPing(t *testing.T) {
+	port := fakePingServer(t, func(c net.Conn) {
+		bufio.NewReader(c).Peek(1)
+		c.Write(statusPacket(`{"players":{"max":10,"online":3}}`))
+	})
+	SetTargetPolicy(TargetPolicy{})
+	qp := port
+	online, players, maxPlayers, err := PublicInfoCheck(store.Server{
+		Host: "127.0.0.1", Port: 25575, Game: "Minecraft", Protocol: "source", QueryProtocol: "auto", QueryPort: &qp,
+	})
+	if err != nil || !online || players == nil || *players != 3 || *maxPlayers != 10 {
+		t.Fatalf("PublicInfoCheck = %v %v %v %v", online, players, maxPlayers, err)
+	}
+}
+
+// If neither Query nor Ping answers, the original Query error is reported and
+// the server counts as offline — exactly as before the fallback existed.
+func TestPublicInfoCheckMinecraftDownStaysOffline(t *testing.T) {
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	SetTargetPolicy(TargetPolicy{})
+	online, players, _, err := PublicInfoCheck(store.Server{
+		Host: "127.0.0.1", Port: port, Game: "Minecraft", Protocol: "source", QueryProtocol: "auto",
+	})
+	if online || players != nil || err == nil || !strings.HasPrefix(err.Error(), "minecraft query:") {
+		t.Fatalf("PublicInfoCheck = %v %v %v", online, players, err)
 	}
 }

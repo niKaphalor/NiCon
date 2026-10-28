@@ -537,7 +537,11 @@ func (s *Store) ListServersForPublicInfoCheck(ctx context.Context) ([]Server, er
 		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id, use_tls
 		 FROM servers
 		 WHERE query_protocol IN ('a2s', 'minecraft')
-		    OR (query_protocol = 'auto' AND (protocol = 'source' OR game = 'Minecraft'))`)
+		    OR (query_protocol = 'auto' AND (protocol = 'source' OR game = 'Minecraft'))
+		    -- 7 Days to Die answers A2S on its game port, but its RCON port is the
+		    -- Telnet port: "auto" is only probed once a query port is stored, or
+		    -- the probe would hit Telnet and record a false offline sample.
+		    OR (query_protocol = 'auto' AND game = '7 Days to Die' AND query_port IS NOT NULL)`)
 	if err != nil {
 		return nil, err
 	}

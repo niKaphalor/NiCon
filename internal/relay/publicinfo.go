@@ -31,7 +31,17 @@ func PublicInfoCheck(srv store.Server) (online bool, players, maxPlayers *int, e
 	if queryProtocol == "minecraft" {
 		stat, err := QueryMinecraftStat(srv.Host, queryPort)
 		if err != nil {
-			return false, nil, nil, err
+			// enable-query is off by default. Fall back to the Server List
+			// Ping, which every server answers, on the same port number
+			// (query.port defaults to server-port, so this is the game port
+			// unless the operator split them). If that fails too, report the
+			// original Query error: nothing changes for a server that is down.
+			ping, pingErr := QueryMinecraftPing(srv.Host, queryPort)
+			if pingErr != nil {
+				return false, nil, nil, err
+			}
+			p, m := ping.Players, ping.MaxPlayers
+			return true, &p, &m, nil
 		}
 		p, m := stat.Players, stat.MaxPlayers
 		return true, &p, &m, nil
