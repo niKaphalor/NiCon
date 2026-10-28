@@ -546,6 +546,13 @@ needed (Steam's server browser depends on it being open); Minecraft
 answers its own, unrelated GameSpy4-derived Query protocol instead
 (`internal/relay/minecraft_query.go`), which a server operator has to
 opt into (`enable-query=true` in `server.properties` — off by default).
+Without it, NiCon falls back to Minecraft Java's Server List Ping over TCP
+(`internal/relay/minecraft_ping.go`) on the *same port number* as the query
+port, so set the query port to the game's TCP port (`server-port`, default
+25565) to get player counts without enabling Query. 7 Days to Die answers A2S
+on its game port too; since its RCON port is the Telnet port, `auto` only
+probes it once a **query port** (the game port) is stored — Nitrado sync
+imports it when Nitrado reports one.
 Either way, a successful probe's player counts land in the same
 `server_health_samples` table (`source` `"a2s"`/`"mcquery"`) the Cloud
 API already aggregates into `players_average`/`players_peak` for the

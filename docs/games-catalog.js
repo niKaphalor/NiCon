@@ -4,6 +4,7 @@ window.NICON_GAME_CATALOG = [
     "key": "sevendaystodie",
     "label": "7 Days to Die",
     "protocol": "telnet",
+    "autoQuery": "a2s",
     "tested": true,
     "integration": "protocol",
     "aliases": [

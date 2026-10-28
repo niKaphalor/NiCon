@@ -6,6 +6,7 @@ package relay
 // game is listed here; any other game uses A2S if its RCON protocol is
 // "source" and no public query otherwise (EffectivePublicQueryProtocol).
 var gameAutoQuery = map[string]string{
+	"7 Days to Die":          "a2s",
 	"ARK: Survival Ascended": "disabled",
 	"Arma 2":                 "a2s",
 	"Arma 3":                 "a2s",
