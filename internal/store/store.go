@@ -526,22 +526,19 @@ func (s *Store) ListServersForHealthCheck(ctx context.Context) ([]Server, error)
 }
 
 // ListServersForPublicInfoCheck returns every server (across every user)
-// whose independent query configuration supports a passive,
-// unauthenticated status query (see internal/relay's
-// QueryA2SInfo/QueryMinecraftStat and main.go's public-info loop).
+// that might support a passive status query: everything that has not
+// explicitly turned its query off. This is deliberately a superset — which of
+// these are actually probed (a game's auto mode, whether a query port is
+// needed, Palworld's password) is decided in Go by relay.PublicQueryDue,
+// next to the code that resolves "auto", so the rule exists in one place.
 // Unlike ListServersForHealthCheck, a stored RCON password is irrelevant
-// here: the whole point is populating player/uptime history for servers
-// that don't have one yet.
+// for most of them: the whole point is populating player/uptime history for
+// servers that don't have one yet.
 func (s *Store) ListServersForPublicInfoCheck(ctx context.Context) ([]Server, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, user_id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source, nitrado_service_id, use_tls
 		 FROM servers
-		 WHERE query_protocol IN ('a2s', 'minecraft')
-		    OR (query_protocol = 'auto' AND (protocol = 'source' OR game = 'Minecraft'))
-		    -- 7 Days to Die answers A2S on its game port, but its RCON port is the
-		    -- Telnet port: "auto" is only probed once a query port is stored, or
-		    -- the probe would hit Telnet and record a false offline sample.
-		    OR (query_protocol = 'auto' AND game = '7 Days to Die' AND query_port IS NOT NULL)`)
+		 WHERE query_protocol <> 'disabled'`)
 	if err != nil {
 		return nil, err
 	}
@@ -558,21 +555,53 @@ func (s *Store) ListServersForPublicInfoCheck(ctx context.Context) ([]Server, er
 	return out, rows.Err()
 }
 
-// UpdateServerPlayerSample records one passive, unauthenticated status
-// probe (A2S or Minecraft Query — see internal/relay's PublicInfoCheck and
-// main.go's public-info loop) into the same history table
-// UpdateServerHealth uses, under its own source label so a failed probe
-// can't be confused with a real RCON health-check failure. Unlike
-// UpdateServerHealth, this never touches servers.health_* — that column
-// set means "the last real RCON connect attempt," which sits alongside,
-// not underneath, "is this server's public query port reachable."
-// playerCurrent/playerMax are nil (stored as SQL NULL) when online is
-// false, matching UpdateServerHealth's own handling of a failed check.
-func (s *Store) UpdateServerPlayerSample(ctx context.Context, serverID int64, online bool, playerCurrent, playerMax *int, source string) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO server_health_samples (server_id, online, player_current, player_max, source) VALUES (?, ?, ?, ?, ?)`,
-		serverID, online, playerCurrent, playerMax, source)
-	return err
+// PublicQueryRecord is one passive status probe (see internal/relay's
+// QueryPublicInfo and main.go's public-info loop).
+type PublicQueryRecord struct {
+	Online     bool
+	Players    *int // nil (SQL NULL) when offline, like UpdateServerHealth
+	MaxPlayers *int
+	LatencyMs  *int   // round trip of the query itself, not of an RCON connect
+	Source     string // "a2s", "mcquery", "bedrock", "palworld"
+	ErrorKind  string // "" on success; see relay.QueryErr*
+	InfoJSON   string // servers.query_info; "" keeps the previous document
+}
+
+// RecordPublicQuery stores one probe in the same history table
+// UpdateServerHealth uses, under its own source label so a failed probe can't
+// be confused with a real RCON health-check failure, and refreshes the
+// server's query_* columns. Unlike UpdateServerHealth this never touches
+// servers.health_* — that column set means "the last real RCON connect
+// attempt," which sits alongside, not underneath, "is this server's public
+// query port reachable."
+func (s *Store) RecordPublicQuery(ctx context.Context, serverID int64, rec PublicQueryRecord) error {
+	var latency, errorKind interface{}
+	if rec.Online && rec.LatencyMs != nil {
+		latency = *rec.LatencyMs
+	}
+	if rec.ErrorKind != "" {
+		errorKind = rec.ErrorKind
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO server_health_samples (server_id, online, latency_ms, player_current, player_max, source, error_kind)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		serverID, rec.Online, latency, rec.Players, rec.MaxPlayers, rec.Source, errorKind); err != nil {
+		return err
+	}
+	// A failed probe keeps the last known details (name, map, version): they
+	// are still the best description of the server, and query_checked_at plus
+	// query_error say how stale they are.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE servers SET query_checked_at = NOW(), query_error = ?, query_info = COALESCE(NULLIF(?, ''), query_info) WHERE id = ?`,
+		errorKind, rec.InfoJSON, serverID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // RecordRCONAudit persists an operator-visible command outcome. Output is

@@ -349,3 +349,53 @@ func TestWebSocketRejectsAnotherUsersServer(t *testing.T) {
 		t.Fatalf("ownership response = %+v", response)
 	}
 }
+
+// "query_players" answers with the names the public query reports, needs no
+// saved server, and reports unsupported query types as a normal failure.
+func TestWebSocketQueryPlayers(t *testing.T) {
+	st := relayE2EStore(t)
+	_, token := relayE2EAccount(t, st)
+	SetTargetPolicy(TargetPolicy{})
+
+	udpPort := newFakeUDPServer(t, func(req []byte) []byte {
+		if string(req[5:9]) == "\xff\xff\xff\xff" {
+			return []byte{0xFF, 0xFF, 0xFF, 0xFF, a2sChallengeHeader, 5, 6, 7, 8}
+		}
+		return append([]byte{0xFF, 0xFF, 0xFF, 0xFF}, a2sPlayerBody([]A2SPlayer{{Name: "Alice", Score: 9, DurationSec: 125}})...)
+	})
+
+	rel := New(log.New(io.Discard, "", 0), []string{testOrigin}, st, auth.New(st))
+	httpServer := httptest.NewServer(rel.Routes())
+	defer httpServer.Close()
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http") + "/ws/rcon"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, http.Header{"Origin": []string{testOrigin}})
+	if err != nil {
+		t.Fatalf("dial relay WebSocket: %v", err)
+	}
+	defer conn.Close()
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	conn.WriteJSON(wsMessage{Type: "auth", Token: token})
+	var resp wsMessage
+	if err := conn.ReadJSON(&resp); err != nil || resp.Type != "authenticated" {
+		t.Fatalf("auth response = %+v, err=%v", resp, err)
+	}
+
+	conn.WriteJSON(wsMessage{Type: "query_players", Host: "127.0.0.1", Port: udpPort, QueryProtocol: "a2s"})
+	resp = wsMessage{}
+	if err := conn.ReadJSON(&resp); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if resp.Type != "query_players_result" || !resp.OK || len(resp.PlayerList) != 1 || resp.PlayerList[0].Name != "Alice" ||
+		resp.PlayerList[0].Score == nil || *resp.PlayerList[0].Score != 9 || *resp.PlayerList[0].DurationSec != 125 {
+		t.Fatalf("query_players response = %+v", resp)
+	}
+
+	conn.WriteJSON(wsMessage{Type: "query_players", Host: "127.0.0.1", Port: udpPort, QueryProtocol: "bedrock"})
+	resp = wsMessage{}
+	if err := conn.ReadJSON(&resp); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if resp.Type != "query_players_result" || resp.OK || !strings.Contains(resp.Message, "player names") {
+		t.Fatalf("unsupported query type response = %+v", resp)
+	}
+}

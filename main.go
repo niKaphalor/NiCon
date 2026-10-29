@@ -237,27 +237,43 @@ func runServer() {
 		}
 	}()
 
-	// Passive public-info sampling: an unauthenticated A2S/Minecraft-Query
-	// probe against every Source-RCON-protocol server, independent of the
-	// RCON health check above and of whether a password is even stored
-	// yet (see internal/relay's PublicInfoCheck). Results land in
-	// server_health_samples (source "a2s"/"mcquery") for the same
-	// players_average/players_peak history the Cloud API already serves
-	// for Nitrado-synced servers (webspace/handlers/servers.php) — this
-	// just gives every other server the same live data.
+	// Passive public-info sampling: an unauthenticated status probe (A2S,
+	// Minecraft Query/Ping, Bedrock; Palworld's REST API with its stored admin
+	// password) against every server whose public query is due — see
+	// relay.PublicQueryDue — independent of the RCON health check above and of
+	// whether a password is even stored yet (see internal/relay's
+	// QueryPublicInfo). Results land in server_health_samples (source
+	// "a2s"/"mcquery"/"bedrock"/"palworld", with the query's round-trip time
+	// and, for a failure, its kind) for the same players_average/players_peak
+	// history the Cloud API already serves for Nitrado-synced servers
+	// (webspace/handlers/servers.php), and the latest server details (name,
+	// map, version, ...) go to servers.query_info.
 	const publicInfoCheckInterval = 5 * time.Minute
-	publicInfoScheduler := newProbeScheduler("public info check", publicInfoCheckInterval, st.ListServersForPublicInfoCheck,
+	listPublicInfoServers := func(ctx context.Context) ([]store.Server, error) {
+		all, err := st.ListServersForPublicInfoCheck(ctx)
+		if err != nil {
+			return nil, err
+		}
+		due := all[:0]
+		for _, srv := range all {
+			if relay.PublicQueryDue(srv) {
+				due = append(due, srv)
+			}
+		}
+		return due, nil
+	}
+	publicInfoScheduler := newProbeScheduler("public info check", publicInfoCheckInterval, listPublicInfoServers,
 		func(ctx context.Context, srv store.Server) bool {
-			online, players, maxPlayers, _ := relay.PublicInfoCheck(srv)
-			source := "a2s"
-			if relay.EffectivePublicQueryProtocol(srv) == "minecraft" {
-				source = "mcquery"
+			res := relay.QueryPublicInfo(srv)
+			if err := st.RecordPublicQuery(ctx, srv.ID, store.PublicQueryRecord{
+				Online: res.Online, Players: res.Players, MaxPlayers: res.MaxPlayers, LatencyMs: res.LatencyMs,
+				Source: res.Source, ErrorKind: res.ErrorKind, InfoJSON: res.InfoJSON(),
+			}); err != nil {
+				logger.Printf("public info check: record server %d: %v", srv.ID, err)
 			}
-			if err := st.UpdateServerPlayerSample(ctx, srv.ID, online, players, maxPlayers, source); err != nil {
-				logger.Printf("public info check: update server %d: %v", srv.ID, err)
-			}
-			return online
+			return res.Online
 		}, outboundProbeSem, logger)
+	publicInfoScheduler.fastRetry, publicInfoScheduler.fastRetries = time.Minute, 2
 	go publicInfoScheduler.Run(rootCtx)
 
 	stop := make(chan os.Signal, 1)

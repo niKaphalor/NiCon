@@ -55,6 +55,9 @@ type wsMessage struct {
 	OK            bool   `json:"ok,omitempty"`
 	Players       *int   `json:"players,omitempty"`
 	PlayersMax    *int   `json:"players_max,omitempty"`
+	// PlayerList answers "query_players" with the names the public query
+	// reports (see PublicPlayers).
+	PlayerList []PublicPlayer `json:"player_list,omitempty"`
 
 	// Audit metadata describes the UI path that emitted a command. The relay
 	// validates and persists it together with the authenticated user/server;
@@ -368,6 +371,30 @@ func (rel *Relay) handleWS(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			_ = writeJSON(wsMessage{Type: "query_test_result", OK: true, Players: players, PlayersMax: maxPlayers})
+
+		case "query_players":
+			// On-demand list of who is online, through the public query (no
+			// RCON password needed). Shares query_test's limits: it is the
+			// same kind of caller-supplied outbound probe.
+			if !rel.queryTestAllowed(userID) {
+				_ = writeJSON(wsMessage{Type: "query_players_result", OK: false, Message: "too many status queries — try again shortly"})
+				continue
+			}
+			releaseProbe, busyErr := acquireProbeSlot()
+			if busyErr != nil {
+				_ = writeJSON(wsMessage{Type: "query_players_result", OK: false, Message: busyErr.Error()})
+				continue
+			}
+			queryPort := msg.Port
+			list, listErr := PublicPlayers(store.Server{
+				Host: msg.Host, Port: msg.Port, QueryProtocol: msg.QueryProtocol, QueryPort: &queryPort,
+			})
+			releaseProbe()
+			if listErr != nil {
+				_ = writeJSON(wsMessage{Type: "query_players_result", OK: false, Message: listErr.Error()})
+				continue
+			}
+			_ = writeJSON(wsMessage{Type: "query_players_result", OK: true, PlayerList: list})
 
 		case "command":
 			commandStarted := time.Now()

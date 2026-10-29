@@ -1,5 +1,6 @@
 // Server list and sidebar, add/edit server, Nitrado sync, connection tests and server selection.
 import { apiErrorMessage, apiFetch, relayWsUrl } from "./api.js";
+import { resolveQueryProtocol } from "./publicquery.js";
 import { loadAccountInfo } from "./auth.js";
 import { disposeConsole, ensureConsole } from "./console.js";
 import { renderContent } from "./detail.js";
@@ -424,10 +425,7 @@ function setManualQueryTestStatus(text, isError) {
 function runQueryTest(options) {
   var host = options.host.value.trim();
   var port = optionalPort(options.queryPort) || parseInt(options.rconPort.value, 10);
-  var protocol = options.queryProtocol.value;
-  if (protocol === "auto") {
-    protocol = options.game.value === "Minecraft" ? "minecraft" : (options.rconProtocol.value === "source" ? "a2s" : "disabled");
-  }
+  var protocol = resolveQueryProtocol(options.queryProtocol.value, options.game.value, options.rconProtocol.value);
   if (!host || !port || protocol === "disabled") {
     options.setStatus(I18N.t("addModal.queryNeedsConfig"), true);
     return;

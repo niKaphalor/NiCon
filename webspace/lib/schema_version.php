@@ -4,4 +4,4 @@
 // whether the database has it.
 declare(strict_types=1);
 
-const NICON_EXPECTED_SCHEMA_VERSION = 1;
+const NICON_EXPECTED_SCHEMA_VERSION = 2;
