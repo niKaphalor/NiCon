@@ -117,3 +117,95 @@ func minecraftQueryBasicStat(conn *net.UDPConn, challenge [4]byte) (MinecraftSta
 	}
 	return MinecraftStat{MOTD: motd, GameType: gametype, Map: mapName, Players: players, MaxPlayers: maxPlayers}, nil
 }
+
+// MinecraftFullStat is Full Stat's contents: the key/value section plus the
+// online players' names.
+type MinecraftFullStat struct {
+	MOTD        string
+	Version     string
+	Map         string
+	Players     int
+	MaxPlayers  int
+	PlayerNames []string
+}
+
+// QueryMinecraftFullStat is QueryMinecraftStat's bigger sibling: same
+// handshake, but the stat request is padded with four extra bytes, which
+// makes the server answer with a key/value section followed by the player
+// names. Needs the same opt-in (enable-query=true).
+func QueryMinecraftFullStat(host string, port int) (MinecraftFullStat, error) {
+	addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(host, strconv.Itoa(port)))
+	if err != nil {
+		return MinecraftFullStat{}, fmt.Errorf("minecraft query: %w", err)
+	}
+	conn, err := net.DialUDP("udp", nil, addr)
+	if err != nil {
+		return MinecraftFullStat{}, fmt.Errorf("minecraft query: %w", err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(minecraftQueryTimeout))
+
+	challenge, err := minecraftQueryHandshake(conn)
+	if err != nil {
+		return MinecraftFullStat{}, err
+	}
+	req := append([]byte{0xFE, 0xFD, 0x00}, minecraftQuerySessionID[:]...)
+	req = append(req, challenge[:]...)
+	req = append(req, 0, 0, 0, 0) // full-stat marker
+	if _, err := conn.Write(req); err != nil {
+		return MinecraftFullStat{}, fmt.Errorf("minecraft query: stat write: %w", err)
+	}
+	buf := make([]byte, 16*1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return MinecraftFullStat{}, fmt.Errorf("minecraft query: stat: no response: %w", err)
+	}
+	return parseMinecraftFullStat(buf[:n])
+}
+
+func parseMinecraftFullStat(resp []byte) (MinecraftFullStat, error) {
+	// type(1) session(4) "splitnum\0\x80\0"(11) then key\0value\0 pairs ended by
+	// an empty key, then "\x01player_\0\0"(10) and the names, ended by an empty one.
+	if len(resp) < 16 || resp[0] != 0x00 {
+		return MinecraftFullStat{}, fmt.Errorf("minecraft query: unexpected full stat response")
+	}
+	r := &cstringReader{buf: resp[16:]}
+	kv := map[string]string{}
+	for i := 0; i < 64; i++ {
+		key := r.readCString()
+		if r.err != nil {
+			return MinecraftFullStat{}, fmt.Errorf("minecraft query: %w", r.err)
+		}
+		if key == "" {
+			break
+		}
+		kv[key] = r.readCString()
+	}
+	r.skip(10)
+	var names []string
+	for i := 0; i < 256 && r.err == nil; i++ {
+		name := r.readCString()
+		if name == "" {
+			break
+		}
+		names = append(names, cleanText(name, 32))
+	}
+	// A missing player section just means no names; the key/value part above
+	// already validated the response.
+	players, err := strconv.Atoi(kv["numplayers"])
+	if err != nil {
+		return MinecraftFullStat{}, fmt.Errorf("minecraft query: parsing player count: %w", err)
+	}
+	maxPlayers, err := strconv.Atoi(kv["maxplayers"])
+	if err != nil {
+		return MinecraftFullStat{}, fmt.Errorf("minecraft query: parsing max players: %w", err)
+	}
+	return MinecraftFullStat{
+		MOTD:        cleanText(kv["hostname"], 128),
+		Version:     cleanText(kv["version"], 64),
+		Map:         cleanText(kv["map"], 64),
+		Players:     players,
+		MaxPlayers:  maxPlayers,
+		PlayerNames: names,
+	}, nil
+}

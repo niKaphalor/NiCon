@@ -223,3 +223,41 @@ func TestServerListIsReloadedOnlyEveryRefreshAndRemovedServersAreForgotten(t *te
 		t.Fatal("state for a removed server should be dropped")
 	}
 }
+
+func TestFailingServerIsRetriedQuicklyThenBacksToTheNormalInterval(t *testing.T) {
+	h := newHarness(1)
+	h.fastRetry, h.fastRetries = time.Minute, 2
+	h.result = func(int64) bool { return false }
+	h.runOnce(context.Background())
+	h.step(h.warmup) // failure 1
+	if h.count(1) != 1 {
+		t.Fatalf("first probe missing: %d", h.count(1))
+	}
+	h.step(time.Minute + time.Second) // quick retry -> failure 2
+	if h.count(1) != 2 {
+		t.Fatalf("expected a quick retry after the first failure, got %d probes", h.count(1))
+	}
+	h.step(time.Minute + time.Second) // quick retry -> failure 3
+	if h.count(1) != 3 {
+		t.Fatalf("expected a second quick retry, got %d probes", h.count(1))
+	}
+	h.step(time.Minute + time.Second)
+	if h.count(1) != 3 {
+		t.Fatal("quick retries must stop after fastRetries failures")
+	}
+	h.step(h.interval)
+	if h.count(1) != 4 {
+		t.Fatalf("expected the normal-interval probe, got %d probes", h.count(1))
+	}
+}
+
+func TestSuccessfulServerNeverGetsQuickRetries(t *testing.T) {
+	h := newHarness(1)
+	h.fastRetry, h.fastRetries = time.Minute, 2
+	h.runOnce(context.Background())
+	h.step(h.warmup)
+	h.step(2 * time.Minute)
+	if h.count(1) != 1 {
+		t.Fatalf("a healthy server was re-probed early: %d probes", h.count(1))
+	}
+}

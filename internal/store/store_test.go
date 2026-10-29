@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -568,5 +569,105 @@ func TestUpdateServerHealthOkAndFailure(t *testing.T) {
 	}
 	if !errMsg.Valid || errMsg.String != "connection refused" {
 		t.Errorf("health_error = %q (valid=%v), want %q", errMsg.String, errMsg.Valid, "connection refused")
+	}
+}
+
+func TestRecordPublicQueryStoresSampleAndKeepsLastKnownInfo(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	userID := mustCreateUser(t, st, uniqueUsername(t))
+	serverID, err := st.CreateServer(ctx, Server{UserID: userID, Name: "q", Host: "h", Port: 1, Protocol: "source"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seven, twenty := 7, 20
+	latency := 38
+
+	if err := st.RecordPublicQuery(ctx, serverID, PublicQueryRecord{
+		Online: true, Players: &seven, MaxPlayers: &twenty, LatencyMs: &latency, Source: "a2s",
+		InfoJSON: `{"protocol":"a2s","name":"NiCon CS","map":"de_dust2"}`,
+	}); err != nil {
+		t.Fatalf("RecordPublicQuery(online): %v", err)
+	}
+	if err := st.RecordPublicQuery(ctx, serverID, PublicQueryRecord{Online: false, Source: "a2s", ErrorKind: "timeout"}); err != nil {
+		t.Fatalf("RecordPublicQuery(offline): %v", err)
+	}
+
+	var info, queryErr sql.NullString
+	var checked sql.NullTime
+	if err := st.db.QueryRowContext(ctx, `SELECT query_info, query_error, query_checked_at FROM servers WHERE id = ?`, serverID).Scan(&info, &queryErr, &checked); err != nil {
+		t.Fatal(err)
+	}
+	if !info.Valid || !strings.Contains(info.String, "de_dust2") {
+		t.Errorf("a failed probe must keep the last known server details, query_info = %q", info.String)
+	}
+	if !queryErr.Valid || queryErr.String != "timeout" || !checked.Valid {
+		t.Errorf("query_error = %+v, query_checked_at valid = %v; want timeout and set", queryErr, checked.Valid)
+	}
+
+	rows, err := st.db.QueryContext(ctx, `SELECT online, latency_ms, player_current, player_max, source, error_kind FROM server_health_samples WHERE server_id = ? ORDER BY id`, serverID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	type sample struct {
+		online            bool
+		latency, cur, max sql.NullInt64
+		source            string
+		errorKind         sql.NullString
+	}
+	var got []sample
+	for rows.Next() {
+		var s sample
+		if err := rows.Scan(&s.online, &s.latency, &s.cur, &s.max, &s.source, &s.errorKind); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, s)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d samples, want 2", len(got))
+	}
+	if !got[0].online || got[0].latency.Int64 != 38 || got[0].cur.Int64 != 7 || got[0].max.Int64 != 20 || got[0].errorKind.Valid {
+		t.Errorf("online sample = %+v", got[0])
+	}
+	if got[1].online || got[1].latency.Valid || got[1].cur.Valid || got[1].errorKind.String != "timeout" || got[1].source != "a2s" {
+		t.Errorf("offline sample = %+v (want no latency/players, error_kind timeout)", got[1])
+	}
+
+	// A later success clears the error but must not erase details with an empty document.
+	if err := st.RecordPublicQuery(ctx, serverID, PublicQueryRecord{Online: true, Players: &seven, MaxPlayers: &twenty, Source: "a2s"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.db.QueryRowContext(ctx, `SELECT query_info, query_error FROM servers WHERE id = ?`, serverID).Scan(&info, &queryErr); err != nil {
+		t.Fatal(err)
+	}
+	if queryErr.Valid || !strings.Contains(info.String, "de_dust2") {
+		t.Errorf("after a success query_error = %+v, query_info = %q", queryErr, info.String)
+	}
+}
+
+func TestListServersForPublicInfoCheckExcludesDisabled(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	userID := mustCreateUser(t, st, uniqueUsername(t))
+	on, err := st.CreateServer(ctx, Server{UserID: userID, Name: "on", Host: "h", Port: 1, Protocol: "source", QueryProtocol: "auto"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	off, err := st.CreateServer(ctx, Server{UserID: userID, Name: "off", Host: "h", Port: 1, Protocol: "source", QueryProtocol: "disabled"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, err := st.ListServersForPublicInfoCheck(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawOn, sawOff bool
+	for _, s := range list {
+		sawOn = sawOn || s.ID == on
+		sawOff = sawOff || s.ID == off
+	}
+	if !sawOn || sawOff {
+		t.Errorf("sawOn=%v sawOff=%v; want the auto server listed and the disabled one not", sawOn, sawOff)
 	}
 }

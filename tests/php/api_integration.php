@@ -311,6 +311,37 @@ try {
     assert_test((float) ($deduplicatedHistory['sample_completeness_percent'] ?? -1) === 0.35, 'sample completeness must count five-minute intervals, not raw sources');
     assert_test((float) ($deduplicatedHistory['players_average'] ?? -1) === 3.0, 'player aggregation must prefer the public query sample in a shared interval');
 
+    // What the relay's passive public query learned: details on the server, the
+    // query's own latency and the failure kinds in the history.
+    $pdo->prepare("INSERT INTO servers (user_id, name, host, port, protocol, game, source, query_info, query_checked_at, query_error) VALUES (?, 'Query details', '127.0.0.1', 27015, 'source', 'Minecraft', 'manual', ?, UTC_TIMESTAMP(), 'timeout')")
+        ->execute([$aliceUserId, '{"protocol":"a2s","name":"Dust","map":"de_dust2","passworded":true,"latency_ms":40}']);
+    $detailId = (int) $pdo->lastInsertId();
+    $pdo->prepare("INSERT INTO server_health_samples (server_id, online, latency_ms, player_current, player_max, source, error_kind) VALUES (?, TRUE, 40, 2, 20, 'a2s', NULL), (?, TRUE, 60, 4, 20, 'bedrock', NULL), (?, FALSE, NULL, NULL, NULL, 'a2s', 'timeout')")
+        ->execute([$detailId, $detailId, $detailId]);
+    [$status, $detailList] = request_json($base, 'GET', '/api/servers', null, $aliceToken);
+    $detail = null;
+    foreach ($detailList as $candidate) if (($candidate['id'] ?? 0) === $detailId) $detail = $candidate;
+    assert_test($status === 200 && is_array($detail), 'server list must include the server with query details');
+    assert_test(($detail['query_info']['map'] ?? '') === 'de_dust2' && ($detail['query_info']['passworded'] ?? null) === true
+        && ($detail['query_error'] ?? '') === 'timeout' && is_string($detail['query_checked_at'] ?? null),
+        'query_info, query_error and query_checked_at must be exposed');
+    assert_test(array_key_exists('query_info', $updated) && $updated['query_info'] === null && $updated['query_error'] === null,
+        'a server that was never probed has no query details');
+    foreach (['24h', '7d'] as $detailRange) {
+        [$status, $detailHistory] = request_json($base, 'GET', "/api/servers/$detailId/health-history?range=$detailRange", null, $aliceToken);
+        assert_test($status === 200 && ($detailHistory['query_latency_ms'] ?? null) === 50, "query latency must average the query samples ($detailRange)");
+        assert_test(($detailHistory['query_errors']['timeout'] ?? 0) === 1, "failure kinds must be counted ($detailRange)");
+    }
+    [$status, $rawHistory] = request_json($base, 'GET', "/api/servers/$detailId/health-history?range=24h", null, $aliceToken);
+    $kinds = array_column($rawHistory['samples'] ?? [], 'error_kind');
+    assert_test(in_array('timeout', $kinds, true), 'raw history samples must carry their error_kind');
+    [$status, $bedrockUpdate] = request_json($base, 'PUT', "/api/servers/$detailId", [
+        'name' => 'Query details', 'host' => '127.0.0.1', 'port' => 27015, 'protocol' => 'source',
+        'query_protocol' => 'bedrock', 'query_port' => 19132, 'game' => 'Minecraft',
+    ], $aliceToken);
+    assert_test($status === 200 && ($bedrockUpdate['query_protocol'] ?? '') === 'bedrock' && ($bedrockUpdate['query_port'] ?? 0) === 19132, 'bedrock must be an accepted query protocol');
+    $pdo->prepare('DELETE FROM servers WHERE id = ?')->execute([$detailId]); // later tests count this account's servers
+
     [$status] = request_json($base, 'PUT', "/api/servers/$serverId/password", ['password' => 'new-secret'], $aliceToken);
     assert_test($status === 204, 'password update failed');
 

@@ -537,7 +537,7 @@ probes share one bounded worker pool. Servers that keep failing back off (see
 A second, independent scheduler on the same interval probes every
 server whose separate public-query configuration is enabled — no RCON
 password required, so it also covers servers that don't have one saved
-yet. `query_protocol` supports `auto`, `a2s`, `minecraft`, and `disabled`;
+yet. `query_protocol` supports `auto`, `a2s`, `minecraft`, `bedrock`, and `disabled`;
 `query_port` can differ from the RCON port. `auto` preserves the legacy
 behaviour (A2S for Source RCON, Minecraft Query for Minecraft) without
 guessing support for other transports. Source-engine servers answer Valve's A2S_INFO query
@@ -553,8 +553,49 @@ port, so set the query port to the game's TCP port (`server-port`, default
 on its game port too; since its RCON port is the Telnet port, `auto` only
 probes it once a **query port** (the game port) is stored — Nitrado sync
 imports it when Nitrado reports one.
+`query_protocol` also accepts `bedrock` (Minecraft Bedrock). Since 26.50 the
+Bedrock dedicated server defaults to the NetherNet transport, so NiCon asks
+both ways at once and takes whichever answers: RakNet's Unconnected Ping over
+UDP (servers still on RakNet) and NetherNet's `GET /v1/join` over HTTP on the
+server port (`internal/relay/bedrock.go`). The NetherNet side follows the
+documentation at [minecraft.wiki/w/NetherNet](https://minecraft.wiki/w/NetherNet)
+and has **not been verified against a live 26.50+ server** — whether that
+endpoint answers without authentication, and over plain HTTP, is unconfirmed.
+Palworld has no UDP query; with a stored admin password its REST API
+(`/info`, `/metrics`) provides the player counts, server FPS, uptime and
+in-game days, with no extra setting.
+
+Probes are built to survive a lost packet and to say why they failed:
+
+- a timeout is retried once inside the probe (a refused port or a malformed
+  answer is not — retrying cannot change those), so one dropped UDP datagram
+  does not read as "server offline";
+- a server that has just started failing is re-probed after a minute, for its
+  first two failures, before the normal five-minute rhythm resumes;
+- the query's own round-trip time is stored with each sample (`latency_ms`,
+  reported as `query_latency_ms`, separate from the RCON connect time);
+- every failure carries a kind — `timeout`, `refused`, `dns`, `blocked`,
+  `auth` or `protocol` — in `server_health_samples.error_kind` and
+  `servers.query_error`, which the Overview shows in plain words ("wrong query
+  port" and "server is down" no longer look the same);
+- each successful probe refreshes `servers.query_info` (name, map, version,
+  password flag, Palworld metrics), shown on the Overview, and a failed probe
+  keeps the last known details;
+- whether a server is probed at all is decided in one place,
+  `relay.PublicQueryDue`: servers whose game has no public query
+  (ARK: Survival Ascended, Hytale) are no longer sampled as "offline", and
+  games whose RCON port is not their game port (Rust, Arma, DayZ, 7 Days to
+  Die) are probed on `auto` only once a query port is stored.
+
+The Overview's **Show players online** button asks the relay (WebSocket
+message `query_players`, rate-limited like the query test) for the names the
+public query reports — A2S_PLAYER with split-response reassembly for Source
+games, Query Full Stat (falling back to the Server List Ping's sample) for
+Minecraft Java. Names are fetched on demand and never stored.
+
 Either way, a successful probe's player counts land in the same
-`server_health_samples` table (`source` `"a2s"`/`"mcquery"`) the Cloud
+`server_health_samples` table (`source` `"a2s"`/`"mcquery"`/`"bedrock"`/
+`"palworld"`) the Cloud
 API already aggregates into `players_average`/`players_peak` for the
 Overview tab. WebRCON and BattlEye profiles can now explicitly use A2S as
 well, independently from their authenticated control protocol. The add/edit

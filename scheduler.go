@@ -40,6 +40,15 @@ type probeScheduler struct {
 	tick     time.Duration // how often to look for due servers
 	refresh  time.Duration // how often to reload the server list
 
+	// fastRetry, when > 0, re-probes a server that has just started failing
+	// after this short delay instead of a full interval, for its first
+	// fastRetries consecutive failures. A game server restart takes a minute
+	// or two: this confirms (or clears) a suspected outage quickly instead of
+	// leaving the history to guess for five minutes. Beyond that the normal
+	// interval and probeBackoff take over. Zero disables it.
+	fastRetry   time.Duration
+	fastRetries int
+
 	list    func(context.Context) ([]store.Server, error)
 	probe   func(context.Context, store.Server) bool // runs and records one probe; reports success
 	sem     chan struct{}                            // shared worker-pool slots
@@ -155,7 +164,11 @@ func (s *probeScheduler) runOnce(ctx context.Context) {
 			delete(s.inflight, srv.ID)
 			// Measured from completion, with jitter around the interval.
 			spread := (s.rnd()*2 - 1) * s.jitter
-			s.next[srv.ID] = s.now().Add(time.Duration(float64(s.interval) * (1 + spread)))
+			delay := time.Duration(float64(s.interval) * (1 + spread))
+			if !ok && s.fastRetry > 0 && s.backoff.failures(srv.ID) <= s.fastRetries {
+				delay = s.fastRetry
+			}
+			s.next[srv.ID] = s.now().Add(delay)
 			s.mu.Unlock()
 		}()
 	}

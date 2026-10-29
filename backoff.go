@@ -46,6 +46,13 @@ func (b *probeBackoff) due(serverID int64) bool {
 	return !ok || !b.now().Before(e.next)
 }
 
+// failures is the number of consecutive failed probes of serverID.
+func (b *probeBackoff) failures(serverID int64) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.state[serverID].fails
+}
+
 // record stores the outcome of a probe. base is the normal cycle interval.
 func (b *probeBackoff) record(serverID int64, ok bool, base time.Duration) {
 	b.mu.Lock()

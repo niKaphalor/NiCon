@@ -320,6 +320,9 @@ main { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .overview-signals { margin-top: 12px; }
 .overview-signals dl { display: grid; grid-template-columns: minmax(140px, .55fr) 1fr; gap: 8px 18px; margin: 8px 0 0; font-size: .82rem; }
 .overview-signals dt { color: var(--color-muted); }
+.public-query-card .btn-secondary { margin-top: 12px; }
+.public-query-players { display: grid; gap: 4px; margin: 10px 0 0; padding: 0; list-style: none; font-size: .82rem; }
+.public-query-players li { overflow-wrap: anywhere; }
 .overview-signals dd { margin: 0; overflow-wrap: anywhere; }
 .password-card { max-width: 480px; margin-top: 28px; }
 .password-card .stacked-form { margin-top: 8px; }

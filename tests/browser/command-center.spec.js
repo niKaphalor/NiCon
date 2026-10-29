@@ -39,6 +39,7 @@ async function installBackend(page, initialServers = []) {
     pagedAuditTotal: 0, // >0: /api/audit-log answers with the paginated shape
     auditRequests: [],
     connectedServerIds: [],
+    queryPlayersRequests: [],
     sockets: [],
     nextServerId: 100,
   };
@@ -191,6 +192,11 @@ async function installBackend(page, initialServers = []) {
         socket.send(JSON.stringify({ type: "connected" }));
       } else if (message.type === "test") {
         socket.send(JSON.stringify({ type: "test_result", ok: true }));
+      } else if (message.type === "query_players") {
+        state.queryPlayersRequests.push({ host: message.host, port: message.port, protocol: message.query_protocol });
+        socket.send(JSON.stringify({ type: "query_players_result", ok: true, player_list: [
+          { name: "Alice", score: 12, duration_s: 3700 }, { name: "", score: 0, duration_s: 4 }, { name: "<img src=x onerror=alert(1)>" },
+        ] }));
       } else if (message.type === "query_test") {
         socket.send(JSON.stringify({ type: "query_test_result", ok: true, players: 3, players_max: 20 }));
       } else if (message.type === "command") {
@@ -793,4 +799,50 @@ test("public status panel shows a distinct message when query checks are disable
   await page.locator(".server-row", { hasText: "GMod Alpha" }).click();
   await expect(page.locator("#password-public-status-values")).toHaveText("Public status checks are turned off for this server.");
   expect(healthHistoryRequested).toBe(false);
+});
+
+test("overview shows what the public query learned and lists players on demand, rendering server text as text", async ({ page }) => {
+  const backend = await installBackend(page, [server({
+    id: 1, query_protocol: "a2s", query_port: 27015,
+    query_checked_at: "2026-09-28T10:00:00Z", query_error: "timeout",
+    query_info: { protocol: "a2s", name: "Dust <b>Arena</b>", map: "de_dust2", version: "1.40.3", passworded: true, latency_ms: 41 },
+  })]);
+  await page.route("**/api/servers/1/health-history**", (route) => route.fulfill({
+    status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" },
+    body: JSON.stringify({
+      range: "24h", uptime_percent: 99, sample_completeness_percent: 100, players_average: 3, players_peak: 7, samples: [],
+      query_latency_ms: 44, query_errors: { timeout: 2 },
+    }),
+  }));
+  await login(page);
+  await page.locator(".server-row", { hasText: "GMod Alpha" }).click();
+  await page.locator("#server-tab-overview").click();
+
+  const card = page.locator(".public-query-card");
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("No answer — server down, wrong query port, or UDP blocked");
+  await expect(card).toContainText("de_dust2");
+  await expect(card).toContainText("1.40.3");
+  await expect(card).toContainText("41 ms · avg 44 ms");
+  await expect(card).toContainText("No answer ×2");
+  await expect(card.locator("dd", { hasText: "Dust <b>Arena</b>" })).toHaveCount(1); // shown as text, not parsed as HTML
+  await expect(card.locator("b")).toHaveCount(0);
+
+  await card.getByRole("button", { name: "Show players online" }).click();
+  const players = card.locator(".public-query-players li");
+  await expect(players).toHaveCount(3);
+  await expect(players.nth(0)).toHaveText("Alice · score 12 · 1 h 1 m");
+  await expect(players.nth(1)).toHaveText("(connecting) · score 0 · 0 m");
+  await expect(players.nth(2)).toHaveText("<img src=x onerror=alert(1)>");
+  await expect(card.locator("img")).toHaveCount(0);
+  expect(backend.queryPlayersRequests).toEqual([{ host: "127.0.0.1", port: 27015, protocol: "a2s" }]);
+});
+
+test("a server that was never probed has no public query card", async ({ page }) => {
+  await installBackend(page, [server({ id: 1, query_protocol: "a2s" })]);
+  await login(page);
+  await page.locator(".server-row", { hasText: "GMod Alpha" }).click();
+  await page.locator("#server-tab-overview").click();
+  await expect(page.locator("#server-overview-content .overview-metrics")).toBeVisible();
+  await expect(page.locator(".public-query-card")).toHaveCount(0);
 });

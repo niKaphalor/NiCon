@@ -24,6 +24,11 @@ const maxMinecraftPingJSON = 64 * 1024
 type MinecraftPing struct {
 	Players    int
 	MaxPlayers int
+	Version    string
+	MOTD       string
+	// Sample is the server's (optional, often truncated or anonymised)
+	// list of online players' names.
+	Sample []string
 }
 
 // QueryMinecraftPing speaks Minecraft Java's Server List Ping (the protocol
@@ -74,15 +79,65 @@ func QueryMinecraftPing(host string, port int) (MinecraftPing, error) {
 		return MinecraftPing{}, fmt.Errorf("minecraft ping: truncated status: %w", err)
 	}
 	var status struct {
-		Players *struct {
+		Version struct {
+			Name string `json:"name"`
+		} `json:"version"`
+		// description is a plain string or a chat component.
+		Description json.RawMessage `json:"description"`
+		Players     *struct {
 			Online int `json:"online"`
 			Max    int `json:"max"`
+			Sample []struct {
+				Name string `json:"name"`
+			} `json:"sample"`
 		} `json:"players"`
 	}
 	if err := json.Unmarshal(raw, &status); err != nil || status.Players == nil {
 		return MinecraftPing{}, fmt.Errorf("minecraft ping: unexpected status JSON")
 	}
-	return MinecraftPing{Players: status.Players.Online, MaxPlayers: status.Players.Max}, nil
+	ping := MinecraftPing{
+		Players:    status.Players.Online,
+		MaxPlayers: status.Players.Max,
+		Version:    cleanText(status.Version.Name, 64),
+		MOTD:       cleanText(chatText(status.Description, 0), 128),
+	}
+	for i, p := range status.Players.Sample {
+		if i >= 100 {
+			break
+		}
+		if name := cleanText(p.Name, 32); name != "" {
+			ping.Sample = append(ping.Sample, name)
+		}
+	}
+	return ping, nil
+}
+
+// chatText flattens a Minecraft chat component (a string, or an object with
+// "text" and nested "extra") to plain text. Depth-limited: the input is
+// server-controlled.
+func chatText(raw json.RawMessage, depth int) string {
+	if len(raw) == 0 || depth > 4 {
+		return ""
+	}
+	var str string
+	if json.Unmarshal(raw, &str) == nil {
+		return str
+	}
+	var obj struct {
+		Text  string            `json:"text"`
+		Extra []json.RawMessage `json:"extra"`
+	}
+	if json.Unmarshal(raw, &obj) != nil {
+		return ""
+	}
+	out := obj.Text
+	for i, e := range obj.Extra {
+		if i >= 32 {
+			break
+		}
+		out += chatText(e, depth+1)
+	}
+	return out
 }
 
 func writeVarInt(buf *bytes.Buffer, v int32) {

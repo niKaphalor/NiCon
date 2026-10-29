@@ -59,7 +59,7 @@ function nicon_use_tls_from_request(array $req, string $protocol): ?bool
 function nicon_query_config(array $req): ?array
 {
     $protocol = strtolower(trim((string) ($req['query_protocol'] ?? 'auto')));
-    if (!in_array($protocol, ['auto', 'a2s', 'minecraft', 'disabled'], true)) {
+    if (!in_array($protocol, ['auto', 'a2s', 'minecraft', 'bedrock', 'disabled'], true)) {
         nicon_send_error('unsupported query protocol', 400);
         return null;
     }
@@ -147,7 +147,7 @@ function nicon_handle_server_health_history(int $userId, int $serverId): void
     }
 
     $stmt = $pdo->prepare("
-        SELECT sampled_at, online, latency_ms, player_current, player_max, source
+        SELECT sampled_at, online, latency_ms, player_current, player_max, source, error_kind
         FROM server_health_samples
         WHERE server_id = ? AND sampled_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL $days DAY)
         ORDER BY sampled_at ASC
@@ -169,7 +169,7 @@ function nicon_handle_server_health_history(int $userId, int $serverId): void
         }
         $current = $row['player_current'] === null ? null : (int) $row['player_current'];
         if ($current !== null) {
-            $priority = $source === 'nitrado' ? 40 : (in_array($source, ['a2s', 'mcquery'], true) ? 30 : ($source === 'client' ? 20 : 10));
+            $priority = $source === 'nitrado' ? 40 : (in_array($source, ['a2s', 'mcquery', 'bedrock', 'palworld'], true) ? 30 : ($source === 'client' ? 20 : 10));
             if (!isset($playerBuckets[$bucket]) || $priority > $playerBuckets[$bucket]['priority']) {
                 $playerBuckets[$bucket] = ['players' => $current, 'priority' => $priority];
             }
@@ -181,6 +181,7 @@ function nicon_handle_server_health_history(int $userId, int $serverId): void
             'players' => $current,
             'players_max' => $row['player_max'] === null ? null : (int) $row['player_max'],
             'source' => $source,
+            'error_kind' => $row['error_kind'] ?? null,
         ];
     }
     $availabilityCount = count($availabilityBuckets);
@@ -196,9 +197,39 @@ function nicon_handle_server_health_history(int $userId, int $serverId): void
         'players_average' => $playersCount ? round($playersTotal / $playersCount, 1) : null,
         'players_peak' => $playersPeak,
         'samples' => $samples,
-    ];
+    ] + nicon_health_query_summary($pdo, $serverId, $days);
     nicon_health_history_cache_put($serverId, $range, $response);
     nicon_send_json($response);
+}
+
+// nicon_health_query_summary condenses what the relay's passive public query
+// recorded over the range: the average round-trip time of the query itself
+// (query_latency_ms — not the RCON connect time in latency_ms) and how often
+// it failed, by kind (query_errors). Shared by the raw and aggregated paths.
+function nicon_health_query_summary(PDO $pdo, int $serverId, int $days): array
+{
+    $since = 'sampled_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ' . (int) $days . ' DAY)';
+    $lat = $pdo->prepare("
+        SELECT AVG(latency_ms) FROM server_health_samples
+        WHERE server_id = ? AND $since AND online = 1 AND latency_ms IS NOT NULL
+          AND source IN ('a2s', 'mcquery', 'bedrock', 'palworld')
+    ");
+    $lat->execute([$serverId]);
+    $avg = $lat->fetchColumn();
+
+    $errors = $pdo->prepare("
+        SELECT error_kind, COUNT(*) AS n FROM server_health_samples
+        WHERE server_id = ? AND $since AND error_kind IS NOT NULL
+        GROUP BY error_kind
+    ");
+    $errors->execute([$serverId]);
+    $kinds = [];
+    foreach ($errors as $row) $kinds[(string) $row['error_kind']] = (int) $row['n'];
+
+    return [
+        'query_latency_ms' => ($avg === false || $avg === null) ? null : (int) round((float) $avg),
+        'query_errors' => (object) $kinds,
+    ];
 }
 
 // nicon_health_history_aggregated answers the 7d/30d/90d ranges with the same
@@ -242,7 +273,7 @@ function nicon_health_history_aggregated(PDO $pdo, int $serverId, string $range,
         SELECT slot DIV $slots AS bkt, COUNT(*) AS n, SUM(pk % 1000000) AS total, MAX(pk % 1000000) AS peak, MAX(pmax) AS pmax
         FROM (
             SELECT $epoch AS slot,
-                   MAX((CASE source WHEN 'nitrado' THEN 40 WHEN 'a2s' THEN 30 WHEN 'mcquery' THEN 30 WHEN 'client' THEN 20 ELSE 10 END) * 1000000 + player_current) AS pk,
+                   MAX((CASE source WHEN 'nitrado' THEN 40 WHEN 'a2s' THEN 30 WHEN 'mcquery' THEN 30 WHEN 'bedrock' THEN 30 WHEN 'palworld' THEN 30 WHEN 'client' THEN 20 ELSE 10 END) * 1000000 + player_current) AS pk,
                    MAX(player_max) AS pmax
             FROM server_health_samples
             WHERE server_id = ? AND $since AND player_current IS NOT NULL
@@ -306,7 +337,7 @@ function nicon_health_history_aggregated(PDO $pdo, int $serverId, string $range,
         'players_average' => $playersCount ? round($playersTotal / $playersCount, 1) : null,
         'players_peak' => $playersPeak,
         'samples' => $samples,
-    ];
+    ] + nicon_health_query_summary($pdo, $serverId, $days);
 }
 
 function nicon_handle_server_player_sample(int $userId, int $serverId): void
@@ -341,6 +372,13 @@ function nicon_handle_server_player_sample(int $userId, int $serverId): void
     http_response_code(204);
 }
 
+function nicon_decode_query_info(?string $json): ?array
+{
+    if ($json === null || $json === '') return null;
+    $info = json_decode($json, true);
+    return is_array($info) ? $info : null;
+}
+
 // nicon_server_response is what a server looks like over the API —
 // everything except the actual password. health_* is written only by the
 // Go relay's periodic background check (main.go's runHealthChecks — a
@@ -366,6 +404,13 @@ function nicon_server_response(array $row): array
         'health_checked_at' => $row['health_checked_at'] !== null ? gmdate('Y-m-d\TH:i:s\Z', strtotime($row['health_checked_at'])) : null,
         'health_latency_ms' => $row['health_latency_ms'] !== null ? (int) $row['health_latency_ms'] : null,
         'health_error' => $row['health_error'],
+        // What the relay's passive public query last learned: name, map,
+        // version, password flag, Palworld FPS/uptime ... (see
+        // internal/relay/publicinfo.go), how long ago, and why the latest
+        // probe failed (timeout, refused, dns, blocked, auth, protocol).
+        'query_info' => nicon_decode_query_info($row['query_info'] ?? null),
+        'query_checked_at' => isset($row['query_checked_at']) ? gmdate('Y-m-d\TH:i:s\Z', strtotime($row['query_checked_at'])) : null,
+        'query_error' => $row['query_error'] ?? null,
     ];
 }
 
@@ -424,6 +469,7 @@ function nicon_handle_list_servers(int $userId): void
     $stmt = nicon_db()->prepare('
         SELECT id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source,
                health_ok, health_checked_at, health_latency_ms, health_error,
+               query_info, query_checked_at, query_error,
                nitrado_game_code, nitrado_game_icon_url, use_tls
         FROM servers WHERE user_id = ? ORDER BY name');
     $stmt->execute([$userId]);
@@ -518,6 +564,7 @@ function nicon_handle_create_server(int $userId): void
     $stmt = $pdo->prepare('
         SELECT id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source,
                health_ok, health_checked_at, health_latency_ms, health_error,
+               query_info, query_checked_at, query_error,
                nitrado_game_code, nitrado_game_icon_url, use_tls
         FROM servers WHERE id = ?');
     $stmt->execute([$id]);
@@ -580,6 +627,7 @@ function nicon_handle_update_server(int $userId, int $serverId): void
     $serverStmt = $pdo->prepare('
         SELECT id, name, host, port, password_enc, protocol, query_protocol, query_port, game, source,
                health_ok, health_checked_at, health_latency_ms, health_error,
+               query_info, query_checked_at, query_error,
                nitrado_game_code, nitrado_game_icon_url, use_tls
         FROM servers WHERE id = ? AND user_id = ?
     ');

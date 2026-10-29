@@ -8,6 +8,7 @@ import { cmdHistoryPanel, cmdSendBtn, cmdTemplatesPanel, contentConsole, content
 import { buildHealthChart, formatHealthTimestamp, healthHistoryCache } from "./health.js";
 import { fetchPagedList, pagerHostFor, renderPager } from "./lists.js";
 import { renderPlayersInto, renderPlayersPanel } from "./players.js";
+import { canListQueryPlayers, fetchQueryPlayers, formatDuration, resolveQueryProtocol } from "./publicquery.js";
 import { findServer, isConnected, openEditServerModal, protocolLabel, removeServer, renderServers, serverStatusClass, serverStatusTooltip } from "./servers.js";
 import { ACTIVITY_PER_PAGE, I18N, nitradoPowerPending, state } from "./state.js";
 import { showConfirm, showToast } from "./ui.js";
@@ -274,6 +275,81 @@ export function renderServerOverview(server) {
   signal(I18N.t("workspace.lastConnected"), formatHealthTimestamp(h.lastConnectedAt) || I18N.t("health.never"));
   signal(I18N.t("workspace.lastError"), h.lastError || server.health_error || I18N.t("health.noError"), !!(h.lastError || server.health_error));
   signals.appendChild(list); serverOverviewContent.appendChild(signals);
+
+  var queryCard = buildPublicQueryCard(server, history);
+  if (queryCard) serverOverviewContent.appendChild(queryCard);
+}
+
+var QUERY_ERROR_KINDS = ["timeout", "refused", "dns", "blocked", "auth", "protocol", "disabled"];
+
+function queryErrorText(kind) {
+  return QUERY_ERROR_KINDS.indexOf(kind) === -1 ? kind : I18N.t("publicQuery.error." + kind);
+}
+
+// What the relay's passive public query (A2S, Minecraft, Bedrock, Palworld
+// REST) learned about the server, why the last probe failed if it did, and
+// an on-demand list of who is online. Everything shown came from the game
+// server, so it is only ever put into the page with textContent.
+function buildPublicQueryCard(server, history) {
+  var info = server.query_info;
+  if (!info && !server.query_error && !server.query_checked_at) return null;
+  info = info || {};
+  var card = document.createElement("div"); card.className = "card overview-signals public-query-card";
+  var title = document.createElement("div"); title.className = "card-kicker"; title.textContent = I18N.t("publicQuery.title"); card.appendChild(title);
+  var list = document.createElement("dl");
+  function row(labelText, valueText, error) {
+    if (valueText == null || valueText === "") return;
+    var dt = document.createElement("dt"); dt.textContent = labelText;
+    var dd = document.createElement("dd"); dd.textContent = valueText; if (error) dd.className = "health-error";
+    list.appendChild(dt); list.appendChild(dd);
+  }
+  row(I18N.t("publicQuery.status"), server.query_error ? queryErrorText(server.query_error) : I18N.t("publicQuery.ok"), !!server.query_error);
+  row(I18N.t("publicQuery.name"), info.name);
+  row(I18N.t("publicQuery.map"), info.map);
+  row(I18N.t("publicQuery.version"), info.version);
+  row(I18N.t("publicQuery.game"), info.game);
+  if (info.passworded != null) row(I18N.t("publicQuery.password"), info.passworded ? I18N.t("publicQuery.yes") : I18N.t("publicQuery.no"));
+  if (info.latency_ms != null) {
+    row(I18N.t("publicQuery.latency"), info.latency_ms + " ms" + (history && history.query_latency_ms != null ? " · " + I18N.t("publicQuery.avgLatency", { value: history.query_latency_ms }) : ""));
+  }
+  if (info.server_fps != null) row(I18N.t("publicQuery.fps"), String(info.server_fps));
+  if (info.uptime_s != null) row(I18N.t("publicQuery.uptime"), formatDuration(info.uptime_s));
+  if (info.days != null) row(I18N.t("publicQuery.days"), String(info.days));
+  row(I18N.t("publicQuery.lastQuery"), server.query_checked_at ? new Date(server.query_checked_at).toLocaleString() : "");
+  var failures = history && history.query_errors ? Object.keys(history.query_errors) : [];
+  if (failures.length) {
+    row(I18N.t("publicQuery.failures"), failures.map(function (kind) { return queryErrorText(kind).split(" — ")[0] + " ×" + history.query_errors[kind]; }).join(", "), true);
+  }
+  card.appendChild(list);
+
+  var protocol = resolveQueryProtocol(server.query_protocol, server.game, server.protocol);
+  if (canListQueryPlayers(protocol)) {
+    var button = document.createElement("button"); button.type = "button"; button.className = "btn-secondary";
+    button.textContent = I18N.t("publicQuery.showPlayers");
+    var result = document.createElement("ul"); result.className = "public-query-players"; result.setAttribute("aria-live", "polite");
+    button.addEventListener("click", function () {
+      button.disabled = true;
+      result.innerHTML = "";
+      var pending = document.createElement("li"); pending.textContent = I18N.t("publicQuery.loading"); result.appendChild(pending);
+      fetchQueryPlayers(server.host, server.query_port || server.port, protocol).then(function (res) {
+        button.disabled = false;
+        result.innerHTML = "";
+        var li = document.createElement("li");
+        if (!res.ok) { li.textContent = I18N.t("publicQuery.playersFailed", { message: res.message }); li.className = "health-error"; result.appendChild(li); return; }
+        if (!res.players.length) { li.textContent = I18N.t("publicQuery.noPlayers"); result.appendChild(li); return; }
+        res.players.forEach(function (player) {
+          var item = document.createElement("li");
+          var meta = [];
+          if (player.score != null) meta.push(I18N.t("publicQuery.score", { value: player.score }));
+          if (player.duration_s != null) meta.push(formatDuration(player.duration_s));
+          item.textContent = (player.name || I18N.t("publicQuery.connecting")) + (meta.length ? " · " + meta.join(" · ") : "");
+          result.appendChild(item);
+        });
+      });
+    });
+    card.appendChild(button); card.appendChild(result);
+  }
+  return card;
 }
 
 function loadServerAudit(server, page) {

@@ -36,27 +36,28 @@ type palworldRestConn struct {
 }
 
 func dialPalworldRest(host string, port int, password string, opts ...dialOptions) (*palworldRestConn, error) {
-	o := firstDialOptions(opts)
-	scheme := "http"
-	if o.TLS {
-		scheme = "https"
-	}
-	c := &palworldRestConn{
-		baseURL:    scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/v1/api",
-		hostHeader: o.hostHeader(port),
-		password:   password,
-		client:     o.httpClient(),
-	}
-	// Verify the credentials actually work before declaring "connected" —
-	// mirrors RCON's dial-time auth check, rather than only discovering a
-	// wrong password on the first real command.
+	c := newPalworldRest(host, port, password, opts...)
 	if _, err := c.request(http.MethodGet, "/info", nil); err != nil {
 		return nil, err
 	}
 	return c, nil
 }
 
-// Close drops any idle keep-alive connection; there is no session to end.
+// newPalworldRest builds the REST client without contacting the server.
+func newPalworldRest(host string, port int, password string, opts ...dialOptions) *palworldRestConn {
+	o := firstDialOptions(opts)
+	scheme := "http"
+	if o.TLS {
+		scheme = "https"
+	}
+	return &palworldRestConn{
+		baseURL:    scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/v1/api",
+		hostHeader: o.hostHeader(port),
+		password:   password,
+		client:     o.httpClient(),
+	}
+}
+
 func (c *palworldRestConn) Close() error {
 	c.client.CloseIdleConnections()
 	return nil
