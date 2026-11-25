@@ -3,7 +3,7 @@ module github.com/niKaphalor/NiCon
 go 1.26.0
 
 require (
-	github.com/go-sql-driver/mysql v1.10.1
+	github.com/go-sql-driver/mysql v1.10.2
 	github.com/gorcon/rcon v1.4.0
 	github.com/gorilla/websocket v1.5.3
 	golang.org/x/crypto v0.58.0
